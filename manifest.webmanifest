@@ -1,6 +1,6 @@
 {
-  "name": "freedom",
-  "short_name": "freedom",
+  "name": "mooni의 단어장",
+  "short_name": "mooni의 단어장",
   "description": "유튜브에서 본 영어 표현을 망각곡선(FSRS)으로 외우는 개인 플래시카드",
   "lang": "ko",
   "start_url": "./",

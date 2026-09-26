@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF1F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13161B" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="freedom">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>freedom</title>
+<style>
+:root {
+  --bg: #EEF1F4;
+  --surface: #FFFFFF;
+  --ink: #1B2430;
+  --muted: #657080;
+  --line: #D5DBE2;
+  --accent: #4B4FD6;
+  --accent-ink: #FFFFFF;
+  --soft: #E3E6F8;
+  --caption-bg: rgba(16, 20, 26, 0.88);
+  --caption-ink: #FFFFFF;
+  --again: #CC453C;
+  --hard: #B97A10;
+  --good: #218B5B;
+  --easy: #3470C9;
+  --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --serif: ui-serif, "New York", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  color-scheme: light dark;
+  box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13161B; --surface: #1D2229; --ink: #E7EBF0; --muted: #97A1AD; --line: #2B323B;
+    --accent: #8C8FF5; --accent-ink: #11131A; --soft: #262B45; --caption-bg: rgba(0, 0, 0, 0.72);
+    --again: #F07068; --hard: #E0A23A; --good: #4CC08A; --easy: #6FA2F0;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13161B; --surface: #1D2229; --ink: #E7EBF0; --muted: #97A1AD; --line: #2B323B;
+  --accent: #8C8FF5; --accent-ink: #11131A; --soft: #262B45; --caption-bg: rgba(0, 0, 0, 0.72);
+  --again: #F07068; --hard: #E0A23A; --good: #4CC08A; --easy: #6FA2F0;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html, body { height: 100%; margin: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 16px/1.5 var(--sans);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.4; cursor: default; }
+img { max-width: 100%; }
+
+/* ---------- 앱 뼈대 ---------- */
+.app { height: 100%; display: flex; flex-direction: column; }
+.view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+[hidden] { display: none !important; }
+
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 20px 10px;
+}
+.topbar h1 { flex: 1; margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+.count { color: var(--muted); font-size: 14px; }
+.pill {
+  border: 0; border-radius: 999px; padding: 7px 14px;
+  background: var(--soft); color: var(--accent); font-weight: 600; font-size: 15px;
+}
+.pill.solid { background: var(--accent); color: var(--accent-ink); }
+
+.scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px 20px 28px; }
+.actions { padding: 12px 20px; border-top: 1px solid var(--line); background: var(--bg); }
+
+.tabbar {
+  display: flex; background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.tab {
+  flex: 1; border: 0; background: none; padding: 8px 0 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 11px; color: var(--muted);
+}
+.tab svg { width: 24px; height: 24px; }
+.tab[aria-selected="true"] { color: var(--accent); }
+
+/* ---------- 카드 앞면(뜻) / 뒷면(자막) ---------- */
+.prompt {
+  background: var(--surface); border-radius: 18px; padding: 22px 20px;
+  border: 1px solid var(--line);
+}
+.prompt-text {
+  margin: 0; font-size: 22px; line-height: 1.45; font-weight: 650;
+  white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
+}
+.shots { display: flex; flex-direction: column; gap: 10px; }
+.shots img { display: block; width: 100%; height: auto; border-radius: 10px; }
+.prompt .shots + .prompt-text { margin-top: 16px; }
+
+.answer { margin-top: 22px; }
+.answer .shots { margin-bottom: 4px; }
+.caption {
+  margin: 16px 0 0; text-align: center;
+  font-family: var(--serif); font-size: 25px; line-height: 1.7;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.caption span {
+  background: var(--caption-bg); color: var(--caption-ink);
+  padding: 5px 12px; border-radius: 6px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.reveal { animation: rise 0.22s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 버튼 ---------- */
+.btn {
+  appearance: none; border: 0; border-radius: 12px; padding: 14px 18px;
+  font-weight: 650; font-size: 16px; line-height: 1.2;
+  background: var(--soft); color: var(--accent);
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.wide { width: 100%; }
+.btn.danger { background: transparent; color: var(--again); border: 1px solid var(--line); }
+
+.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grades.two { grid-template-columns: 1fr 1fr; gap: 10px; }
+.grade {
+  --c: var(--accent);
+  border: 0; border-radius: 12px; padding: 9px 4px 10px;
+  background: var(--surface);
+  background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  color: var(--c);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.grade small { font-size: 12px; opacity: 0.85; }
+.grade span { font-size: 16px; font-weight: 700; }
+.grade.again { --c: var(--again); }
+.grade.hard { --c: var(--hard); }
+.grade.good { --c: var(--good); }
+.grade.easy { --c: var(--easy); }
+
+/* ---------- 빈 화면 ---------- */
+.empty { padding: 48px 8px 0; text-align: center; }
+.empty h2 { margin: 0 0 6px; font-size: 20px; }
+.empty p { margin: 0 0 22px; color: var(--muted); }
+
+/* ---------- 카드 목록 ---------- */
+.card-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: 18px; border: 1px solid var(--line); overflow: hidden; }
+.card-list li + li .row { border-top: 1px solid var(--line); }
+.row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: 0; background: none; text-align: left; padding: 13px 16px;
+}
+.thumb { position: relative; flex: none; width: 52px; height: 52px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.thumb b {
+  position: absolute; right: 3px; bottom: 3px; font-size: 11px; line-height: 1;
+  padding: 3px 5px; border-radius: 999px; background: rgba(0,0,0,.62); color: #fff;
+}
+.row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.row-kor, .row-eng { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-kor { font-weight: 600; }
+.row-eng { font-family: var(--serif); color: var(--muted); }
+.row-meta { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.row-meta .due-now { color: var(--accent); font-weight: 600; }
+
+/* ---------- 전체화면 시트 (편집, 연습, 백업) ---------- */
+.sheet {
+  position: fixed; inset: 0; z-index: 20; background: var(--bg);
+  display: flex; flex-direction: column;
+  animation: slideup 0.24s ease-out;
+}
+@keyframes slideup { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 8px;
+  border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.sheet-head h2 { flex: 1; margin: 0; text-align: center; font-size: 17px; font-weight: 700; }
+.link { border: 0; background: none; color: var(--accent); font-size: 17px; padding: 8px 10px; min-width: 70px; }
+.link.strong { font-weight: 700; }
+.link.end { text-align: right; }
+.link.start { text-align: left; }
+.head-note { min-width: 70px; text-align: right; padding-right: 10px; color: var(--muted); font-size: 14px; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px calc(env(safe-area-inset-bottom, 0px) + 28px); }
+.sheet .actions { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+
+.field { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 12px; }
+.field h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.field h3 span { color: var(--muted); font-weight: 500; margin-left: 6px; }
+textarea {
+  width: 100%; min-height: 3.4em; resize: vertical;
+  font: 18px/1.45 var(--sans); color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+textarea.eng { font-family: var(--serif); }
+.thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; }
+.thumbs figure { position: relative; flex: none; width: 96px; height: 96px; margin: 0; }
+.thumbs img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.thumbs figcaption {
+  position: absolute; left: 4px; bottom: 4px; font-size: 11px; line-height: 1;
+  padding: 3px 6px; border-radius: 999px; background: rgba(0,0,0,.62); color: #fff;
+}
+.thumbs .x {
+  position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%;
+  border: 0; background: rgba(0,0,0,.62); color: #fff; font-size: 18px; line-height: 26px; padding: 0;
+}
+.hint { color: var(--muted); font-size: 14px; margin: -6px 0 16px; }
+.chip { display: inline-block; margin-bottom: 12px; padding: 3px 11px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+
+.backup-text { color: var(--muted); margin: 0 0 18px; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.toast {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); transform: translateX(-50%);
+  z-index: 40; max-width: calc(100% - 40px);
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .sheet { animation: none; }
+}
+@media (min-width: 700px) {
+  .scroll, .sheet-body, .actions { padding-left: max(20px, calc(50% - 300px)); padding-right: max(20px, calc(50% - 300px)); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 복습 -->
+  <section class="view" id="view-review">
+    <header class="topbar">
+      <h1>복습</h1>
+      <span class="count" id="due-count"></span>
+      <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
+    </header>
+    <main class="scroll" id="review-main"></main>
+    <div class="actions" id="review-actions" hidden></div>
+  </section>
+
+  <!-- 카드 목록 -->
+  <section class="view" id="view-cards" hidden>
+    <header class="topbar">
+      <h1 id="cards-title">표현</h1>
+      <button class="pill" data-act="backup">백업</button>
+      <button class="pill solid" data-act="add" aria-label="표현 추가">추가</button>
+    </header>
+    <main class="scroll" id="cards-main"></main>
+  </section>
+
+  <nav class="tabbar" role="tablist">
+    <button class="tab" role="tab" data-tab="review" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="11" rx="2.5"/><path d="M7 18h10M9 21h6"/></svg>
+      복습
+    </button>
+    <button class="tab" role="tab" data-tab="cards" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      카드
+    </button>
+  </nav>
+</div>
+
+<div class="sheet" id="editor" hidden></div>
+<div class="sheet" id="practice" hidden></div>
+<div class="sheet" id="backup" hidden>
+  <header class="sheet-head">
+    <button class="link start" data-act="backup-close">닫기</button>
+    <h2>백업</h2>
+    <span class="head-note"></span>
+  </header>
+  <div class="sheet-body">
+    <p class="backup-text">카드와 사진, 복습 기록은 이 기기의 브라우저 안에만 저장돼요. 가끔 백업 파일을 만들어 파일 앱이나 iCloud Drive에 보관해 두세요.</p>
+    <div class="stack">
+      <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
+      <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="photo-input" accept="image/*" multiple hidden>
+<input type="file" id="backup-input" accept="application/json,.json" hidden>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module">
+import { fsrs, generatorParameters, createEmptyCard, Rating } from './vendor/ts-fsrs.mjs';
+
+// ================= 설정 =================
+// FSRS-6 기본 파라미터, 목표 유지율 90%, 간격에 약간의 랜덤(fuzz)
+const scheduler = fsrs(generatorParameters({ request_retention: 0.9, enable_fuzz: true }));
+const GRADES = [
+  { r: Rating.Again, label: '다시', cls: 'again' },
+  { r: Rating.Hard, label: '어려움', cls: 'hard' },
+  { r: Rating.Good, label: '알맞음', cls: 'good' },
+  { r: Rating.Easy, label: '쉬움', cls: 'easy' },
+];
+// 자유 연습: 맞음 +1, 틀림 -2, 최근 본 3장은 바로 다시 안 나옴
+const PRACTICE = { correct: 1, wrong: -2, recentExclude: 3 };
+const IMAGE_MAX = 1600;      // 사진 긴 변 최대 픽셀
+const IMAGE_QUALITY = 0.8;   // JPEG 품질
+
+// ================= 저장소 (IndexedDB) =================
+let db;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('freedom', 1);
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('reviews')) {
+        const s = d.createObjectStore('reviews', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('cardId', 'cardId');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+const done = (t) => new Promise((res, rej) => {
+  t.oncomplete = () => res();
+  t.onerror = () => rej(t.error);
+  t.onabort = () => rej(t.error);
+});
+const getAll = (name) => new Promise((res, rej) => {
+  const r = db.transaction(name).objectStore(name).getAll();
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function putCard(card) {
+  const t = db.transaction('cards', 'readwrite');
+  t.objectStore('cards').put(card);
+  await done(t);
+}
+async function addReview(review) {
+  const t = db.transaction('reviews', 'readwrite');
+  t.objectStore('reviews').add(review);
+  await done(t);
+}
+async function removeCard(id) {
+  const t = db.transaction(['cards', 'reviews'], 'readwrite');
+  t.objectStore('cards').delete(id);
+  const reviews = t.objectStore('reviews');
+  reviews.index('cardId').openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (cursor) { reviews.delete(cursor.primaryKey); cursor.continue(); }
+  };
+  await done(t);
+}
+async function replaceAll(newCards, newReviews) {
+  const t = db.transaction(['cards', 'reviews'], 'readwrite');
+  const cs = t.objectStore('cards'), rs = t.objectStore('reviews');
+  cs.clear(); rs.clear();
+  newCards.forEach((c) => cs.put(c));
+  newReviews.forEach(({ id, ...rest }) => rs.add(rest));
+  await done(t);
+}
+function requestPersist() {
+  navigator.storage?.persist?.().catch(() => {});
+}
+
+// ================= 상태 =================
+let cards = [];
+const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '' };
+const practice = { currentId: null, recent: [], show: false, solved: 0 };
+let editor = null;        // { cardId, korText, engText, korImages, engImages, loading }
+let photoSide = 'kor';
+
+// ================= 도우미 =================
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toDate = (d) => (d instanceof Date ? d : new Date(d));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+function intervalText(due, now) {
+  const minutes = Math.max(0, toDate(due) - now) / 60000;
+  if (minutes < 60) return `${Math.max(1, Math.round(minutes))}분`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${Math.round(hours)}시간`;
+  const days = hours / 24;
+  if (days < 30) return `${Math.round(days)}일`;
+  if (days < 365) return `${(days / 30).toFixed(1)}개월`;
+  return `${(days / 365).toFixed(1)}년`;
+}
+const formatDay = (d) => toDate(d).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+
+const urlCache = new WeakMap();
+function blobURL(blob) {
+  let url = urlCache.get(blob);
+  if (!url) { url = URL.createObjectURL(blob); urlCache.set(blob, url); }
+  return url;
+}
+
+let toastTimer;
+function toast(message) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+}
+
+/** 사진을 긴 변 1600px 이하 JPEG로 줄이기 */
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, IMAGE_MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', IMAGE_QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ================= 카드 표시 =================
+const imagesHTML = (list) => list.map((b) => `<img src="${blobURL(b)}" alt="">`).join('');
+
+function promptHTML(card) {
+  return `<section class="prompt">
+    ${card.korImages.length ? `<div class="shots">${imagesHTML(card.korImages)}</div>` : ''}
+    ${card.korText ? `<p class="prompt-text">${esc(card.korText)}</p>` : ''}
+  </section>`;
+}
+function answerHTML(card) {
+  return `<section class="answer reveal">
+    ${card.engImages.length ? `<div class="shots">${imagesHTML(card.engImages)}</div>` : ''}
+    ${card.engText ? `<p class="caption"><span>${esc(card.engText)}</span></p>` : ''}
+  </section>`;
+}
+
+// ================= 복습 =================
+function dueCards(now) {
+  return cards
+    .filter((c) => toDate(c.srs.due) <= now)
+    .sort((a, b) => toDate(a.srs.due) - toDate(b.srs.due));
+}
+
+function renderReview() {
+  const now = new Date();
+  const due = dueCards(now);
+  ui.reviewSig = due.map((c) => c.id).join(',');
+  $('#due-count').textContent = due.length ? `${due.length}장 남음` : '';
+  $('#practice-open').disabled = cards.length === 0;
+  const main = $('#review-main'), bar = $('#review-actions');
+
+  if (!due.length) {
+    ui.reviewShow = false; ui.reviewCardId = null;
+    const next = cards.map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
+    let message = '카드 탭에서 유튜브에서 본 표현을 추가해 보세요.';
+    if (next) message = `다음 복습은 ${intervalText(next, now)} 뒤예요. 그 전에 풀고 싶으면 자유 연습을 해 보세요.`;
+    main.innerHTML = `<div class="empty">
+      <h2>${cards.length ? '지금 복습할 카드가 없어요' : '아직 표현이 없어요'}</h2>
+      <p>${message}</p>
+      ${cards.length
+        ? '<button class="btn primary" data-act="practice">자유 연습하기</button>'
+        : '<button class="btn primary" data-act="add">표현 추가하기</button>'}
+    </div>`;
+    bar.hidden = true; bar.innerHTML = '';
+    return;
+  }
+
+  const card = due[0];
+  if (ui.reviewCardId !== card.id) { ui.reviewCardId = card.id; ui.reviewShow = false; }
+  main.innerHTML = promptHTML(card) + (ui.reviewShow ? answerHTML(card) : '');
+  bar.hidden = false;
+  if (!ui.reviewShow) {
+    bar.innerHTML = '<button class="btn primary wide" data-act="reveal">정답 보기</button>';
+  } else {
+    const preview = scheduler.repeat(card.srs, now);
+    bar.innerHTML = `<div class="grades">${GRADES.map((g) => `
+      <button class="grade ${g.cls}" data-act="grade" data-r="${g.r}">
+        <small>${intervalText(preview[g.r].card.due, now)}</small><span>${g.label}</span>
+      </button>`).join('')}</div>`;
+  }
+}
+
+async function gradeCard(rating) {
+  const card = cards.find((c) => c.id === ui.reviewCardId);
+  if (!card) return;
+  const now = new Date();
+  const { card: next, log } = scheduler.next(card.srs, now, rating);
+  card.srs = next;
+  await putCard(card);
+  await addReview({ cardId: card.id, ...log });
+  ui.reviewShow = false;
+  renderReview();
+  $('#review-main').scrollTop = 0;
+}
+
+// ================= 자유 연습 =================
+function pickPractice() {
+  if (!cards.length) { practice.currentId = null; return; }
+  const n = Math.min(PRACTICE.recentExclude, cards.length - 1);
+  const excluded = new Set(n > 0 ? practice.recent.slice(-n) : []);
+  const candidates = cards.filter((c) => !excluded.has(c.id));
+  const lowest = Math.min(...candidates.map((c) => c.practiceScore));
+  const pool = candidates.filter((c) => c.practiceScore === lowest);
+  practice.currentId = pool[Math.floor(Math.random() * pool.length)].id;
+}
+
+function openPractice() {
+  practice.recent = []; practice.solved = 0; practice.show = false;
+  pickPractice();
+  $('#practice').hidden = false;
+  renderPractice();
+}
+
+function renderPractice() {
+  const card = cards.find((c) => c.id === practice.currentId);
+  const el = $('#practice');
+  const head = `<header class="sheet-head">
+    <button class="link start" data-act="practice-close">끝내기</button>
+    <h2>자유 연습</h2>
+    <span class="head-note">${practice.solved}장 풀었어요</span>
+  </header>`;
+  if (!card) {
+    el.innerHTML = head + '<div class="sheet-body"><div class="empty"><h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div></div>';
+    return;
+  }
+  const actions = practice.show
+    ? `<div class="grades two">
+        <button class="grade again" data-act="practice-answer" data-correct="0"><small>${PRACTICE.wrong}</small><span>틀림</span></button>
+        <button class="grade good" data-act="practice-answer" data-correct="1"><small>+${PRACTICE.correct}</small><span>맞음</span></button>
+      </div>`
+    : '<button class="btn primary wide" data-act="practice-reveal">정답 보기</button>';
+  el.innerHTML = `${head}
+    <div class="sheet-body" id="practice-body">
+      <span class="chip">연습 점수 ${card.practiceScore}</span>
+      ${promptHTML(card)}
+      ${practice.show ? answerHTML(card) : ''}
+    </div>
+    <div class="actions">${actions}</div>`;
+}
+
+async function answerPractice(correct) {
+  const card = cards.find((c) => c.id === practice.currentId);
+  if (!card) return;
+  card.practiceScore += correct ? PRACTICE.correct : PRACTICE.wrong;
+  card.practiceCount += 1;
+  await putCard(card);
+  practice.recent.push(card.id);
+  if (practice.recent.length > 10) practice.recent.shift();
+  practice.solved += 1;
+  practice.show = false;
+  pickPractice();
+  renderPractice();
+}
+
+// ================= 카드 목록 =================
+function rowHTML(c, now) {
+  const thumb = c.korImages[0] || c.engImages[0];
+  const count = c.korImages[0] ? c.korImages.length : c.engImages.length;
+  let status;
+  if (c.srs.reps === 0) status = '<span>새 카드</span>';
+  else if (toDate(c.srs.due) <= now) status = '<span class="due-now">지금 복습</span>';
+  else if (toDate(c.srs.due) - now < 86400000) status = `<span>${intervalText(c.srs.due, now)} 뒤 복습</span>`;
+  else status = `<span>${formatDay(c.srs.due)} 복습</span>`;
+  return `<li><button class="row" data-act="edit" data-id="${c.id}">
+    ${thumb ? `<span class="thumb"><img src="${blobURL(thumb)}" alt="">${count > 1 ? `<b>${count}</b>` : ''}</span>` : ''}
+    <span class="row-text">
+      <span class="row-kor">${c.korText ? esc(c.korText) : `사진 ${c.korImages.length}장`}</span>
+      <span class="row-eng">${c.engText ? esc(c.engText) : `사진 ${c.engImages.length}장`}</span>
+      <span class="row-meta">${status}<span>연습 ${c.practiceScore}점</span></span>
+    </span>
+  </button></li>`;
+}
+
+function renderCards() {
+  $('#cards-title').textContent = `표현 ${cards.length}개`;
+  const main = $('#cards-main');
+  if (!cards.length) {
+    main.innerHTML = `<div class="empty">
+      <h2>아직 표현이 없어요</h2>
+      <p>유튜브에서 본 표현을 캡처해서 추가해 보세요.</p>
+      <button class="btn primary" data-act="add">표현 추가하기</button>
+    </div>`;
+    return;
+  }
+  const now = new Date();
+  const list = [...cards].sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
+  main.innerHTML = `<ul class="card-list">${list.map((c) => rowHTML(c, now)).join('')}</ul>`;
+}
+
+// ================= 편집 =================
+function openEditor(cardId = null) {
+  const card = cardId ? cards.find((c) => c.id === cardId) : null;
+  editor = {
+    cardId: card?.id ?? null,
+    korText: card?.korText ?? '',
+    engText: card?.engText ?? '',
+    korImages: [...(card?.korImages ?? [])],
+    engImages: [...(card?.engImages ?? [])],
+    loading: 0,
+  };
+  $('#editor').hidden = false;
+  renderEditor();
+}
+function closeEditor() {
+  editor = null;
+  $('#editor').hidden = true;
+  $('#editor').innerHTML = '';
+}
+
+function sideEditorHTML(side, title, hint, text, images) {
+  return `<div class="field">
+    <h3>${title}<span>${hint}</span></h3>
+    <textarea class="${side}" data-side="${side}" rows="2" placeholder="직접 입력">${esc(text)}</textarea>
+    ${images.length ? `<div class="thumbs">${images.map((b, i) => `
+      <figure>
+        <img src="${blobURL(b)}" alt="">
+        <figcaption>${i + 1}</figcaption>
+        <button class="x" data-act="remove-photo" data-side="${side}" data-index="${i}" aria-label="${i + 1}번 사진 삭제">×</button>
+      </figure>`).join('')}</div>` : ''}
+    <button class="btn wide" data-act="add-photos" data-side="${side}">${images.length ? '사진 더 추가' : '사진 첨부 (여러 장 가능)'}</button>
+  </div>`;
+}
+
+function renderEditor() {
+  const e = editor;
+  $('#editor').innerHTML = `
+    <header class="sheet-head">
+      <button class="link start" data-act="editor-cancel">취소</button>
+      <h2>${e.cardId ? '표현 수정' : '새 표현'}</h2>
+      <button class="link strong end" data-act="editor-save" id="editor-save">저장</button>
+    </header>
+    <div class="sheet-body">
+      ${sideEditorHTML('kor', '뜻', '먼저 보이는 면 (KOR)', e.korText, e.korImages)}
+      ${sideEditorHTML('eng', '영어 표현', '떠올려야 할 정답 (ENG)', e.engText, e.engImages)}
+      ${e.loading ? '<p class="hint">사진을 불러오는 중이에요…</p>' : ''}
+      ${e.cardId ? '<button class="btn danger wide" data-act="editor-delete">이 표현 삭제</button>' : ''}
+    </div>`;
+  updateSaveState();
+}
+
+const hasContent = (text, images) => text.trim().length > 0 || images.length > 0;
+function editorValid() {
+  return editor && !editor.loading && hasContent(editor.korText, editor.korImages) && hasContent(editor.engText, editor.engImages);
+}
+function updateSaveState() {
+  const btn = $('#editor-save');
+  if (btn) btn.disabled = !editorValid();
+}
+
+async function addPhotos(files) {
+  if (!editor || !files.length) return;
+  const e = editor;
+  const side = photoSide;
+  e.loading += 1;
+  renderEditor();
+  const loaded = [];
+  for (const file of files) {
+    const blob = await compressImage(file);
+    if (blob) loaded.push(blob);
+  }
+  if (editor !== e) return;   // 그 사이 편집 화면을 닫은 경우
+  (side === 'kor' ? e.korImages : e.engImages).push(...loaded);
+  e.loading -= 1;
+  if (loaded.length < files.length) toast('일부 사진은 불러오지 못했어요.');
+  renderEditor();
+}
+
+async function saveEditor() {
+  if (!editorValid()) return;
+  const e = editor;
+  const fields = {
+    korText: e.korText.trim(), engText: e.engText.trim(),
+    korImages: e.korImages, engImages: e.engImages,
+  };
+  let card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
+  if (card) {
+    Object.assign(card, fields);
+  } else {
+    const now = new Date();
+    card = { id: uid(), createdAt: now, ...fields, srs: createEmptyCard(now), practiceScore: 0, practiceCount: 0 };
+    cards.push(card);
+  }
+  await putCard(card);
+  closeEditor();
+  renderAll();
+  requestPersist();
+  toast(e.cardId ? '수정했어요.' : '추가했어요.');
+}
+
+async function deleteFromEditor() {
+  const id = editor?.cardId;
+  if (!id || !confirm('이 표현과 복습 기록을 삭제할까요?')) return;
+  await removeCard(id);
+  cards = cards.filter((c) => c.id !== id);
+  closeEditor();
+  renderAll();
+  toast('삭제했어요.');
+}
+
+// ================= 백업 =================
+const blobToDataURL = (b) => new Promise((res) => {
+  const r = new FileReader();
+  r.onload = () => res(r.result);
+  r.readAsDataURL(b);
+});
+const dataURLToBlob = async (u) => (await fetch(u)).blob();
+const reviveDate = (v) => (v ? new Date(v) : v);
+
+async function exportBackup() {
+  const reviews = await getAll('reviews');
+  const payload = {
+    app: 'freedom', version: 1, exportedAt: new Date().toISOString(),
+    cards: await Promise.all(cards.map(async (c) => ({
+      ...c,
+      korImages: await Promise.all(c.korImages.map(blobToDataURL)),
+      engImages: await Promise.all(c.engImages.map(blobToDataURL)),
+    }))),
+    reviews,
+  };
+  const stamp = new Date().toISOString().slice(0, 10);
+  const file = new File([JSON.stringify(payload)], `freedom-backup-${stamp}.json`, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'freedom 백업' });
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+async function importBackup(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { data = null; }
+  if (!data || data.app !== 'freedom' || !Array.isArray(data.cards)) {
+    toast('freedom 백업 파일이 아니에요. 파일을 다시 확인해 주세요.');
+    return;
+  }
+  if (!confirm(`백업의 표현 ${data.cards.length}개로 지금 데이터를 바꿀까요? 현재 기기의 데이터는 지워져요.`)) return;
+  const restored = await Promise.all(data.cards.map(async (c) => ({
+    ...c,
+    createdAt: new Date(c.createdAt),
+    srs: { ...c.srs, due: new Date(c.srs.due), last_review: reviveDate(c.srs.last_review) },
+    korImages: await Promise.all((c.korImages || []).map(dataURLToBlob)),
+    engImages: await Promise.all((c.engImages || []).map(dataURLToBlob)),
+    practiceScore: c.practiceScore ?? 0,
+    practiceCount: c.practiceCount ?? 0,
+  })));
+  const reviews = (data.reviews || []).map((r) => ({ ...r, review: reviveDate(r.review), due: reviveDate(r.due) }));
+  await replaceAll(restored, reviews);
+  cards = restored;
+  $('#backup').hidden = true;
+  renderAll();
+  toast(`표현 ${restored.length}개를 복원했어요.`);
+}
+
+// ================= 화면 전환 =================
+function setTab(tab) {
+  ui.tab = tab;
+  $('#view-review').hidden = tab !== 'review';
+  $('#view-cards').hidden = tab !== 'cards';
+  document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
+  renderAll();
+}
+function renderAll() {
+  renderReview();
+  renderCards();
+}
+
+// ================= 이벤트 =================
+document.addEventListener('click', (ev) => {
+  const tabBtn = ev.target.closest('[data-tab]');
+  if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+  const el = ev.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const act = el.dataset.act;
+  switch (act) {
+    case 'reveal': ui.reviewShow = true; renderReview(); break;
+    case 'grade': gradeCard(Number(el.dataset.r)); break;
+    case 'practice': if (cards.length) openPractice(); break;
+    case 'practice-close': $('#practice').hidden = true; renderAll(); break;
+    case 'practice-reveal': practice.show = true; renderPractice(); break;
+    case 'practice-answer': answerPractice(el.dataset.correct === '1'); break;
+    case 'add': openEditor(); break;
+    case 'edit': openEditor(el.dataset.id); break;
+    case 'editor-cancel': closeEditor(); break;
+    case 'editor-save': saveEditor(); break;
+    case 'editor-delete': deleteFromEditor(); break;
+    case 'add-photos': photoSide = el.dataset.side; $('#photo-input').click(); break;
+    case 'remove-photo': {
+      const list = el.dataset.side === 'kor' ? editor.korImages : editor.engImages;
+      list.splice(Number(el.dataset.index), 1);
+      renderEditor();
+      break;
+    }
+    case 'backup': $('#backup').hidden = false; break;
+    case 'backup-close': $('#backup').hidden = true; break;
+    case 'export': exportBackup().catch(() => toast('백업 파일을 만들지 못했어요. 다시 시도해 주세요.')); break;
+    case 'import': $('#backup-input').click(); break;
+  }
+});
+
+document.addEventListener('input', (ev) => {
+  if (!editor || ev.target.tagName !== 'TEXTAREA') return;
+  if (ev.target.dataset.side === 'kor') editor.korText = ev.target.value;
+  else editor.engText = ev.target.value;
+  updateSaveState();
+});
+
+$('#photo-input').addEventListener('change', (ev) => {
+  const files = [...ev.target.files];
+  ev.target.value = '';
+  addPhotos(files);
+});
+$('#backup-input').addEventListener('change', (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (file) importBackup(file).catch(() => toast('복원하지 못했어요. 파일을 다시 확인해 주세요.'));
+});
+
+// 1분·10분 뒤 다시 나오는 학습 단계 카드를 위해 주기적으로 확인
+function tick() {
+  if (!db) return;
+  const sig = dueCards(new Date()).map((c) => c.id).join(',');
+  if (sig !== ui.reviewSig) renderReview();
+}
+setInterval(tick, 20000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && db) renderAll();
+});
+
+// ================= 시작 =================
+async function init() {
+  db = await openDB();
+  cards = await getAll('cards');
+  renderAll();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+}
+init().catch((err) => {
+  $('#review-main').innerHTML = `<div class="empty"><h2>저장소를 열지 못했어요</h2><p>개인정보 보호 브라우징을 끄고 다시 열어 주세요. (${esc(err?.message || err)})</p></div>`;
+});
+</script>
+</body>
+</html>

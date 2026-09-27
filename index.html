@@ -252,6 +252,10 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 
 .backup-text { color: var(--muted); margin: 0 0 18px; }
 .version { margin: 28px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
+.section-title { margin: 26px 0 8px; font-size: 15px; font-weight: 700; }
+.sync-line { margin: 0; color: var(--muted); font-size: 15px; }
+.sync-line.warn { color: var(--hard); }
+.pill .dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: var(--hard); vertical-align: 2px; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 
 .toast {
@@ -286,7 +290,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   <section class="view" id="view-cards" hidden>
     <header class="topbar">
       <h1 id="cards-title">표현</h1>
-      <button class="pill" data-act="backup">백업</button>
+      <button class="pill" data-act="backup" id="sync-pill">동기화</button>
       <button class="pill solid" data-act="add" aria-label="표현 추가">추가</button>
     </header>
     <div class="filters" id="cards-filters" hidden></div>
@@ -310,11 +314,13 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 <div class="sheet" id="backup" hidden>
   <header class="sheet-head">
     <button class="link start" data-act="backup-close">닫기</button>
-    <h2>백업</h2>
+    <h2>동기화 · 백업</h2>
     <span class="head-note"></span>
   </header>
   <div class="sheet-body">
-    <p class="backup-text">카드와 사진, 복습 기록은 이 기기의 브라우저 안에만 저장돼요. 가끔 백업 파일을 만들어 파일 앱이나 iCloud Drive에 보관해 두세요.</p>
+    <div id="sync-box"></div>
+    <h3 class="section-title">파일로 백업</h3>
+    <p class="backup-text">Drive와 별개로, 지금 데이터를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
     <div class="stack">
       <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
       <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
@@ -354,14 +360,22 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
+// Google Drive 동기화: 사용자 본인 Drive의 앱 전용 숨김 폴더(appDataFolder)에 저장
+const GOOGLE = {
+  clientId: '380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com',
+  scope: 'https://www.googleapis.com/auth/drive.appdata',
+};
+const AUTH_KEY = 'freedom-auth';
+const OAUTH_STATE_KEY = 'freedom-oauth-state';
+const SILENT_LOGIN_KEY = 'freedom-oauth-silent';
 
 // ================= 저장소 (IndexedDB) =================
 let db;
 function openDB() {
   return new Promise((resolve, reject) => {
-    // v2: categories 저장소 추가 (기존 cards, reviews는 그대로)
-    const req = indexedDB.open('freedom', 2);
+    // v2: categories 저장소 추가, v3: meta(동기화 상태) 저장소 추가. 기존 cards, reviews는 그대로
+    const req = indexedDB.open('freedom', 3);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
@@ -370,6 +384,7 @@ function openDB() {
         s.createIndex('cardId', 'cardId');
       }
       if (!d.objectStoreNames.contains('categories')) d.createObjectStore('categories', { keyPath: 'key' });
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
     };
     req.onsuccess = () => {
       const d = req.result;
@@ -422,6 +437,27 @@ function addReview(review) {
     await done(t);
   });
 }
+function addReviews(list) {
+  return withReconnect(async () => {
+    const t = db.transaction('reviews', 'readwrite');
+    list.forEach((r) => t.objectStore('reviews').add(r));
+    await done(t);
+  });
+}
+function getMeta(key) {
+  return withReconnect(() => new Promise((res, rej) => {
+    const r = db.transaction('meta').objectStore('meta').get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+}
+function putMeta(key, value) {
+  return withReconnect(async () => {
+    const t = db.transaction('meta', 'readwrite');
+    t.objectStore('meta').put(value, key);
+    await done(t);
+  });
+}
 function removeCard(id) {
   return withReconnect(() => removeCardOnce(id));
 }
@@ -451,6 +487,7 @@ function requestPersist() {
 // ================= 상태 =================
 let cards = [];
 let catNames = new Map();   // 카테고리 키 → 보이는 이름 (이름을 바꾼 것만)
+let catStamps = new Map();  // 카테고리 키 → 이름을 바꾼 시각 (동기화 병합용)
 const ui = { tab: 'review', reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading }
@@ -534,8 +571,10 @@ async function keyForName(name) {
   if (found) return found;
   const key = keys.has(name) ? `${name}~${uid().slice(0, 8)}` : name;
   if (key !== name) {
-    await putCategoryNames([{ key, name }]);
+    const updatedAt = Date.now();
+    await putCategoryNames([{ key, name, updatedAt }]);
     catNames.set(key, name);
+    catStamps.set(key, updatedAt);
   }
   return key;
 }
@@ -612,8 +651,10 @@ async function renameCategory(from, name) {
   ui.renaming = null;
   if (!name || name === from) { renderCards(); return; }
   const keys = [...new Set([...cards.map(catKey), ...catNames.keys()])].filter((k) => catName(k) === from);
-  await putCategoryNames(keys.map((key) => ({ key, name })));
-  keys.forEach((key) => catNames.set(key, name));
+  const updatedAt = Date.now();
+  await putCategoryNames(keys.map((key) => ({ key, name, updatedAt })));
+  keys.forEach((key) => { catNames.set(key, name); catStamps.set(key, updatedAt); });
+  markChanged();
   if (study.cats) {
     study.cats = [...new Set(study.cats.map((c) => (c === from ? name : c)))];
     saveStudy();
@@ -717,8 +758,10 @@ async function gradeCard(rating) {
   const now = new Date();
   const { card: next, log } = scheduler.next(card.srs, now, rating);
   card.srs = next;
+  card.studyAt = card.updatedAt = Date.now();
   await putCard(card);
   await addReview({ cardId: card.id, ...log });
+  markChanged();
   ui.reviewShow = false;
   renderReview();
   $('#review-main').scrollTop = 0;
@@ -795,7 +838,9 @@ async function answerPractice(correct) {
   if (!card) return;
   card.practiceScore += correct ? PRACTICE.correct : PRACTICE.wrong;
   card.practiceCount += 1;
+  card.studyAt = card.updatedAt = Date.now();
   await putCard(card);
+  markChanged();
   practice.recent.push(card.id);
   if (practice.recent.length > 10) practice.recent.shift();
   practice.solved += 1;
@@ -973,13 +1018,16 @@ async function saveEditor() {
   };
   let card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
   if (card) {
-    Object.assign(card, fields);
+    const t = Date.now();
+    Object.assign(card, fields, { contentAt: t, updatedAt: t });
   } else {
     const now = new Date();
-    card = { id: uid(), createdAt: now, ...fields, srs: createEmptyCard(now), practiceScore: 0, practiceCount: 0 };
+    const t = now.getTime();
+    card = { id: uid(), createdAt: now, contentAt: t, studyAt: t, updatedAt: t, ...fields, srs: createEmptyCard(now), practiceScore: 0, practiceCount: 0 };
     cards.push(card);
   }
   await putCard(card);
+  markChanged();
   closeEditor();
   renderAll();
   requestPersist();
@@ -991,9 +1039,417 @@ async function deleteFromEditor() {
   if (!id || !confirm('이 표현과 복습 기록을 삭제할까요?')) return;
   await removeCard(id);
   cards = cards.filter((c) => c.id !== id);
+  syncMeta.deleted[id] = Date.now();
+  markChanged();
   closeEditor();
   renderAll();
   toast('삭제했어요.');
+}
+
+// ================= Google Drive 동기화 =================
+// 이 기기(IndexedDB)가 원본이고, Drive는 같은 계정의 기기들이 함께 쓰는 사본.
+// Drive에는 data.json(카드·기록·카테고리)과 사진 파일(img-<해시>.jpg)을 둠.
+// 병합은 카드 단위로, 내용(글·사진·카테고리, contentAt)과 학습 기록(복습 일정·연습 점수, studyAt)을
+// 따로 비교해 각각 더 나중에 바뀐 쪽을 씀. 그래서 한 기기에서 고치고 다른 기기에서 복습해도 둘 다 남음.
+// 삭제는 deleted에 시각과 함께 기록.
+const DRIVE_API = 'https://www.googleapis.com/drive/v3';
+const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
+const DATA_FILE = 'data.json';
+
+const auth = loadAuth();                 // { connected, email, token, exp } (이 기기에만 저장)
+const syncMeta = { seq: 0, syncedSeq: 0, deleted: {}, lastSyncAt: 0 };   // IndexedDB meta에 저장
+const sync = { running: false, again: false, timer: null, error: null, gcDone: false };
+
+function loadAuth() {
+  try {
+    const a = JSON.parse(localStorage.getItem(AUTH_KEY));
+    if (a && a.connected) return a;
+  } catch {}
+  return { connected: false };
+}
+function saveAuth() {
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); } catch {}
+}
+const tokenValid = () => !!(auth.connected && auth.token && auth.exp - Date.now() > 60000);
+const contentAt = (c) => c.contentAt ?? 0;
+const studyAt = (c) => c.studyAt ?? 0;
+const touchedAt = (c) => Math.max(contentAt(c), studyAt(c));
+const pendingCount = () => Math.max(0, syncMeta.seq - syncMeta.syncedSeq);
+const saveSyncMeta = () => putMeta('sync', { ...syncMeta });
+
+/** 로컬에서 무언가 바뀌었을 때: 기록해 두고 잠시 뒤 Drive에 올림 */
+function markChanged() {
+  syncMeta.seq += 1;
+  saveSyncMeta().catch(() => {});
+  renderSyncStatus();
+  scheduleSync();
+}
+function scheduleSync(delay = 3000) {
+  clearTimeout(sync.timer);
+  if (!tokenValid()) return;
+  sync.timer = setTimeout(() => syncNow(), delay);
+}
+
+// ----- 로그인 (아이폰 홈 화면 앱에서도 되도록 팝업 대신 페이지 이동 방식) -----
+const redirectUri = () => new URL('./', location.href).href;
+function startLogin(silent) {
+  const state = uid();
+  try { localStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ state, silent })); } catch {}
+  const params = new URLSearchParams({
+    client_id: GOOGLE.clientId,
+    redirect_uri: redirectUri(),
+    response_type: 'token',
+    scope: GOOGLE.scope,
+    include_granted_scopes: 'true',
+    state,
+  });
+  if (silent) params.set('prompt', 'none');
+  if (auth.email) params.set('login_hint', auth.email);
+  location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+}
+/** 로그인하고 돌아왔으면 주소의 #access_token 처리. 반환: 'ok' | { error, silent } | null */
+function handleOAuthReturn() {
+  if (!/[#&]state=/.test(location.hash)) return null;
+  const p = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, '', location.pathname + location.search);
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(OAUTH_STATE_KEY));
+    localStorage.removeItem(OAUTH_STATE_KEY);
+  } catch {}
+  if (!saved || p.get('state') !== saved.state) return null;
+  if (p.get('access_token')) {
+    auth.connected = true;
+    auth.token = p.get('access_token');
+    auth.exp = Date.now() + Number(p.get('expires_in') || 3600) * 1000;
+    saveAuth();
+    return 'ok';
+  }
+  return { error: p.get('error') || 'unknown', silent: !!saved.silent };
+}
+/** 로그인이 만료됐으면 화면 전환 없이(사용자 입력 없이) 다시 받아오기. 공부·편집 중이거나 최근에 시도했으면 안 함 */
+function trySilentLogin() {
+  if (!auth.connected || tokenValid() || !navigator.onLine) return false;
+  if (editor || practice.open || ui.reviewStarted || !$('#backup').hidden) return false;
+  let last = 0;
+  try { last = Number(localStorage.getItem(SILENT_LOGIN_KEY)) || 0; } catch {}
+  if (Date.now() - last < 10 * 60000) return false;
+  try { localStorage.setItem(SILENT_LOGIN_KEY, String(Date.now())); } catch {}
+  startLogin(true);
+  return true;
+}
+async function disconnectDrive() {
+  if (!confirm('Google Drive 연결을 해제할까요? 이 기기의 카드는 그대로 남고, Drive에 저장된 데이터도 지워지지 않아요.')) return;
+  const token = auth.token;
+  auth.connected = false; auth.token = null; auth.email = null;
+  saveAuth();
+  clearTimeout(sync.timer);
+  if (token) {
+    fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    }).catch(() => {});
+  }
+  renderSyncStatus();
+  toast('Google Drive 연결을 해제했어요.');
+}
+
+// ----- Drive API -----
+class AuthNeeded extends Error {
+  constructor() { super('Google 로그인이 필요해요'); this.name = 'AuthNeeded'; }
+}
+async function gfetch(url, opts = {}) {
+  if (!tokenValid()) throw new AuthNeeded();
+  const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${auth.token}` } });
+  if (res.status === 401) {
+    auth.token = null;
+    saveAuth();
+    throw new AuthNeeded();
+  }
+  if (!res.ok) throw new Error(`Drive 오류 ${res.status}`);
+  return res;
+}
+async function driveList(q, fields = 'id,name') {
+  const files = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({ spaces: 'appDataFolder', q, fields: `nextPageToken,files(${fields})`, pageSize: '1000' });
+    if (pageToken) params.set('pageToken', pageToken);
+    const data = await (await gfetch(`${DRIVE_API}/files?${params}`)).json();
+    files.push(...(data.files || []));
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return files;
+}
+const driveDownload = (id) => gfetch(`${DRIVE_API}/files/${id}?alt=media`);
+// 본문은 Blob 대신 바이트(ArrayBuffer)로 보냄 (iOS에서 저장소의 사진 Blob을 바로 보내면 실패하는 경우가 있음)
+async function driveUpload({ id, name, type, data }) {
+  if (id) {
+    const res = await gfetch(`${DRIVE_UPLOAD}/files/${id}?uploadType=media&fields=id`, {
+      method: 'PATCH', headers: { 'Content-Type': type }, body: await data.arrayBuffer(),
+    });
+    return (await res.json()).id;
+  }
+  const boundary = `mooni${uid().replace(/-/g, '')}`;
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
+    JSON.stringify({ name, parents: ['appDataFolder'] }),
+    `\r\n--${boundary}\r\nContent-Type: ${type}\r\n\r\n`,
+    data,
+    `\r\n--${boundary}--`,
+  ]);
+  const res = await gfetch(`${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id`, {
+    method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body: await body.arrayBuffer(),
+  });
+  return (await res.json()).id;
+}
+
+// ----- 사진: 내용 해시로 구분해서 같은 사진은 한 번만 올림 -----
+const hashCache = new WeakMap();
+function blobHash(blob) {
+  let h = hashCache.get(blob);
+  if (!h) {
+    h = blob.arrayBuffer()
+      .then((buf) => crypto.subtle.digest('SHA-256', buf))
+      .then((d) => [...new Uint8Array(d)].slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join(''));
+    hashCache.set(blob, h);
+  }
+  return h;
+}
+
+/** Drive의 카드 → 이 기기의 카드. 이미 가진 사진은 다시 받지 않음.
+    iOS는 저장소에서 읽은 사진 Blob을 다른 카드 객체에 담아 다시 저장하면 사진이 깨질 수 있어서,
+    가진 사진도 바이트를 복사한 새 Blob으로 만들어 새 카드를 추가할 때와 같은 방식으로 저장함 */
+async function cardFromRemote(rc, local, imageIds) {
+  const localByHash = new Map();
+  if (local) {
+    for (const b of [...local.korImages, ...local.engImages]) localByHash.set(await blobHash(b), b);
+  }
+  const load = async (h) => {
+    if (localByHash.has(h)) {
+      const old = localByHash.get(h);
+      const copy = new Blob([await old.arrayBuffer()], { type: old.type || 'image/jpeg' });
+      hashCache.set(copy, Promise.resolve(h));
+      return copy;
+    }
+    if (!imageIds[h]) return null;
+    const got = await (await driveDownload(imageIds[h])).blob();
+    const blob = got.type.startsWith('image/') ? got : new Blob([got], { type: 'image/jpeg' });
+    hashCache.set(blob, Promise.resolve(h));
+    return blob;
+  };
+  const korImages = (await Promise.all((rc.korImages || []).map(load))).filter(Boolean);
+  const engImages = (await Promise.all((rc.engImages || []).map(load))).filter(Boolean);
+  return reviveCard({ ...rc, korImages, engImages });
+}
+
+const reviewKey = (r) => `${r.cardId}|${toDate(r.review).getTime()}`;
+
+async function runSync() {
+  // 1. Drive에서 받기
+  const [file] = await driveList(`name='${DATA_FILE}' and trashed=false`);
+  let remote = {};
+  if (file) remote = await (await driveDownload(file.id)).json();
+  const rCards = remote.cards || {};
+  const imageIds = { ...(remote.images || {}) };   // 해시 → Drive 파일 ID
+  if (!auth.email) {
+    try {
+      auth.email = (await (await gfetch(`${DRIVE_API}/about?fields=user(emailAddress)`)).json()).user?.emailAddress || null;
+      saveAuth();
+    } catch {}
+  }
+  let localChanged = false;
+
+  // 2. 삭제 합치기: 삭제 시각 이후에 바뀐 적 없는 카드는 지움
+  const deleted = { ...(remote.deleted || {}) };
+  for (const [id, ts] of Object.entries(syncMeta.deleted)) deleted[id] = Math.max(deleted[id] || 0, ts);
+  const isDead = (id, at) => id in deleted && deleted[id] >= at;
+  for (const local of [...cards]) {
+    if (isDead(local.id, touchedAt(local)) && editor?.cardId !== local.id) {
+      await removeCard(local.id);
+      cards = cards.filter((c) => c !== local);
+      localChanged = true;
+    }
+  }
+  syncMeta.deleted = deleted;
+
+  // 3. 카드 합치기: 내용·학습 기록 중 Drive 쪽이 더 최근인 부분을 이 기기에 반영 (편집 중인 카드는 다음 번에)
+  for (const [id, rc] of Object.entries(rCards)) {
+    if (isDead(id, touchedAt(rc)) || editor?.cardId === id) continue;
+    const local = cards.find((c) => c.id === id);
+    const newContent = !local || contentAt(rc) > contentAt(local);
+    const newStudy = !local || studyAt(rc) > studyAt(local);
+    if (!newContent && !newStudy) continue;
+    const study = newStudy ? reviveCard(rc) : local;
+    const studyFields = { srs: study.srs, practiceScore: study.practiceScore, practiceCount: study.practiceCount, studyAt: studyAt(study) };
+    if (!newContent) {
+      // 학습 기록만 바뀜: 복습할 때처럼 지금 카드 객체를 고쳐서 그대로 저장
+      Object.assign(local, studyFields);
+      local.updatedAt = touchedAt(local);
+      await putCard(local);
+    } else {
+      const card = Object.assign(await cardFromRemote(rc, local, imageIds), studyFields, { contentAt: contentAt(rc) });
+      card.updatedAt = touchedAt(card);
+      await putCard(card);
+      const i = cards.findIndex((c) => c.id === id);
+      if (i >= 0) cards[i] = card; else cards.push(card);
+    }
+    localChanged = true;
+  }
+
+  // 4. 카테고리 이름 합치기
+  const catUpdates = [];
+  for (const [key, rk] of Object.entries(remote.categories || {})) {
+    if ((catStamps.get(key) ?? -1) < (rk.updatedAt || 0)) catUpdates.push({ key, name: rk.name, updatedAt: rk.updatedAt || 0 });
+  }
+  if (catUpdates.length) {
+    await putCategoryNames(catUpdates);
+    catUpdates.forEach((k) => { catNames.set(k.key, k.name); catStamps.set(k.key, k.updatedAt); });
+    localChanged = true;
+  }
+
+  // 5. 복습 기록 합치기 (없는 것만 추가)
+  const alive = new Set(cards.map((c) => c.id));
+  let localReviews = await getAll('reviews');
+  const have = new Set(localReviews.map(reviewKey));
+  const newReviews = (remote.reviews || [])
+    .filter((r) => alive.has(r.cardId) && !have.has(reviewKey(r)))
+    .map((r) => ({ ...r, review: reviveDate(r.review), due: reviveDate(r.due) }));
+  if (newReviews.length) {
+    await addReviews(newReviews);
+    localReviews = await getAll('reviews');
+  }
+  if (localChanged) renderAll();
+
+  // 6. 이 기기 기준으로 Drive에 올릴 내용 만들기 (새 사진은 먼저 올림)
+  const out = { app: 'freedom', version: 1, cards: {}, deleted, categories: {}, images: {}, reviews: [] };
+  for (const c of cards) {
+    const rc = rCards[c.id];
+    const remoteAhead = rc && (contentAt(rc) > contentAt(c) || studyAt(rc) > studyAt(c));
+    const same = rc && contentAt(rc) === contentAt(c) && studyAt(rc) === studyAt(c);
+    // 같거나, 편집 중이라 아직 반영 못 한 Drive 쪽이 앞서 있으면 Drive 것을 유지 (다음 동기화 때 합침)
+    if (same || remoteAhead) { out.cards[c.id] = rc; continue; }
+    const pack = async (list) => {
+      const hashes = [];
+      for (const blob of list) {
+        const h = await blobHash(blob);
+        if (!imageIds[h]) imageIds[h] = await driveUpload({ name: `img-${h}.jpg`, type: blob.type || 'image/jpeg', data: blob });
+        hashes.push(h);
+      }
+      return hashes;
+    };
+    out.cards[c.id] = {
+      id: c.id, createdAt: c.createdAt, updatedAt: touchedAt(c), contentAt: contentAt(c), studyAt: studyAt(c),
+      korText: c.korText, engText: c.engText, category: c.category,
+      srs: c.srs, practiceScore: c.practiceScore, practiceCount: c.practiceCount,
+      korImages: await pack(c.korImages), engImages: await pack(c.engImages),
+    };
+  }
+  // 편집 중이라 아직 반영하지 못한 Drive 카드도 그대로 유지
+  for (const [id, rc] of Object.entries(rCards)) {
+    if (!out.cards[id] && !isDead(id, touchedAt(rc))) out.cards[id] = rc;
+  }
+  for (const rc of Object.values(out.cards)) {
+    for (const h of [...(rc.korImages || []), ...(rc.engImages || [])]) if (imageIds[h]) out.images[h] = imageIds[h];
+  }
+  for (const [key, name] of catNames) out.categories[key] = { name, updatedAt: catStamps.get(key) ?? 0 };
+  const inOut = new Set(Object.keys(out.cards));
+  out.reviews = localReviews.filter((r) => inOut.has(r.cardId)).map(({ id, ...r }) => r);
+
+  // 7. 바뀐 게 있을 때만 data.json 저장 (순서를 정렬해서 내용이 같으면 같은 글자가 되게)
+  const sorted = (obj) => Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]));
+  out.cards = sorted(out.cards); out.deleted = sorted(out.deleted);
+  out.categories = sorted(out.categories); out.images = sorted(out.images);
+  out.reviews.sort((a, b) => toDate(a.review) - toDate(b.review) || String(a.cardId).localeCompare(String(b.cardId)));
+  const text = JSON.stringify(out);
+  if (!file || text !== JSON.stringify(remote)) {
+    await driveUpload({ id: file?.id, name: DATA_FILE, type: 'application/json', data: new Blob([text], { type: 'application/json' }) });
+  }
+
+  // 8. 더 이상 쓰지 않는 사진 정리 (한 세션에 한 번, 다른 기기가 막 올린 것은 남겨 둠)
+  if (!sync.gcDone) {
+    sync.gcDone = true;
+    const used = new Set(Object.values(out.images));
+    const files = await driveList(`name contains 'img-' and trashed=false`, 'id,name,createdTime');
+    const hourAgo = Date.now() - 3600000;
+    for (const f of files) {
+      if (!used.has(f.id) && new Date(f.createdTime).getTime() < hourAgo) {
+        await gfetch(`${DRIVE_API}/files/${f.id}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+  }
+}
+
+async function syncNow({ quiet = true, announce = false } = {}) {
+  if (!auth.connected) return;
+  if (sync.running) { sync.again = true; return; }
+  if (!tokenValid()) {
+    if (!quiet) startLogin(false);
+    renderSyncStatus();
+    return;
+  }
+  clearTimeout(sync.timer);
+  sync.running = true;
+  sync.error = null;
+  renderSyncStatus();
+  const startSeq = syncMeta.seq;
+  try {
+    await runSync();
+    syncMeta.syncedSeq = Math.max(syncMeta.syncedSeq, startSeq);
+    syncMeta.lastSyncAt = Date.now();
+    await saveSyncMeta();
+    if (announce) toast('Google Drive에 연결했어요. 이제 자동으로 저장돼요.');
+    else if (!quiet) toast('동기화했어요.');
+  } catch (err) {
+    sync.error = err;
+    await saveSyncMeta().catch(() => {});
+    if (!quiet || announce) toast(err instanceof AuthNeeded ? 'Google 로그인이 만료됐어요. 다시 연결해 주세요.' : `동기화하지 못했어요. (${errText(err)})`);
+  } finally {
+    sync.running = false;
+    renderSyncStatus();
+    if (sync.again) { sync.again = false; scheduleSync(1000); }
+  }
+}
+
+function agoText(ts) {
+  const sec = (Date.now() - ts) / 1000;
+  if (sec < 60) return '방금';
+  if (sec < 3600) return `${Math.round(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}시간 전`;
+  return `${Math.round(sec / 86400)}일 전`;
+}
+function renderSyncStatus() {
+  const pending = pendingCount();
+  const needsAttention = auth.connected && ((!tokenValid() && pending > 0) || (sync.error && !sync.running));
+  const pill = $('#sync-pill');
+  if (pill) pill.innerHTML = `동기화${needsAttention ? '<span class="dot" aria-label="확인 필요"></span>' : ''}`;
+  const box = $('#sync-box');
+  if (!box || $('#backup').hidden) return;
+  if (!auth.connected) {
+    box.innerHTML = `<div class="field">
+      <h3>Google Drive 동기화</h3>
+      <p class="sync-line">로그인하면 카드와 사진, 복습 기록이 내 Google Drive에 자동으로 저장돼요. 같은 계정으로 로그인한 다른 기기와도 맞춰져요.</p>
+      <button class="btn primary wide" data-act="drive-login">Google로 로그인</button>
+    </div>`;
+    return;
+  }
+  let line, warn = false;
+  if (sync.running) line = '동기화하는 중…';
+  else if (!tokenValid()) {
+    warn = true;
+    line = `로그인이 만료됐어요. 다시 연결하면 이어서 저장돼요.${pending ? ` (Drive에 안 올라간 변경 ${pending}개)` : ''}`;
+  } else if (sync.error) {
+    warn = true;
+    line = `동기화하지 못했어요. (${esc(errText(sync.error))})`;
+  } else if (pending) line = `Drive에 올리는 중이에요 · 변경 ${pending}개`;
+  else line = syncMeta.lastSyncAt ? `모두 저장됨 · 마지막 동기화 ${agoText(syncMeta.lastSyncAt)}` : '아직 동기화하지 않았어요.';
+  box.innerHTML = `<div class="field">
+    <h3>Google Drive 동기화<span>${esc(auth.email || '연결됨')}</span></h3>
+    <p class="sync-line${warn ? ' warn' : ''}">${line}</p>
+    ${tokenValid()
+      ? `<button class="btn wide" data-act="drive-sync" ${sync.running ? 'disabled' : ''}>지금 동기화</button>`
+      : '<button class="btn primary wide" data-act="drive-login">다시 연결</button>'}
+    <button class="btn danger wide" data-act="drive-disconnect">연결 해제</button>
+  </div>`;
 }
 
 // ================= 백업 =================
@@ -1004,6 +1460,14 @@ const blobToDataURL = (b) => new Promise((res) => {
 });
 const dataURLToBlob = async (u) => (await fetch(u)).blob();
 const reviveDate = (v) => (v ? new Date(v) : v);
+/** JSON에서 읽은 카드의 날짜 값들을 Date로 */
+const reviveCard = (c) => ({
+  ...c,
+  createdAt: new Date(c.createdAt),
+  srs: { ...c.srs, due: new Date(c.srs.due), last_review: reviveDate(c.srs.last_review) },
+  practiceScore: c.practiceScore ?? 0,
+  practiceCount: c.practiceCount ?? 0,
+});
 
 async function exportBackup() {
   const reviews = await getAll('reviews');
@@ -1015,7 +1479,7 @@ async function exportBackup() {
       engImages: await Promise.all(c.engImages.map(blobToDataURL)),
     }))),
     reviews,
-    categories: [...catNames].map(([key, name]) => ({ key, name })),
+    categories: [...catNames].map(([key, name]) => ({ key, name, updatedAt: catStamps.get(key) ?? 0 })),
   };
   const stamp = new Date().toISOString().slice(0, 10);
   const file = new File([JSON.stringify(payload)], `freedom-backup-${stamp}.json`, { type: 'application/json' });
@@ -1044,20 +1508,21 @@ async function importBackup(file) {
     return;
   }
   if (!confirm(`백업의 표현 ${data.cards.length}개로 지금 데이터를 바꿀까요? 현재 기기의 데이터는 지워져요.`)) return;
-  const restored = await Promise.all(data.cards.map(async (c) => ({
+  // 복원한 카드는 다른 기기의 옛 버전보다 앞서도록 지금 시각으로 표시
+  const now = Date.now();
+  const restored = await Promise.all(data.cards.map(async (c) => reviveCard({
     ...c,
-    createdAt: new Date(c.createdAt),
-    srs: { ...c.srs, due: new Date(c.srs.due), last_review: reviveDate(c.srs.last_review) },
+    contentAt: now, studyAt: now, updatedAt: now,
     korImages: await Promise.all((c.korImages || []).map(dataURLToBlob)),
     engImages: await Promise.all((c.engImages || []).map(dataURLToBlob)),
-    practiceScore: c.practiceScore ?? 0,
-    practiceCount: c.practiceCount ?? 0,
   })));
   const reviews = (data.reviews || []).map((r) => ({ ...r, review: reviveDate(r.review), due: reviveDate(r.due) }));
   const categories = (data.categories || []).filter((k) => k && typeof k.key === 'string' && typeof k.name === 'string');
   await replaceAll(restored, reviews, categories);
   cards = restored;
   catNames = new Map(categories.map((k) => [k.key, k.name]));
+  catStamps = new Map(categories.map((k) => [k.key, k.updatedAt ?? 0]));
+  markChanged();
   $('#backup').hidden = true;
   renderAll();
   toast(`표현 ${restored.length}개를 복원했어요.`);
@@ -1125,7 +1590,10 @@ document.addEventListener('click', (ev) => {
       renderEditor();
       break;
     }
-    case 'backup': $('#backup').hidden = false; break;
+    case 'backup': $('#backup').hidden = false; renderSyncStatus(); break;
+    case 'drive-login': startLogin(false); break;
+    case 'drive-sync': syncNow({ quiet: false }); break;
+    case 'drive-disconnect': disconnectDrive(); break;
     case 'backup-close': $('#backup').hidden = true; break;
     case 'export': exportBackup().catch(() => toast('백업 파일을 만들지 못했어요. 다시 시도해 주세요.')); break;
     case 'import': $('#backup-input').click(); break;
@@ -1173,6 +1641,10 @@ setInterval(tick, 20000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (db) renderAll();
+  if (db && auth.connected) {
+    if (tokenValid()) { if (Date.now() - (syncMeta.lastSyncAt || 0) > 10000) syncNow(); }
+    else trySilentLogin();
+  }
   // iOS 홈 화면 앱은 닫아도 메모리에서 그대로 돌아오는 경우가 많아서, 돌아올 때마다 새 버전 확인
   navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {});
 });
@@ -1188,8 +1660,23 @@ function reloadForUpdate() {
 async function init() {
   db = await openDB();
   cards = await getAll('cards');
-  catNames = new Map((await getAll('categories')).map((k) => [k.key, k.name]));
+  const catRows = await getAll('categories');
+  catNames = new Map(catRows.map((k) => [k.key, k.name]));
+  catStamps = new Map(catRows.map((k) => [k.key, k.updatedAt ?? 0]));
+  Object.assign(syncMeta, await getMeta('sync').catch(() => null));
   renderAll();
+  // Google 로그인에서 돌아온 경우
+  const login = handleOAuthReturn();
+  if (login === 'ok') {
+    syncMeta.seq += 1;   // 처음 연결이면 이 기기의 카드를 모두 올리도록
+    syncNow({ quiet: false, announce: true });
+  } else if (login) {
+    if (!login.silent) toast(login.error === 'access_denied' ? 'Google 로그인을 취소했어요.' : `Google에 연결하지 못했어요. (${login.error})`);
+    renderSyncStatus();
+  } else if (auth.connected) {
+    if (tokenValid()) syncNow();
+    else if (!trySilentLogin()) renderSyncStatus();
+  }
   $('#app-version').textContent = `앱 버전 ${APP_VERSION}`;
   if ('serviceWorker' in navigator) {
     // 처음 설치될 때는 이미 최신이므로 새로고침하지 않음

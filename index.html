@@ -244,6 +244,44 @@ textarea.eng { font-family: var(--serif); }
 .setup-title { margin: 8px 0 14px; font-size: 20px; font-weight: 750; }
 .setup-note { margin: -8px 0 16px; color: var(--muted); }
 .summary { flex: 1; min-width: 0; align-self: center; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ---------- 기록(캘린더) ---------- */
+.streak { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
+.streak b { font-size: 26px; font-weight: 800; line-height: 1.2; }
+.streak small, .tile small { color: var(--muted); font-size: 14px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; }
+.tile b { font-size: 21px; font-weight: 750; }
+.cal { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px 14px; margin-bottom: 10px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cal-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.cal-nav { border: 0; background: none; color: var(--accent); font-size: 26px; line-height: 1; width: 44px; height: 40px; border-radius: 10px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.wd { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0 4px; }
+.day {
+  position: relative; aspect-ratio: 1; border: 0; border-radius: 8px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.day.l1 { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.day.l2 { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+.day.l3 { background: color-mix(in srgb, var(--accent) 70%, var(--surface)); }
+.day.l4 { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.day.future { opacity: 0.35; }
+.day.today { box-shadow: inset 0 0 0 2px var(--ink); }
+.day[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.day .add-dot { position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--muted); }
+.legend { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.legend i.l1 { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.legend i.l2 { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+.legend i.l3 { background: color-mix(in srgb, var(--accent) 70%, var(--surface)); }
+.legend i.l4 { background: var(--accent); }
+.legend .gap { width: 10px; }
+.legend i.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.day-rows { list-style: none; margin: 0; padding: 0; }
+.day-rows li { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); }
+.day-rows li:first-child { border-top: 0; }
+.day-rows b { font-variant-numeric: tabular-nums; }
 input.text {
   width: 100%; font: 17px/1.4 var(--sans); color: var(--ink);
   background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
@@ -297,6 +335,14 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
     <main class="scroll" id="cards-main"></main>
   </section>
 
+  <!-- 기록 (캘린더) -->
+  <section class="view" id="view-stats" hidden>
+    <header class="topbar">
+      <h1>기록</h1>
+    </header>
+    <main class="scroll" id="stats-main"></main>
+  </section>
+
   <nav class="tabbar" role="tablist">
     <button class="tab" role="tab" data-tab="review" aria-selected="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="11" rx="2.5"/><path d="M7 18h10M9 21h6"/></svg>
@@ -305,6 +351,10 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
     <button class="tab" role="tab" data-tab="cards" aria-selected="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
       카드
+    </button>
+    <button class="tab" role="tab" data-tab="stats" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17.5h2"/></svg>
+      기록
     </button>
   </nav>
 </div>
@@ -360,7 +410,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 // Google Drive 동기화: 사용자 본인 Drive의 앱 전용 숨김 폴더(appDataFolder)에 저장
 const GOOGLE = {
   clientId: '380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com',
@@ -374,8 +424,8 @@ const SILENT_LOGIN_KEY = 'freedom-oauth-silent';
 let db;
 function openDB() {
   return new Promise((resolve, reject) => {
-    // v2: categories 저장소 추가, v3: meta(동기화 상태) 저장소 추가. 기존 cards, reviews는 그대로
-    const req = indexedDB.open('freedom', 3);
+    // v2: categories, v3: meta(동기화 상태), v4: activity(공부 기록) 저장소 추가. 기존 cards, reviews는 그대로
+    const req = indexedDB.open('freedom', 4);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
@@ -385,6 +435,7 @@ function openDB() {
       }
       if (!d.objectStoreNames.contains('categories')) d.createObjectStore('categories', { keyPath: 'key' });
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+      if (!d.objectStoreNames.contains('activity')) d.createObjectStore('activity', { keyPath: 'id' });
     };
     req.onsuccess = () => {
       const d = req.result;
@@ -444,6 +495,15 @@ function addReviews(list) {
     await done(t);
   });
 }
+/** 공부 기록 저장. id가 정해져 있어서 같은 기록을 여러 번 넣어도 하나로 남음 */
+function putActivity(list) {
+  if (!list.length) return Promise.resolve();
+  return withReconnect(async () => {
+    const t = db.transaction('activity', 'readwrite');
+    list.forEach((a) => t.objectStore('activity').put(a));
+    await done(t);
+  });
+}
 function getMeta(key) {
   return withReconnect(() => new Promise((res, rej) => {
     const r = db.transaction('meta').objectStore('meta').get(key);
@@ -488,7 +548,17 @@ function requestPersist() {
 let cards = [];
 let catNames = new Map();   // 카테고리 키 → 보이는 이름 (이름을 바꾼 것만)
 let catStamps = new Map();  // 카테고리 키 → 이름을 바꾼 시각 (동기화 병합용)
-const ui = { tab: 'review', reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
+// 공부 기록: { id, at(ms) }. id 첫 글자로 종류 구분 r=복습, p=자유 연습, a=표현 추가.
+// 카드를 지워도 남겨서 지난 기록(캘린더)이 줄어들지 않게 함
+let activity = [];
+const reviewActivity = (cardId, at) => ({ id: `r|${cardId}|${toDate(at).getTime()}`, at: toDate(at).getTime() });
+const addActivity = (card) => ({ id: `a|${card.id}`, at: toDate(card.createdAt).getTime() });
+async function recordActivity(list) {
+  await putActivity(list);
+  const have = new Set(activity.map((a) => a.id));
+  activity.push(...list.filter((a) => !have.has(a.id)));
+}
+const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading }
 // 복습·자유 연습 설정 (이 기기에만 저장). cats: null이면 전체 카테고리
@@ -761,6 +831,7 @@ async function gradeCard(rating) {
   card.studyAt = card.updatedAt = Date.now();
   await putCard(card);
   await addReview({ cardId: card.id, ...log });
+  await recordActivity([reviewActivity(card.id, now)]);
   markChanged();
   ui.reviewShow = false;
   renderReview();
@@ -840,6 +911,7 @@ async function answerPractice(correct) {
   card.practiceCount += 1;
   card.studyAt = card.updatedAt = Date.now();
   await putCard(card);
+  await recordActivity([{ id: `p|${card.id}|${card.studyAt}`, at: card.studyAt }]);
   markChanged();
   practice.recent.push(card.id);
   if (practice.recent.length > 10) practice.recent.shift();
@@ -1027,6 +1099,7 @@ async function saveEditor() {
     cards.push(card);
   }
   await putCard(card);
+  if (!e.cardId) await recordActivity([addActivity(card)]);
   markChanged();
   closeEditor();
   renderAll();
@@ -1318,10 +1391,19 @@ async function runSync() {
     await addReviews(newReviews);
     localReviews = await getAll('reviews');
   }
+  // 6-0. 공부 기록 합치기 (id 기준 합집합) + 받아온 복습·카드에서 기록 만들기 (이전 버전 기기 대비)
+  const fromRemote = (remote.activity || []).map(([id, at]) => ({ id, at }));
+  const derived = [...newReviews.map((r) => reviewActivity(r.cardId, r.review)), ...cards.map(addActivity)];
+  const haveActivity = new Set(activity.map((a) => a.id));
+  const newActivity = [...fromRemote, ...derived].filter((a) => !haveActivity.has(a.id) && (haveActivity.add(a.id), true));
+  if (newActivity.length) {
+    await recordActivity(newActivity);
+    localChanged = true;
+  }
   if (localChanged) renderAll();
 
   // 6. 이 기기 기준으로 Drive에 올릴 내용 만들기 (새 사진은 먼저 올림)
-  const out = { app: 'freedom', version: 1, cards: {}, deleted, categories: {}, images: {}, reviews: [] };
+  const out = { app: 'freedom', version: 1, cards: {}, deleted, categories: {}, images: {}, reviews: [], activity: [] };
   for (const c of cards) {
     const rc = rCards[c.id];
     const remoteAhead = rc && (contentAt(rc) > contentAt(c) || studyAt(rc) > studyAt(c));
@@ -1354,6 +1436,7 @@ async function runSync() {
   for (const [key, name] of catNames) out.categories[key] = { name, updatedAt: catStamps.get(key) ?? 0 };
   const inOut = new Set(Object.keys(out.cards));
   out.reviews = localReviews.filter((r) => inOut.has(r.cardId)).map(({ id, ...r }) => r);
+  out.activity = activity.map((a) => [a.id, a.at]).sort((x, y) => x[1] - y[1] || (x[0] < y[0] ? -1 : 1));
 
   // 7. 바뀐 게 있을 때만 data.json 저장 (순서를 정렬해서 내용이 같으면 같은 글자가 되게)
   const sorted = (obj) => Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]));
@@ -1519,6 +1602,7 @@ async function importBackup(file) {
   const reviews = (data.reviews || []).map((r) => ({ ...r, review: reviveDate(r.review), due: reviveDate(r.due) }));
   const categories = (data.categories || []).filter((k) => k && typeof k.key === 'string' && typeof k.name === 'string');
   await replaceAll(restored, reviews, categories);
+  await recordActivity([...restored.map(addActivity), ...reviews.map((r) => reviewActivity(r.cardId, r.review))]);
   cards = restored;
   catNames = new Map(categories.map((k) => [k.key, k.name]));
   catStamps = new Map(categories.map((k) => [k.key, k.updatedAt ?? 0]));
@@ -1528,15 +1612,138 @@ async function importBackup(file) {
   toast(`표현 ${restored.length}개를 복원했어요.`);
 }
 
+// ================= 기록 (캘린더) =================
+// 날짜 칸 색: 그날 푼 카드 수(복습 + 자유 연습). 0 / 1~9 / 10~29 / 30~59 / 60+
+const LEVELS = [1, 10, 30, 60];
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const pad2 = (n) => String(n).padStart(2, '0');
+const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const levelOf = (n) => LEVELS.filter((t) => n >= t).length;
+
+/** 날짜(기기 현지 시간) → { review, practice, add } */
+function dailyActivity() {
+  const days = new Map();
+  for (const a of activity) {
+    const k = dayKey(new Date(a.at));
+    const d = days.get(k) || { review: 0, practice: 0, add: 0 };
+    if (a.id[0] === 'r') d.review += 1;
+    else if (a.id[0] === 'p') d.practice += 1;
+    else if (a.id[0] === 'a') d.add += 1;
+    days.set(k, d);
+  }
+  return days;
+}
+const solvedOf = (d) => (d ? d.review + d.practice : 0);
+
+/** 연속 공부일: 오늘(아직 안 했으면 어제)부터 거꾸로 1장이라도 한 날이 이어진 수 */
+function streakInfo(days) {
+  const d = new Date();
+  const doneToday = solvedOf(days.get(dayKey(d))) > 0;
+  if (!doneToday) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (solvedOf(days.get(dayKey(d))) > 0) { n += 1; d.setDate(d.getDate() - 1); }
+  return { n, doneToday };
+}
+
+function renderStats() {
+  if (ui.tab !== 'stats') return;
+  const days = dailyActivity();
+  const now = new Date();
+  const todayKey = dayKey(now);
+  if (!ui.calMonth) ui.calMonth = { y: now.getFullYear(), m: now.getMonth() };
+  const { y, m } = ui.calMonth;
+  const monthLabel = `${m + 1}월`;
+
+  // 연속 기록
+  const { n, doneToday } = streakInfo(days);
+  let streakSub;
+  if (n === 0) streakSub = '오늘 1장이라도 풀면 연속 기록이 시작돼요.';
+  else if (doneToday) streakSub = '연속 공부 중 · 오늘도 했어요';
+  else streakSub = `오늘 공부하면 ${n + 1}일째가 돼요.`;
+
+  // 이번 달(보고 있는 달) 합계
+  let monthDays = 0, monthSolved = 0;
+  const last = new Date(y, m + 1, 0).getDate();
+  for (let d = 1; d <= last; d++) {
+    const solved = solvedOf(days.get(`${y}-${pad2(m + 1)}-${pad2(d)}`));
+    if (solved) { monthDays += 1; monthSolved += solved; }
+  }
+
+  // 달력: 일요일 시작
+  const firstKey = [...days.keys()].sort()[0];
+  const first = firstKey ? new Date(`${firstKey}T00:00:00`) : now;
+  const canPrev = y > first.getFullYear() || (y === first.getFullYear() && m > first.getMonth());
+  const canNext = y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth());
+  const selected = ui.calDay || (y === now.getFullYear() && m === now.getMonth() ? todayKey : null);
+  const lead = new Date(y, m, 1).getDay();
+  let cells = WEEKDAYS.map((w) => `<span class="wd" aria-hidden="true">${w}</span>`).join('');
+  cells += '<span></span>'.repeat(lead);
+  for (let d = 1; d <= last; d++) {
+    const k = `${y}-${pad2(m + 1)}-${pad2(d)}`;
+    const info = days.get(k);
+    const solved = solvedOf(info);
+    const future = k > todayKey;
+    const label = `${m + 1}월 ${d}일, ${solved ? `${solved}장 풀었어요` : '공부 기록 없음'}${info?.add ? `, 새 표현 ${info.add}개` : ''}`;
+    cells += `<button class="day${solved ? ` l${levelOf(solved)}` : ''}${k === todayKey ? ' today' : ''}${future ? ' future' : ''}"
+      data-act="cal-day" data-day="${k}" aria-pressed="${k === selected}" aria-label="${label}" ${future ? 'disabled' : ''}>
+      ${d}${!solved && info?.add ? '<span class="add-dot"></span>' : ''}
+    </button>`;
+  }
+
+  // 고른 날 상세
+  let detail = '';
+  if (selected) {
+    const info = days.get(selected);
+    const date = new Date(`${selected}T00:00:00`);
+    const title = date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
+    detail = `<section class="field">
+      <h3>${title}${selected === todayKey ? '<span>오늘</span>' : ''}</h3>
+      ${info && (solvedOf(info) || info.add)
+        ? `<ul class="day-rows">
+            <li><span>복습</span><b>${info.review}장</b></li>
+            <li><span>자유 연습</span><b>${info.practice}장</b></li>
+            <li><span>새 표현</span><b>${info.add}개</b></li>
+          </ul>`
+        : '<p class="sync-line">공부 기록이 없어요.</p>'}
+    </section>`;
+  }
+
+  $('#stats-main').innerHTML = `
+    <div class="streak">
+      <b>${n > 0 ? `🔥 ${n}일 연속` : '연속 기록 0일'}</b>
+      <small>${streakSub}</small>
+    </div>
+    <div class="tiles">
+      <div class="tile"><b>${monthDays}일</b><small>${monthLabel}에 공부한 날</small></div>
+      <div class="tile"><b>${monthSolved}장</b><small>${monthLabel}에 푼 카드</small></div>
+    </div>
+    <section class="cal" aria-label="${y}년 ${monthLabel} 공부 달력">
+      <div class="cal-head">
+        <button class="cal-nav" data-act="cal-prev" aria-label="이전 달" ${canPrev ? '' : 'disabled'}>‹</button>
+        <h2>${y}년 ${monthLabel}</h2>
+        <button class="cal-nav" data-act="cal-next" aria-label="다음 달" ${canNext ? '' : 'disabled'}>›</button>
+      </div>
+      <div class="cal-grid">${cells}</div>
+      <div class="legend" aria-hidden="true">
+        적음 <i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> 많음
+        <span class="gap"></span><i class="dot"></i> 표현만 추가
+      </div>
+    </section>
+    ${detail}`;
+}
+
 // ================= 화면 전환 =================
 function setTab(tab) {
   ui.tab = tab;
   $('#view-review').hidden = tab !== 'review';
   $('#view-cards').hidden = tab !== 'cards';
+  $('#view-stats').hidden = tab !== 'stats';
+  if (tab === 'stats') { ui.calMonth = null; ui.calDay = null; }
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
   renderAll();
 }
 function renderAll() {
+  renderStats();
   renderReview();
   renderCards();
 }
@@ -1562,6 +1769,15 @@ document.addEventListener('click', (ev) => {
       break;
     case 'practice-stop': practice.started = false; renderPractice(); break;
     case 'study-cat': toggleStudyCat(el.dataset.cat ?? null); break;
+    case 'cal-prev': case 'cal-next': {
+      const { y, m } = ui.calMonth;
+      const d = new Date(y, m + (act === 'cal-next' ? 1 : -1), 1);
+      ui.calMonth = { y: d.getFullYear(), m: d.getMonth() };
+      ui.calDay = null;
+      renderStats();
+      break;
+    }
+    case 'cal-day': ui.calDay = el.dataset.day; renderStats(); break;
     case 'cards-cat': ui.cardsCat = el.dataset.cat ?? null; renderCards(); break;
     case 'rename-cat': {
       ui.renaming = el.dataset.cat;
@@ -1664,6 +1880,13 @@ async function init() {
   catNames = new Map(catRows.map((k) => [k.key, k.name]));
   catStamps = new Map(catRows.map((k) => [k.key, k.updatedAt ?? 0]));
   Object.assign(syncMeta, await getMeta('sync').catch(() => null));
+  activity = await getAll('activity');
+  // 공부 기록 저장소가 생기기 전의 복습 기록과 카드 추가 날짜로 채움 (한 번만)
+  if (!(await getMeta('activitySeeded').catch(() => false))) {
+    const reviews = await getAll('reviews');
+    await recordActivity([...reviews.map((r) => reviewActivity(r.cardId, r.review)), ...cards.map(addActivity)]);
+    await putMeta('activitySeeded', true);
+  }
   renderAll();
   // Google 로그인에서 돌아온 경우
   const login = handleOAuthReturn();

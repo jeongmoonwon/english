@@ -251,6 +251,7 @@ input.text {
 input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .backup-text { color: var(--muted); margin: 0 0 18px; }
+.version { margin: 28px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 
 .toast {
@@ -318,6 +319,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
       <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
       <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
     </div>
+    <p class="version" id="app-version"></p>
   </div>
 </div>
 
@@ -351,6 +353,8 @@ const DIRECTIONS = {
   reverse: { label: '표현 → 뜻', sides: ['eng', 'kor'] },
 };
 const STUDY_KEY = 'freedom-study';
+// 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
+const APP_VERSION = 'v6';
 
 // ================= 저장소 (IndexedDB) =================
 let db;
@@ -883,6 +887,7 @@ function closeEditor() {
   editor = null;
   $('#editor').hidden = true;
   $('#editor').innerHTML = '';
+  if (updateReady) { location.reload(); return; }
 }
 
 function sideEditorHTML(side, title, hint, text, images) {
@@ -1166,8 +1171,18 @@ function tick() {
 }
 setInterval(tick, 20000);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && db) renderAll();
+  if (document.visibilityState !== 'visible') return;
+  if (db) renderAll();
+  // iOS 홈 화면 앱은 닫아도 메모리에서 그대로 돌아오는 경우가 많아서, 돌아올 때마다 새 버전 확인
+  navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {});
 });
+
+/** 새 버전이 설치되면 한 번 새로고침해서 바로 적용 (편집 중이면 편집을 닫은 뒤에) */
+let updateReady = false;
+function reloadForUpdate() {
+  if (editor) { updateReady = true; return; }
+  location.reload();
+}
 
 // ================= 시작 =================
 async function init() {
@@ -1175,7 +1190,16 @@ async function init() {
   cards = await getAll('cards');
   catNames = new Map((await getAll('categories')).map((k) => [k.key, k.name]));
   renderAll();
+  $('#app-version').textContent = `앱 버전 ${APP_VERSION}`;
   if ('serviceWorker' in navigator) {
+    // 처음 설치될 때는 이미 최신이므로 새로고침하지 않음
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      reloadForUpdate();
+    });
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 }

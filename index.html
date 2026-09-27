@@ -230,9 +230,20 @@ textarea.eng { font-family: var(--serif); }
 }
 .cat small { margin-left: 5px; opacity: 0.7; }
 .cat[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.cat.dir { background: var(--soft); border-color: transparent; color: var(--accent); font-weight: 700; }
 .cat.ghost { background: none; border-style: dashed; color: var(--muted); }
-.filters .sep { flex: none; width: 1px; margin: 4px 2px; background: var(--line); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.seg-btn {
+  border: 1px solid var(--line); border-radius: 14px; padding: 12px 10px;
+  background: var(--bg); color: var(--ink); text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 17px; font-weight: 700;
+}
+.seg-btn small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.seg-btn[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); color: var(--accent); }
+.seg-btn[aria-pressed="true"] small { color: var(--accent); }
+.setup-title { margin: 8px 0 14px; font-size: 20px; font-weight: 750; }
+.setup-note { margin: -8px 0 16px; color: var(--muted); }
+.summary { flex: 1; min-width: 0; align-self: center; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 input.text {
   width: 100%; font: 17px/1.4 var(--sans); color: var(--ink);
   background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
@@ -265,7 +276,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
       <span class="count" id="due-count"></span>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
     </header>
-    <div class="filters" id="review-filters"></div>
+    <div class="filters" id="review-filters" hidden></div>
     <main class="scroll" id="review-main"></main>
     <div class="actions" id="review-actions" hidden></div>
   </section>
@@ -436,8 +447,8 @@ function requestPersist() {
 // ================= 상태 =================
 let cards = [];
 let catNames = new Map();   // 카테고리 키 → 보이는 이름 (이름을 바꾼 것만)
-const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
-const practice = { currentId: null, recent: [], show: false, solved: 0, open: false };
+const ui = { tab: 'review', reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
+const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading }
 // 복습·자유 연습 설정 (이 기기에만 저장). cats: null이면 전체 카테고리
 const study = loadStudy();
@@ -553,40 +564,44 @@ function toggleStudyCat(name) {
   saveStudy();
   studyChanged();
 }
-function toggleDirection() {
-  study.dir = study.dir === 'forward' ? 'reverse' : 'forward';
+function setDirection(dir) {
+  if (!DIRECTIONS[dir]) return;
+  study.dir = dir;
   saveStudy();
   studyChanged();
 }
-/** 방향이나 카테고리를 바꾸면 복습·연습 카드를 처음부터 다시 보여 줌 */
+/** 설정 화면에서 방향·카테고리를 바꾸면 다시 그림 (카드는 시작을 눌러야 보임) */
 function studyChanged() {
-  ui.reviewShow = false; ui.reviewCardId = null;
-  renderFilters();
   renderReview();
-  if (practice.open) {
-    practice.show = false;
-    pickPractice();
-    renderPractice();
-  }
+  if (practice.open) renderPractice();
 }
 
-function studyFiltersHTML() {
+/** 복습·연습 시작 전 설정: 방향과 카테고리 */
+function setupHTML() {
   const cats = categoryList();
   const sel = new Set(selectedCats());
-  const dir = DIRECTIONS[study.dir];
-  let html = `<button class="cat dir" data-act="toggle-dir" aria-label="학습 방향 ${dir.label}, 눌러서 바꾸기">${dir.label} ⇄</button>`;
-  if (cats.length > 1) {
-    html += `<span class="sep"></span>
-      <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체</button>
-      ${cats.map((c) => `<button class="cat" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}`;
-  }
-  return html;
+  const dirBtn = (key, hint) => `<button class="seg-btn" data-act="set-dir" data-dir="${key}" aria-pressed="${study.dir === key}">${DIRECTIONS[key].label}<small>${hint}</small></button>`;
+  return `<div class="field">
+      <h3>방향</h3>
+      <div class="seg">
+        ${dirBtn('forward', '뜻 보고 표현 떠올리기')}
+        ${dirBtn('reverse', '표현 보고 뜻 떠올리기')}
+      </div>
+    </div>
+    ${cats.length > 1 ? `<div class="field">
+      <h3>카테고리<span>여러 개 고를 수 있어요</span></h3>
+      <div class="chips">
+        <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체</button>
+        ${cats.map((c) => `<button class="cat" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}
+      </div>
+    </div>` : ''}`;
 }
-function renderFilters() {
-  const html = studyFiltersHTML();
-  $('#review-filters').innerHTML = html;
-  const pf = $('#practice-filters');
-  if (pf) pf.innerHTML = html;
+/** 진행 중에 보이는 설정 요약 + 설정으로 돌아가기 */
+function studySummaryHTML(stopAct) {
+  const sel = selectedCats();
+  const cats = categoryList().length > 1 ? ` · ${sel.length ? sel.map(esc).join(', ') : '전체'}` : '';
+  return `<span class="summary">${DIRECTIONS[study.dir].label}${cats}</span>
+    <button class="cat ghost" data-act="${stopAct}">설정 바꾸기</button>`;
 }
 
 async function renameCategory(from, name) {
@@ -643,24 +658,40 @@ function renderReview() {
   ui.reviewSig = due.map((c) => c.id).join(',');
   $('#due-count').textContent = due.length ? `${due.length}장 남음` : '';
   $('#practice-open').disabled = cards.length === 0;
-  const main = $('#review-main'), bar = $('#review-actions');
+  const main = $('#review-main'), bar = $('#review-actions'), filters = $('#review-filters');
+  if (!due.length) ui.reviewStarted = false;
 
-  if (!due.length) {
-    ui.reviewShow = false; ui.reviewCardId = null;
-    const next = studyCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
-    let message = '카드 탭에서 유튜브에서 본 표현을 추가해 보세요.';
-    if (next) message = `다음 복습은 ${intervalText(next, now)} 뒤예요. 그 전에 풀고 싶으면 자유 연습을 해 보세요.`;
+  if (!cards.length) {
+    filters.hidden = true;
     main.innerHTML = `<div class="empty">
-      <h2>${cards.length ? '지금 복습할 카드가 없어요' : '아직 표현이 없어요'}</h2>
-      <p>${message}</p>
-      ${cards.length
-        ? '<button class="btn primary" data-act="practice">자유 연습하기</button>'
-        : '<button class="btn primary" data-act="add">표현 추가하기</button>'}
+      <h2>아직 표현이 없어요</h2>
+      <p>카드 탭에서 유튜브에서 본 표현을 추가해 보세요.</p>
+      <button class="btn primary" data-act="add">표현 추가하기</button>
     </div>`;
     bar.hidden = true; bar.innerHTML = '';
     return;
   }
 
+  // 시작 전: 방향·카테고리를 고르는 화면 (카드는 아직 안 보여 줌)
+  if (!ui.reviewStarted) {
+    ui.reviewShow = false; ui.reviewCardId = null;
+    filters.hidden = true;
+    let head = `<h2 class="setup-title">지금 복습할 카드 ${due.length}장</h2>`;
+    if (!due.length) {
+      const next = studyCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
+      head = `<h2 class="setup-title">지금 복습할 카드가 없어요</h2>
+        <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p>`;
+    }
+    main.innerHTML = head + setupHTML();
+    bar.hidden = false;
+    bar.innerHTML = due.length
+      ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`
+      : '<button class="btn wide" data-act="practice">자유 연습하기</button>';
+    return;
+  }
+
+  filters.hidden = false;
+  filters.innerHTML = studySummaryHTML('review-stop');
   const card = due[0];
   if (ui.reviewCardId !== card.id) { ui.reviewCardId = card.id; ui.reviewShow = false; }
   main.innerHTML = promptHTML(card) + (ui.reviewShow ? answerHTML(card) : '');
@@ -703,8 +734,7 @@ function pickPractice() {
 }
 
 function openPractice() {
-  practice.recent = []; practice.solved = 0; practice.show = false; practice.open = true;
-  pickPractice();
+  practice.recent = []; practice.solved = 0; practice.show = false; practice.open = true; practice.started = false;
   const el = $('#practice');
   el.innerHTML = `<header class="sheet-head">
       <button class="link start" data-act="practice-close">끝내기</button>
@@ -715,7 +745,6 @@ function openPractice() {
     <div class="sheet-body" id="practice-body"></div>
     <div class="actions" id="practice-actions"></div>`;
   el.hidden = false;
-  renderFilters();
   renderPractice();
 }
 function closePractice() {
@@ -727,8 +756,17 @@ function closePractice() {
 
 function renderPractice() {
   const card = cards.find((c) => c.id === practice.currentId);
-  const body = $('#practice-body'), bar = $('#practice-actions');
-  $('#practice-solved').textContent = `${practice.solved}장 풀었어요`;
+  const body = $('#practice-body'), bar = $('#practice-actions'), filters = $('#practice-filters');
+  $('#practice-solved').textContent = practice.solved ? `${practice.solved}장 풀었어요` : '';
+  if (!practice.started) {
+    filters.hidden = true;
+    body.innerHTML = `<h2 class="setup-title">연습할 카드 ${studyCards().length}장</h2>` + setupHTML();
+    bar.hidden = false;
+    bar.innerHTML = '<button class="btn primary wide" data-act="practice-start">연습 시작</button>';
+    return;
+  }
+  filters.hidden = false;
+  filters.innerHTML = studySummaryHTML('practice-stop');
   if (!card) {
     body.innerHTML = '<div class="empty"><h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div>';
     bar.hidden = true;
@@ -1029,7 +1067,6 @@ function setTab(tab) {
   renderAll();
 }
 function renderAll() {
-  renderFilters();
   renderReview();
   renderCards();
 }
@@ -1046,7 +1083,14 @@ document.addEventListener('click', (ev) => {
     case 'grade': gradeCard(Number(el.dataset.r)).catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'practice': if (cards.length) openPractice(); break;
     case 'practice-close': closePractice(); break;
-    case 'toggle-dir': toggleDirection(); break;
+    case 'set-dir': setDirection(el.dataset.dir); break;
+    case 'review-start': ui.reviewStarted = true; renderReview(); $('#review-main').scrollTop = 0; break;
+    case 'review-stop': ui.reviewStarted = false; renderReview(); break;
+    case 'practice-start':
+      practice.started = true; practice.show = false; pickPractice(); renderPractice();
+      $('#practice-body').scrollTop = 0;
+      break;
+    case 'practice-stop': practice.started = false; renderPractice(); break;
     case 'study-cat': toggleStudyCat(el.dataset.cat ?? null); break;
     case 'cards-cat': ui.cardsCat = el.dataset.cat ?? null; renderCards(); break;
     case 'rename-cat': {

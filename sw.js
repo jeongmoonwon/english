@@ -1,6 +1,6 @@
 // 앱 파일을 기기에 저장해 오프라인에서도 열리게 합니다.
 // index.html 등을 수정해 다시 올릴 때는 아래 버전 숫자를 올려 주세요.
-const CACHE = 'freedom-v4';
+const CACHE = 'freedom-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -29,9 +29,10 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
   // 페이지: 온라인이면 최신 버전, 오프라인이면 저장된 버전
+  // (브라우저 HTTP 캐시를 건너뛰고 서버에 확인해서 push 직후에도 새 버전을 받음)
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put('./index.html', copy));

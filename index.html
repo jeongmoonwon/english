@@ -105,6 +105,8 @@ img { max-width: 100%; }
 .shots { display: flex; flex-direction: column; gap: 10px; }
 .shots img { display: block; width: 100%; height: auto; border-radius: 10px; }
 .prompt .shots + .prompt-text { margin-top: 16px; }
+.prompt-text.serif { font-family: var(--serif); font-weight: 500; }
+.answer-text { margin-top: 16px; text-align: center; }
 
 .answer { margin-top: 22px; }
 .answer .shots { margin-bottom: 4px; }
@@ -217,6 +219,26 @@ textarea.eng { font-family: var(--serif); }
 .hint { color: var(--muted); font-size: 14px; margin: -6px 0 16px; }
 .chip { display: inline-block; margin-bottom: 12px; padding: 3px 11px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 600; }
 
+/* ---------- 학습 방향 / 카테고리 칩 ---------- */
+.filters { display: flex; gap: 8px; padding: 2px 20px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.sheet .filters { padding-top: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat {
+  flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px;
+  background: var(--surface); color: var(--ink); font-size: 14px; line-height: 1.3; white-space: nowrap;
+}
+.cat small { margin-left: 5px; opacity: 0.7; }
+.cat[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.cat.dir { background: var(--soft); border-color: transparent; color: var(--accent); font-weight: 700; }
+.cat.ghost { background: none; border-style: dashed; color: var(--muted); }
+.filters .sep { flex: none; width: 1px; margin: 4px 2px; background: var(--line); }
+input.text {
+  width: 100%; font: 17px/1.4 var(--sans); color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .backup-text { color: var(--muted); margin: 0 0 18px; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 
@@ -230,7 +252,7 @@ textarea.eng { font-family: var(--serif); }
   .reveal, .sheet { animation: none; }
 }
 @media (min-width: 700px) {
-  .scroll, .sheet-body, .actions { padding-left: max(20px, calc(50% - 300px)); padding-right: max(20px, calc(50% - 300px)); }
+  .scroll, .sheet-body, .actions, .filters { padding-left: max(20px, calc(50% - 300px)); padding-right: max(20px, calc(50% - 300px)); }
 }
 </style>
 </head>
@@ -243,6 +265,7 @@ textarea.eng { font-family: var(--serif); }
       <span class="count" id="due-count"></span>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
     </header>
+    <div class="filters" id="review-filters"></div>
     <main class="scroll" id="review-main"></main>
     <div class="actions" id="review-actions" hidden></div>
   </section>
@@ -254,6 +277,7 @@ textarea.eng { font-family: var(--serif); }
       <button class="pill" data-act="backup">백업</button>
       <button class="pill solid" data-act="add" aria-label="표현 추가">추가</button>
     </header>
+    <div class="filters" id="cards-filters" hidden></div>
     <main class="scroll" id="cards-main"></main>
   </section>
 
@@ -306,6 +330,14 @@ const GRADES = [
 const PRACTICE = { correct: 1, wrong: -2, recentExclude: 3 };
 const IMAGE_MAX = 1600;      // 사진 긴 변 최대 픽셀
 const IMAGE_QUALITY = 0.8;   // JPEG 품질
+// 카테고리가 없는 카드(이전 버전에서 만든 카드)는 이 카테고리로 봅니다
+const DEFAULT_CATEGORY = '기본';
+// 학습 방향: forward = 뜻 보고 표현 떠올리기, reverse = 표현 보고 뜻 떠올리기
+const DIRECTIONS = {
+  forward: { label: '뜻 → 표현', sides: ['kor', 'eng'] },
+  reverse: { label: '표현 → 뜻', sides: ['eng', 'kor'] },
+};
+const STUDY_KEY = 'freedom-study';
 
 // ================= 저장소 (IndexedDB) =================
 let db;
@@ -368,9 +400,22 @@ function requestPersist() {
 
 // ================= 상태 =================
 let cards = [];
-const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '' };
-const practice = { currentId: null, recent: [], show: false, solved: 0 };
-let editor = null;        // { cardId, korText, engText, korImages, engImages, loading }
+const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null };
+const practice = { currentId: null, recent: [], show: false, solved: 0, open: false };
+let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading }
+// 복습·자유 연습 설정 (이 기기에만 저장). cats: null이면 전체 카테고리
+const study = loadStudy();
+
+function loadStudy() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STUDY_KEY));
+    if (s && DIRECTIONS[s.dir]) return { dir: s.dir, cats: Array.isArray(s.cats) ? s.cats : null };
+  } catch {}
+  return { dir: 'forward', cats: null };
+}
+function saveStudy() {
+  try { localStorage.setItem(STUDY_KEY, JSON.stringify(study)); } catch {}
+}
 let photoSide = 'kor';
 
 // ================= 도우미 =================
@@ -426,25 +471,120 @@ function compressImage(file) {
   });
 }
 
+// ================= 카테고리 =================
+const catOf = (c) => c.category || DEFAULT_CATEGORY;
+
+function categoryList() {
+  const counts = new Map();
+  cards.forEach((c) => counts.set(catOf(c), (counts.get(catOf(c)) || 0) + 1));
+  return [...counts.keys()]
+    .sort((a, b) => (a === DEFAULT_CATEGORY ? -1 : b === DEFAULT_CATEGORY ? 1 : a.localeCompare(b, 'ko')))
+    .map((name) => ({ name, count: counts.get(name) }));
+}
+
+/** 복습·자유 연습에 고른 카테고리 (지금 있는 것만). 비어 있으면 전체 */
+function selectedCats() {
+  const names = new Set(categoryList().map((c) => c.name));
+  return (study.cats || []).filter((c) => names.has(c));
+}
+function studyCards() {
+  const sel = new Set(selectedCats());
+  return sel.size ? cards.filter((c) => sel.has(catOf(c))) : cards;
+}
+
+function toggleStudyCat(name) {
+  const all = categoryList();
+  const sel = new Set(selectedCats());
+  if (name == null) sel.clear();
+  else if (sel.has(name)) sel.delete(name);
+  else sel.add(name);
+  study.cats = sel.size && sel.size < all.length ? [...sel] : null;
+  saveStudy();
+  studyChanged();
+}
+function toggleDirection() {
+  study.dir = study.dir === 'forward' ? 'reverse' : 'forward';
+  saveStudy();
+  studyChanged();
+}
+/** 방향이나 카테고리를 바꾸면 복습·연습 카드를 처음부터 다시 보여 줌 */
+function studyChanged() {
+  ui.reviewShow = false; ui.reviewCardId = null;
+  renderFilters();
+  renderReview();
+  if (practice.open) {
+    practice.show = false;
+    pickPractice();
+    renderPractice();
+  }
+}
+
+function studyFiltersHTML() {
+  const cats = categoryList();
+  const sel = new Set(selectedCats());
+  const dir = DIRECTIONS[study.dir];
+  let html = `<button class="cat dir" data-act="toggle-dir" aria-label="학습 방향 ${dir.label}, 눌러서 바꾸기">${dir.label} ⇄</button>`;
+  if (cats.length > 1) {
+    html += `<span class="sep"></span>
+      <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체</button>
+      ${cats.map((c) => `<button class="cat" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}`;
+  }
+  return html;
+}
+function renderFilters() {
+  const html = studyFiltersHTML();
+  $('#review-filters').innerHTML = html;
+  const pf = $('#practice-filters');
+  if (pf) pf.innerHTML = html;
+}
+
+async function renameCategory(from) {
+  const name = prompt(`'${from}' 카테고리의 새 이름`, from)?.trim();
+  if (!name || name === from) return;
+  const targets = cards.filter((c) => catOf(c) === from);
+  const t = db.transaction('cards', 'readwrite');
+  const store = t.objectStore('cards');
+  targets.forEach((c) => store.put({ ...c, category: name }));
+  await done(t);
+  targets.forEach((c) => { c.category = name; });
+  if (study.cats) {
+    study.cats = [...new Set(study.cats.map((c) => (c === from ? name : c)))];
+    saveStudy();
+  }
+  ui.cardsCat = name;
+  renderAll();
+  toast(`카테고리 이름을 '${name}'(으)로 바꿨어요.`);
+}
+
 // ================= 카드 표시 =================
 const imagesHTML = (list) => list.map((b) => `<img src="${blobURL(b)}" alt="">`).join('');
+const sideOf = (card, side) => ({ side, text: card[`${side}Text`], images: card[`${side}Images`] });
 
+/** 문제 면: 방향에 따라 뜻(kor) 또는 표현(eng) */
 function promptHTML(card) {
+  const s = sideOf(card, DIRECTIONS[study.dir].sides[0]);
   return `<section class="prompt">
-    ${card.korImages.length ? `<div class="shots">${imagesHTML(card.korImages)}</div>` : ''}
-    ${card.korText ? `<p class="prompt-text">${esc(card.korText)}</p>` : ''}
+    ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
+    ${s.text ? `<p class="prompt-text${s.side === 'eng' ? ' serif' : ''}">${esc(s.text)}</p>` : ''}
   </section>`;
 }
 function answerHTML(card) {
+  const s = sideOf(card, DIRECTIONS[study.dir].sides[1]);
+  let text = '';
+  if (s.text) {
+    text = s.side === 'eng'
+      ? `<p class="caption"><span>${esc(s.text)}</span></p>`
+      : `<p class="prompt-text answer-text">${esc(s.text)}</p>`;
+  }
   return `<section class="answer reveal">
-    ${card.engImages.length ? `<div class="shots">${imagesHTML(card.engImages)}</div>` : ''}
-    ${card.engText ? `<p class="caption"><span>${esc(card.engText)}</span></p>` : ''}
+    ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
+    ${text}
   </section>`;
 }
 
 // ================= 복습 =================
 function dueCards(now) {
-  return cards
+  return studyCards()
     .filter((c) => toDate(c.srs.due) <= now)
     .sort((a, b) => toDate(a.srs.due) - toDate(b.srs.due));
 }
@@ -459,7 +599,7 @@ function renderReview() {
 
   if (!due.length) {
     ui.reviewShow = false; ui.reviewCardId = null;
-    const next = cards.map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
+    const next = studyCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
     let message = '카드 탭에서 유튜브에서 본 표현을 추가해 보세요.';
     if (next) message = `다음 복습은 ${intervalText(next, now)} 뒤예요. 그 전에 풀고 싶으면 자유 연습을 해 보세요.`;
     main.innerHTML = `<div class="empty">
@@ -503,32 +643,47 @@ async function gradeCard(rating) {
 
 // ================= 자유 연습 =================
 function pickPractice() {
-  if (!cards.length) { practice.currentId = null; return; }
-  const n = Math.min(PRACTICE.recentExclude, cards.length - 1);
-  const excluded = new Set(n > 0 ? practice.recent.slice(-n) : []);
-  const candidates = cards.filter((c) => !excluded.has(c.id));
+  const studyList = studyCards();
+  if (!studyList.length) { practice.currentId = null; return; }
+  const n = Math.min(PRACTICE.recentExclude, studyList.length - 1);
+  const recent = practice.recent.filter((id) => studyList.some((c) => c.id === id));
+  const excluded = new Set(n > 0 ? recent.slice(-n) : []);
+  const candidates = studyList.filter((c) => !excluded.has(c.id));
   const lowest = Math.min(...candidates.map((c) => c.practiceScore));
   const pool = candidates.filter((c) => c.practiceScore === lowest);
   practice.currentId = pool[Math.floor(Math.random() * pool.length)].id;
 }
 
 function openPractice() {
-  practice.recent = []; practice.solved = 0; practice.show = false;
+  practice.recent = []; practice.solved = 0; practice.show = false; practice.open = true;
   pickPractice();
-  $('#practice').hidden = false;
+  const el = $('#practice');
+  el.innerHTML = `<header class="sheet-head">
+      <button class="link start" data-act="practice-close">끝내기</button>
+      <h2>자유 연습</h2>
+      <span class="head-note" id="practice-solved"></span>
+    </header>
+    <div class="filters" id="practice-filters"></div>
+    <div class="sheet-body" id="practice-body"></div>
+    <div class="actions" id="practice-actions"></div>`;
+  el.hidden = false;
+  renderFilters();
   renderPractice();
+}
+function closePractice() {
+  practice.open = false;
+  $('#practice').hidden = true;
+  $('#practice').innerHTML = '';
+  renderAll();
 }
 
 function renderPractice() {
   const card = cards.find((c) => c.id === practice.currentId);
-  const el = $('#practice');
-  const head = `<header class="sheet-head">
-    <button class="link start" data-act="practice-close">끝내기</button>
-    <h2>자유 연습</h2>
-    <span class="head-note">${practice.solved}장 풀었어요</span>
-  </header>`;
+  const body = $('#practice-body'), bar = $('#practice-actions');
+  $('#practice-solved').textContent = `${practice.solved}장 풀었어요`;
   if (!card) {
-    el.innerHTML = head + '<div class="sheet-body"><div class="empty"><h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div></div>';
+    body.innerHTML = '<div class="empty"><h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div>';
+    bar.hidden = true;
     return;
   }
   const actions = practice.show
@@ -537,13 +692,12 @@ function renderPractice() {
         <button class="grade good" data-act="practice-answer" data-correct="1"><small>+${PRACTICE.correct}</small><span>맞음</span></button>
       </div>`
     : '<button class="btn primary wide" data-act="practice-reveal">정답 보기</button>';
-  el.innerHTML = `${head}
-    <div class="sheet-body" id="practice-body">
-      <span class="chip">연습 점수 ${card.practiceScore}</span>
-      ${promptHTML(card)}
-      ${practice.show ? answerHTML(card) : ''}
-    </div>
-    <div class="actions">${actions}</div>`;
+  const catLabel = categoryList().length > 1 ? `${esc(catOf(card))} · ` : '';
+  body.innerHTML = `<span class="chip">${catLabel}연습 점수 ${card.practiceScore}</span>
+    ${promptHTML(card)}
+    ${practice.show ? answerHTML(card) : ''}`;
+  bar.hidden = false;
+  bar.innerHTML = actions;
 }
 
 async function answerPractice(correct) {
@@ -558,10 +712,11 @@ async function answerPractice(correct) {
   practice.show = false;
   pickPractice();
   renderPractice();
+  $('#practice-body').scrollTop = 0;
 }
 
 // ================= 카드 목록 =================
-function rowHTML(c, now) {
+function rowHTML(c, now, showCat) {
   const thumb = c.korImages[0] || c.engImages[0];
   const count = c.korImages[0] ? c.korImages.length : c.engImages.length;
   let status;
@@ -574,13 +729,23 @@ function rowHTML(c, now) {
     <span class="row-text">
       <span class="row-kor">${c.korText ? esc(c.korText) : `사진 ${c.korImages.length}장`}</span>
       <span class="row-eng">${c.engText ? esc(c.engText) : `사진 ${c.engImages.length}장`}</span>
-      <span class="row-meta">${status}<span>연습 ${c.practiceScore}점</span></span>
+      <span class="row-meta">${showCat ? `<span>${esc(catOf(c))}</span>` : ''}${status}<span>연습 ${c.practiceScore}점</span></span>
     </span>
   </button></li>`;
 }
 
 function renderCards() {
-  $('#cards-title').textContent = `표현 ${cards.length}개`;
+  const cats = categoryList();
+  if (!cats.some((c) => c.name === ui.cardsCat)) ui.cardsCat = null;
+  const filters = $('#cards-filters');
+  filters.hidden = cats.length === 0;
+  filters.innerHTML = cats.length ? `
+    <button class="cat" data-act="cards-cat" aria-pressed="${ui.cardsCat === null}">전체<small>${cards.length}</small></button>
+    ${cats.map((c) => `<button class="cat" data-act="cards-cat" data-cat="${esc(c.name)}" aria-pressed="${ui.cardsCat === c.name}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}
+    ${ui.cardsCat !== null ? `<button class="cat ghost" data-act="rename-cat" data-cat="${esc(ui.cardsCat)}">이름 바꾸기</button>` : ''}` : '';
+
+  const shown = ui.cardsCat === null ? cards : cards.filter((c) => catOf(c) === ui.cardsCat);
+  $('#cards-title').textContent = `표현 ${shown.length}개`;
   const main = $('#cards-main');
   if (!cards.length) {
     main.innerHTML = `<div class="empty">
@@ -591,8 +756,9 @@ function renderCards() {
     return;
   }
   const now = new Date();
-  const list = [...cards].sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
-  main.innerHTML = `<ul class="card-list">${list.map((c) => rowHTML(c, now)).join('')}</ul>`;
+  const showCat = ui.cardsCat === null && cats.length > 1;
+  const list = [...shown].sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
+  main.innerHTML = `<ul class="card-list">${list.map((c) => rowHTML(c, now, showCat)).join('')}</ul>`;
 }
 
 // ================= 편집 =================
@@ -604,6 +770,10 @@ function openEditor(cardId = null) {
     engText: card?.engText ?? '',
     korImages: [...(card?.korImages ?? [])],
     engImages: [...(card?.engImages ?? [])],
+    // 새 카드는 카드 탭에서 보고 있던 카테고리에 넣음
+    category: card ? catOf(card) : (ui.cardsCat ?? DEFAULT_CATEGORY),
+    catNew: false,
+    newCatText: '',
     loading: 0,
   };
   $('#editor').hidden = false;
@@ -629,6 +799,19 @@ function sideEditorHTML(side, title, hint, text, images) {
   </div>`;
 }
 
+function categoryEditorHTML(e) {
+  const names = categoryList().map((c) => c.name);
+  if (!names.includes(e.category)) names.unshift(e.category);
+  return `<div class="field">
+    <h3>카테고리<span>주제나 언어별로 나눠요</span></h3>
+    <div class="chips">
+      ${names.map((n) => `<button class="cat" data-act="pick-cat" data-cat="${esc(n)}" aria-pressed="${!e.catNew && e.category === n}">${esc(n)}</button>`).join('')}
+      <button class="cat ghost" data-act="new-cat" aria-pressed="${e.catNew}">+ 새 카테고리</button>
+    </div>
+    ${e.catNew ? `<input class="text" id="cat-input" data-field="category" maxlength="30" placeholder="예: 여행, 일본어" value="${esc(e.newCatText)}">` : ''}
+  </div>`;
+}
+
 function renderEditor() {
   const e = editor;
   $('#editor').innerHTML = `
@@ -638,8 +821,9 @@ function renderEditor() {
       <button class="link strong end" data-act="editor-save" id="editor-save">저장</button>
     </header>
     <div class="sheet-body">
-      ${sideEditorHTML('kor', '뜻', '먼저 보이는 면 (KOR)', e.korText, e.korImages)}
-      ${sideEditorHTML('eng', '영어 표현', '떠올려야 할 정답 (ENG)', e.engText, e.engImages)}
+      ${sideEditorHTML('kor', '뜻', '한국어 뜻 (KOR)', e.korText, e.korImages)}
+      ${sideEditorHTML('eng', '표현', '외울 표현 (ENG 등)', e.engText, e.engImages)}
+      ${categoryEditorHTML(e)}
       ${e.loading ? '<p class="hint">사진을 불러오는 중이에요…</p>' : ''}
       ${e.cardId ? '<button class="btn danger wide" data-act="editor-delete">이 표현 삭제</button>' : ''}
     </div>`;
@@ -648,7 +832,8 @@ function renderEditor() {
 
 const hasContent = (text, images) => text.trim().length > 0 || images.length > 0;
 function editorValid() {
-  return editor && !editor.loading && hasContent(editor.korText, editor.korImages) && hasContent(editor.engText, editor.engImages);
+  return editor && !editor.loading && hasContent(editor.korText, editor.korImages) && hasContent(editor.engText, editor.engImages)
+    && (!editor.catNew || editor.newCatText.trim().length > 0);
 }
 function updateSaveState() {
   const btn = $('#editor-save');
@@ -679,6 +864,7 @@ async function saveEditor() {
   const fields = {
     korText: e.korText.trim(), engText: e.engText.trim(),
     korImages: e.korImages, engImages: e.engImages,
+    category: e.catNew ? e.newCatText.trim() : e.category,
   };
   let card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
   if (card) {
@@ -778,6 +964,7 @@ function setTab(tab) {
   renderAll();
 }
 function renderAll() {
+  renderFilters();
   renderReview();
   renderCards();
 }
@@ -793,7 +980,13 @@ document.addEventListener('click', (ev) => {
     case 'reveal': ui.reviewShow = true; renderReview(); break;
     case 'grade': gradeCard(Number(el.dataset.r)); break;
     case 'practice': if (cards.length) openPractice(); break;
-    case 'practice-close': $('#practice').hidden = true; renderAll(); break;
+    case 'practice-close': closePractice(); break;
+    case 'toggle-dir': toggleDirection(); break;
+    case 'study-cat': toggleStudyCat(el.dataset.cat ?? null); break;
+    case 'cards-cat': ui.cardsCat = el.dataset.cat ?? null; renderCards(); break;
+    case 'rename-cat': renameCategory(el.dataset.cat).catch(() => toast('이름을 바꾸지 못했어요.')); break;
+    case 'pick-cat': editor.category = el.dataset.cat; editor.catNew = false; renderEditor(); break;
+    case 'new-cat': editor.catNew = true; renderEditor(); $('#cat-input')?.focus(); break;
     case 'practice-reveal': practice.show = true; renderPractice(); break;
     case 'practice-answer': answerPractice(el.dataset.correct === '1'); break;
     case 'add': openEditor(); break;
@@ -816,7 +1009,13 @@ document.addEventListener('click', (ev) => {
 });
 
 document.addEventListener('input', (ev) => {
-  if (!editor || ev.target.tagName !== 'TEXTAREA') return;
+  if (!editor) return;
+  if (ev.target.dataset.field === 'category') {
+    editor.newCatText = ev.target.value;
+    updateSaveState();
+    return;
+  }
+  if (ev.target.tagName !== 'TEXTAREA') return;
   if (ev.target.dataset.side === 'kor') editor.korText = ev.target.value;
   else editor.engText = ev.target.value;
   updateSaveState();

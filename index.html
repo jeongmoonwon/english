@@ -332,6 +332,8 @@ const IMAGE_MAX = 1600;      // 사진 긴 변 최대 픽셀
 const IMAGE_QUALITY = 0.8;   // JPEG 품질
 // 카테고리가 없는 카드(이전 버전에서 만든 카드)는 이 카테고리로 봅니다
 const DEFAULT_CATEGORY = '기본';
+// 카드에는 바뀌지 않는 카테고리 키만 저장하고, 보이는 이름은 categories 저장소에 따로 둠.
+// 그래서 카테고리 이름을 바꿔도 카드(사진 포함)는 다시 저장하지 않음
 // 학습 방향: forward = 뜻 보고 표현 떠올리기, reverse = 표현 보고 뜻 떠올리기
 const DIRECTIONS = {
   forward: { label: '뜻 → 표현', sides: ['kor', 'eng'] },
@@ -343,7 +345,8 @@ const STUDY_KEY = 'freedom-study';
 let db;
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('freedom', 1);
+    // v2: categories 저장소 추가 (기존 cards, reviews는 그대로)
+    const req = indexedDB.open('freedom', 2);
     req.onupgradeneeded = () => {
       const d = req.result;
       if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
@@ -351,8 +354,13 @@ function openDB() {
         const s = d.createObjectStore('reviews', { keyPath: 'id', autoIncrement: true });
         s.createIndex('cardId', 'cardId');
       }
+      if (!d.objectStoreNames.contains('categories')) d.createObjectStore('categories', { keyPath: 'key' });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const d = req.result;
+      d.onversionchange = () => d.close();
+      resolve(d);
+    };
     req.onerror = () => reject(req.error);
   });
 }
@@ -366,17 +374,43 @@ const getAll = (name) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
 });
-async function putCard(card) {
-  const t = db.transaction('cards', 'readwrite');
-  t.objectStore('cards').put(card);
-  await done(t);
+/** iOS는 앱이 백그라운드에 있는 동안 저장소 연결을 끊기도 해서, 실패하면 다시 연결해 한 번 더 시도 */
+async function withReconnect(run) {
+  try {
+    return await run();
+  } catch (err) {
+    try { db.close(); } catch {}
+    db = await openDB();
+    return await run();
+  }
 }
-async function addReview(review) {
-  const t = db.transaction('reviews', 'readwrite');
-  t.objectStore('reviews').add(review);
-  await done(t);
+const errText = (err) => (err ? `${err.name || ''} ${err.message || err}`.trim() : '알 수 없는 오류');
+
+function putCard(card) {
+  return withReconnect(async () => {
+    const t = db.transaction('cards', 'readwrite');
+    t.objectStore('cards').put(card);
+    await done(t);
+  });
 }
-async function removeCard(id) {
+function putCategoryNames(entries) {
+  return withReconnect(async () => {
+    const t = db.transaction('categories', 'readwrite');
+    entries.forEach((e) => t.objectStore('categories').put(e));
+    await done(t);
+  });
+}
+function addReview(review) {
+  return withReconnect(async () => {
+    const t = db.transaction('reviews', 'readwrite');
+    t.objectStore('reviews').add(review);
+    await done(t);
+  });
+}
+function removeCard(id) {
+  return withReconnect(() => removeCardOnce(id));
+}
+async function removeCardOnce(id) {
   const t = db.transaction(['cards', 'reviews'], 'readwrite');
   t.objectStore('cards').delete(id);
   const reviews = t.objectStore('reviews');
@@ -386,12 +420,13 @@ async function removeCard(id) {
   };
   await done(t);
 }
-async function replaceAll(newCards, newReviews) {
-  const t = db.transaction(['cards', 'reviews'], 'readwrite');
-  const cs = t.objectStore('cards'), rs = t.objectStore('reviews');
-  cs.clear(); rs.clear();
+async function replaceAll(newCards, newReviews, newCategories) {
+  const t = db.transaction(['cards', 'reviews', 'categories'], 'readwrite');
+  const cs = t.objectStore('cards'), rs = t.objectStore('reviews'), ks = t.objectStore('categories');
+  cs.clear(); rs.clear(); ks.clear();
   newCards.forEach((c) => cs.put(c));
   newReviews.forEach(({ id, ...rest }) => rs.add(rest));
+  newCategories.forEach((k) => ks.put(k));
   await done(t);
 }
 function requestPersist() {
@@ -400,7 +435,8 @@ function requestPersist() {
 
 // ================= 상태 =================
 let cards = [];
-const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null };
+let catNames = new Map();   // 카테고리 키 → 보이는 이름 (이름을 바꾼 것만)
+const ui = { tab: 'review', reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false };
 let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading }
 // 복습·자유 연습 설정 (이 기기에만 저장). cats: null이면 전체 카테고리
@@ -472,7 +508,22 @@ function compressImage(file) {
 }
 
 // ================= 카테고리 =================
-const catOf = (c) => c.category || DEFAULT_CATEGORY;
+const catKey = (c) => c.category || DEFAULT_CATEGORY;
+const catName = (key) => catNames.get(key) ?? key;
+const catOf = (c) => catName(catKey(c));
+
+/** 이름으로 카테고리 키 찾기. 없으면 새 키를 만들고, 키와 이름이 다르면 이름도 저장 */
+async function keyForName(name) {
+  const keys = new Set([...cards.map(catKey), ...catNames.keys()]);
+  const found = [...keys].find((k) => catName(k) === name);
+  if (found) return found;
+  const key = keys.has(name) ? `${name}~${uid().slice(0, 8)}` : name;
+  if (key !== name) {
+    await putCategoryNames([{ key, name }]);
+    catNames.set(key, name);
+  }
+  return key;
+}
 
 function categoryList() {
   const counts = new Map();
@@ -538,15 +589,12 @@ function renderFilters() {
   if (pf) pf.innerHTML = html;
 }
 
-async function renameCategory(from) {
-  const name = prompt(`'${from}' 카테고리의 새 이름`, from)?.trim();
-  if (!name || name === from) return;
-  const targets = cards.filter((c) => catOf(c) === from);
-  const t = db.transaction('cards', 'readwrite');
-  const store = t.objectStore('cards');
-  targets.forEach((c) => store.put({ ...c, category: name }));
-  await done(t);
-  targets.forEach((c) => { c.category = name; });
+async function renameCategory(from, name) {
+  ui.renaming = null;
+  if (!name || name === from) { renderCards(); return; }
+  const keys = [...new Set([...cards.map(catKey), ...catNames.keys()])].filter((k) => catName(k) === from);
+  await putCategoryNames(keys.map((key) => ({ key, name })));
+  keys.forEach((key) => catNames.set(key, name));
   if (study.cats) {
     study.cats = [...new Set(study.cats.map((c) => (c === from ? name : c)))];
     saveStudy();
@@ -737,6 +785,7 @@ function rowHTML(c, now, showCat) {
 function renderCards() {
   const cats = categoryList();
   if (!cats.some((c) => c.name === ui.cardsCat)) ui.cardsCat = null;
+  if (ui.renaming !== ui.cardsCat) ui.renaming = null;
   const filters = $('#cards-filters');
   filters.hidden = cats.length === 0;
   filters.innerHTML = cats.length ? `
@@ -758,7 +807,20 @@ function renderCards() {
   const now = new Date();
   const showCat = ui.cardsCat === null && cats.length > 1;
   const list = [...shown].sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
-  main.innerHTML = `<ul class="card-list">${list.map((c) => rowHTML(c, now, showCat)).join('')}</ul>`;
+  const rename = ui.renaming === null ? '' : `<div class="field">
+      <h3>카테고리 이름 바꾸기<span>${esc(ui.renaming)}</span></h3>
+      <input class="text" id="rename-input" maxlength="30" value="${esc(ui.renaming)}" enterkeyhint="done">
+      <div class="grades two">
+        <button class="btn" data-act="rename-cancel">취소</button>
+        <button class="btn primary" data-act="rename-save">저장</button>
+      </div>
+    </div>`;
+  main.innerHTML = `${rename}<ul class="card-list">${list.map((c) => rowHTML(c, now, showCat)).join('')}</ul>`;
+}
+function saveRename() {
+  const from = ui.renaming;
+  const name = $('#rename-input')?.value.trim();
+  renameCategory(from, name).catch((err) => toast(`이름을 바꾸지 못했어요. (${errText(err)})`));
 }
 
 // ================= 편집 =================
@@ -864,7 +926,7 @@ async function saveEditor() {
   const fields = {
     korText: e.korText.trim(), engText: e.engText.trim(),
     korImages: e.korImages, engImages: e.engImages,
-    category: e.catNew ? e.newCatText.trim() : e.category,
+    category: await keyForName(e.catNew ? e.newCatText.trim() : e.category),
   };
   let card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
   if (card) {
@@ -910,6 +972,7 @@ async function exportBackup() {
       engImages: await Promise.all(c.engImages.map(blobToDataURL)),
     }))),
     reviews,
+    categories: [...catNames].map(([key, name]) => ({ key, name })),
   };
   const stamp = new Date().toISOString().slice(0, 10);
   const file = new File([JSON.stringify(payload)], `freedom-backup-${stamp}.json`, { type: 'application/json' });
@@ -948,8 +1011,10 @@ async function importBackup(file) {
     practiceCount: c.practiceCount ?? 0,
   })));
   const reviews = (data.reviews || []).map((r) => ({ ...r, review: reviveDate(r.review), due: reviveDate(r.due) }));
-  await replaceAll(restored, reviews);
+  const categories = (data.categories || []).filter((k) => k && typeof k.key === 'string' && typeof k.name === 'string');
+  await replaceAll(restored, reviews, categories);
   cards = restored;
+  catNames = new Map(categories.map((k) => [k.key, k.name]));
   $('#backup').hidden = true;
   renderAll();
   toast(`표현 ${restored.length}개를 복원했어요.`);
@@ -978,21 +1043,31 @@ document.addEventListener('click', (ev) => {
   const act = el.dataset.act;
   switch (act) {
     case 'reveal': ui.reviewShow = true; renderReview(); break;
-    case 'grade': gradeCard(Number(el.dataset.r)); break;
+    case 'grade': gradeCard(Number(el.dataset.r)).catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'practice': if (cards.length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'toggle-dir': toggleDirection(); break;
     case 'study-cat': toggleStudyCat(el.dataset.cat ?? null); break;
     case 'cards-cat': ui.cardsCat = el.dataset.cat ?? null; renderCards(); break;
-    case 'rename-cat': renameCategory(el.dataset.cat).catch(() => toast('이름을 바꾸지 못했어요.')); break;
+    case 'rename-cat': {
+      ui.renaming = el.dataset.cat;
+      renderCards();
+      $('#cards-main').scrollTop = 0;
+      const input = $('#rename-input');
+      input.focus();
+      input.select();
+      break;
+    }
+    case 'rename-cancel': ui.renaming = null; renderCards(); break;
+    case 'rename-save': saveRename(); break;
     case 'pick-cat': editor.category = el.dataset.cat; editor.catNew = false; renderEditor(); break;
     case 'new-cat': editor.catNew = true; renderEditor(); $('#cat-input')?.focus(); break;
     case 'practice-reveal': practice.show = true; renderPractice(); break;
-    case 'practice-answer': answerPractice(el.dataset.correct === '1'); break;
+    case 'practice-answer': answerPractice(el.dataset.correct === '1').catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'add': openEditor(); break;
     case 'edit': openEditor(el.dataset.id); break;
     case 'editor-cancel': closeEditor(); break;
-    case 'editor-save': saveEditor(); break;
+    case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'add-photos': photoSide = el.dataset.side; $('#photo-input').click(); break;
     case 'remove-photo': {
@@ -1021,6 +1096,13 @@ document.addEventListener('input', (ev) => {
   updateSaveState();
 });
 
+document.addEventListener('keydown', (ev) => {
+  if (ev.target.id === 'rename-input' && ev.key === 'Enter' && !ev.isComposing) {
+    ev.preventDefault();
+    saveRename();
+  }
+});
+
 $('#photo-input').addEventListener('change', (ev) => {
   const files = [...ev.target.files];
   ev.target.value = '';
@@ -1047,6 +1129,7 @@ document.addEventListener('visibilitychange', () => {
 async function init() {
   db = await openDB();
   cards = await getAll('cards');
+  catNames = new Map((await getAll('categories')).map((k) => [k.key, k.name]));
   renderAll();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

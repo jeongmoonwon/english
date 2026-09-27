@@ -409,7 +409,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 // Google Drive 동기화: 사용자 본인 Drive의 앱 전용 숨김 폴더(appDataFolder)에 저장
 const GOOGLE = {
   clientId: '380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com',
@@ -1127,7 +1127,7 @@ const DATA_FILE = 'data.json';
 
 const auth = loadAuth();                 // { connected, email, token, exp } (이 기기에만 저장)
 const syncMeta = { seq: 0, syncedSeq: 0, deleted: {}, lastSyncAt: 0 };   // IndexedDB meta에 저장
-const sync = { running: false, again: false, timer: null, error: null, gcDone: false };
+const sync = { running: false, again: false, timer: null, error: null, gcDone: false, photoCheckDone: false, broken: new Set(), skipped: 0 };
 
 function loadAuth() {
   try {
@@ -1291,14 +1291,20 @@ function blobHash(blob) {
 async function cardFromRemote(rc, local, imageIds) {
   const localByHash = new Map();
   if (local) {
-    for (const b of [...local.korImages, ...local.engImages]) localByHash.set(await blobHash(b), b);
+    for (const b of [...local.korImages, ...local.engImages]) {
+      const h = await blobHash(b).catch(() => null);   // 읽을 수 없는(깨진) 사진은 건너뛰고 Drive에서 받음
+      if (h) localByHash.set(h, b);
+    }
   }
   const load = async (h) => {
     if (localByHash.has(h)) {
       const old = localByHash.get(h);
-      const copy = new Blob([await old.arrayBuffer()], { type: old.type || 'image/jpeg' });
-      hashCache.set(copy, Promise.resolve(h));
-      return copy;
+      const bytes = await old.arrayBuffer().catch(() => null);
+      if (bytes) {
+        const copy = new Blob([bytes], { type: old.type || 'image/jpeg' });
+        hashCache.set(copy, Promise.resolve(h));
+        return copy;
+      }
     }
     if (!imageIds[h]) return null;
     const got = await (await driveDownload(imageIds[h])).blob();
@@ -1341,11 +1347,23 @@ async function runSync() {
   }
   syncMeta.deleted = deleted;
 
+  // 2-1. 이 기기에서 읽을 수 없게 된(깨진) 사진이 있는 카드 찾기 (세션마다 한 번)
+  if (!sync.photoCheckDone) {
+    sync.photoCheckDone = true;
+    for (const c of cards) {
+      for (const b of [...c.korImages, ...c.engImages]) {
+        if (!(await b.slice(0, 1).arrayBuffer().then(() => true, () => false))) { sync.broken.add(c.id); break; }
+      }
+    }
+  }
+
   // 3. 카드 합치기: 내용·학습 기록 중 Drive 쪽이 더 최근인 부분을 이 기기에 반영 (편집 중인 카드는 다음 번에)
+  //    사진이 깨진 카드는 Drive의 사진으로 복구 (글은 이 기기 쪽이 더 최근이면 그대로 둠)
   for (const [id, rc] of Object.entries(rCards)) {
     if (isDead(id, touchedAt(rc)) || editor?.cardId === id) continue;
     const local = cards.find((c) => c.id === id);
-    const newContent = !local || contentAt(rc) > contentAt(local);
+    const repair = !!local && sync.broken.has(id);
+    const newContent = !local || repair || contentAt(rc) > contentAt(local);
     const newStudy = !local || studyAt(rc) > studyAt(local);
     if (!newContent && !newStudy) continue;
     const study = newStudy ? reviveCard(rc) : local;
@@ -1357,6 +1375,10 @@ async function runSync() {
       await putCard(local);
     } else {
       const card = Object.assign(await cardFromRemote(rc, local, imageIds), studyFields, { contentAt: contentAt(rc) });
+      if (repair && contentAt(local) > contentAt(rc)) {
+        Object.assign(card, { korText: local.korText, engText: local.engText, category: local.category, contentAt: contentAt(local) });
+      }
+      if (repair) sync.broken.delete(id);
       card.updatedAt = touchedAt(card);
       await putCard(card);
       const i = cards.findIndex((c) => c.id === id);
@@ -1400,16 +1422,26 @@ async function runSync() {
 
   // 6. 이 기기 기준으로 Drive에 올릴 내용 만들기 (새 사진은 먼저 올림)
   const out = { app: 'freedom', version: 1, cards: {}, deleted, categories: {}, images: {}, reviews: [], activity: [] };
+  let skipped = 0;
   for (const c of cards) {
     const rc = rCards[c.id];
     const remoteAhead = rc && (contentAt(rc) > contentAt(c) || studyAt(rc) > studyAt(c));
     const same = rc && contentAt(rc) === contentAt(c) && studyAt(rc) === studyAt(c);
     // 같거나, 편집 중이라 아직 반영 못 한 Drive 쪽이 앞서 있으면 Drive 것을 유지 (다음 동기화 때 합침)
     if (same || remoteAhead) { out.cards[c.id] = rc; continue; }
+    // 내용은 Drive와 같고 학습 기록만 바뀜: 사진을 다시 읽지 않고 Drive의 내용에 학습 기록만 바꿔 씀
+    if (rc && contentAt(rc) === contentAt(c)) {
+      out.cards[c.id] = {
+        ...rc, updatedAt: touchedAt(c), studyAt: studyAt(c),
+        srs: c.srs, practiceScore: c.practiceScore, practiceCount: c.practiceCount,
+      };
+      continue;
+    }
     const pack = async (list) => {
       const hashes = [];
       for (const blob of list) {
-        const h = await blobHash(blob);
+        const h = await blobHash(blob).catch(() => null);
+        if (!h) { skipped += 1; continue; }   // 이 기기에서 읽을 수 없는 사진은 건너뜀
         if (!imageIds[h]) imageIds[h] = await driveUpload({ name: `img-${h}.jpg`, type: blob.type || 'image/jpeg', data: blob });
         hashes.push(h);
       }
@@ -1433,6 +1465,8 @@ async function runSync() {
   const inOut = new Set(Object.keys(out.cards));
   out.reviews = localReviews.filter((r) => inOut.has(r.cardId)).map(({ id, ...r }) => r);
   out.activity = activity.map((a) => [a.id, a.at]).sort((x, y) => x[1] - y[1] || (x[0] < y[0] ? -1 : 1));
+
+  sync.skipped = skipped;
 
   // 7. 바뀐 게 있을 때만 data.json 저장 (순서를 정렬해서 내용이 같으면 같은 글자가 되게)
   const sorted = (obj) => Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]));
@@ -1520,6 +1554,10 @@ function renderSyncStatus() {
     warn = true;
     line = `동기화하지 못했어요. (${esc(errText(sync.error))})`;
   } else if (pending) line = `Drive에 올리는 중이에요 · 변경 ${pending}개`;
+  else if (sync.skipped) {
+    warn = true;
+    line = `사진 ${sync.skipped}장은 이 기기에서 읽을 수 없어 Drive에 올리지 못했어요. 나머지는 모두 저장됐어요.`;
+  }
   else line = syncMeta.lastSyncAt ? `모두 저장됨 · 마지막 동기화 ${agoText(syncMeta.lastSyncAt)}` : '아직 동기화하지 않았어요.';
   box.innerHTML = `<div class="field">
     <h3>Google Drive 동기화<span>${esc(auth.email || '연결됨')}</span></h3>

@@ -137,13 +137,12 @@ img { max-width: 100%; }
 .grades.two { grid-template-columns: 1fr 1fr; gap: 10px; }
 .grade {
   --c: var(--accent);
-  border: 0; border-radius: 12px; padding: 9px 4px 10px;
+  border: 0; border-radius: 12px; padding: 15px 4px;
   background: var(--surface);
   background: color-mix(in srgb, var(--c) 14%, var(--surface));
   color: var(--c);
   display: flex; flex-direction: column; align-items: center; gap: 1px;
 }
-.grade small { font-size: 12px; opacity: 0.85; }
 .grade span { font-size: 16px; font-weight: 700; }
 .grade.again { --c: var(--again); }
 .grade.hard { --c: var(--hard); }
@@ -410,7 +409,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 // Google Drive 동기화: 사용자 본인 Drive의 앱 전용 숨김 폴더(appDataFolder)에 저장
 const GOOGLE = {
   clientId: '380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com',
@@ -814,11 +813,8 @@ function renderReview() {
   if (!ui.reviewShow) {
     bar.innerHTML = '<button class="btn primary wide" data-act="reveal">정답 보기</button>';
   } else {
-    const preview = scheduler.repeat(card.srs, now);
     bar.innerHTML = `<div class="grades">${GRADES.map((g) => `
-      <button class="grade ${g.cls}" data-act="grade" data-r="${g.r}">
-        <small>${intervalText(preview[g.r].card.due, now)}</small><span>${g.label}</span>
-      </button>`).join('')}</div>`;
+      <button class="grade ${g.cls}" data-act="grade" data-r="${g.r}"><span>${g.label}</span></button>`).join('')}</div>`;
   }
 }
 
@@ -892,8 +888,8 @@ function renderPractice() {
   }
   const actions = practice.show
     ? `<div class="grades two">
-        <button class="grade again" data-act="practice-answer" data-correct="0"><small>${PRACTICE.wrong}</small><span>틀림</span></button>
-        <button class="grade good" data-act="practice-answer" data-correct="1"><small>+${PRACTICE.correct}</small><span>맞음</span></button>
+        <button class="grade again" data-act="practice-answer" data-correct="0"><span>틀림</span></button>
+        <button class="grade good" data-act="practice-answer" data-correct="1"><span>맞음</span></button>
       </div>`
     : '<button class="btn primary wide" data-act="practice-reveal">정답 보기</button>';
   const catLabel = categoryList().length > 1 ? `${esc(catOf(card))} · ` : '';

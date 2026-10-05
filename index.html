@@ -483,6 +483,7 @@ textarea::placeholder { font-family: var(--sans); }
       <h1>복습</h1>
       <span class="count" id="due-count"></span>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
+      <button class="pill" data-act="review-quit" id="review-quit" hidden>그만하기</button>
     </header>
     <div class="filters" id="review-filters" hidden></div>
     <main class="scroll" id="review-main"></main>
@@ -585,7 +586,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -739,7 +740,7 @@ async function recordActivity(list) {
   const have = new Set(activity.map((a) => a.id));
   activity.push(...list.filter((a) => !have.has(a.id)));
 }
-const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null, deleting: null, moveTo: null };
+const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', sessionDone: 0, cardsCat: null, renaming: null, deleting: null, moveTo: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, entries: [{ korText, engText, note, category }], korImages, engImages, newCats, catInput, loading, found, checked }
 let scanRemaining = null; // 오늘 남은 자동 입력 횟수 (마지막으로 받은 값)
@@ -1057,6 +1058,9 @@ function renderReview() {
   $('#practice-open').disabled = cards.length === 0;
   const main = $('#review-main'), bar = $('#review-actions'), filters = $('#review-filters');
   if (!due.length) ui.reviewStarted = false;
+  // 복습 중에는 '자유 연습' 대신 '그만하기'
+  $('#practice-open').hidden = ui.reviewStarted;
+  $('#review-quit').hidden = !ui.reviewStarted;
 
   if (!cards.length) {
     filters.hidden = true;
@@ -1113,11 +1117,13 @@ async function gradeCard(rating) {
   card.studyAt = card.updatedAt = Date.now();
   await putCard(card);
   await addReview({ cardId: card.id, ...log });
+  ui.sessionDone += 1;
   await recordActivity([reviewActivity(card.id, now)]);
   markChanged();
   ui.reviewShow = false;
   renderReview();
   $('#review-main').scrollTop = 0;
+  if (!ui.reviewStarted) toast(`지금 복습할 카드를 다 끝냈어요! ${ui.sessionDone}장 복습했어요 🍑`);
 }
 
 // ================= 자유 연습 =================
@@ -1148,6 +1154,7 @@ function openPractice() {
   renderPractice();
 }
 function closePractice() {
+  if (practice.solved) toast(`${practice.solved}장 연습했어요. 수고했어요!`);
   practice.open = false;
   $('#practice').hidden = true;
   $('#practice').innerHTML = '';
@@ -2275,7 +2282,14 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (cards.length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'set-dir': setDirection(el.dataset.dir); break;
-    case 'review-start': ui.reviewStarted = true; renderReview(); $('#review-main').scrollTop = 0; break;
+    case 'review-start': ui.reviewStarted = true; ui.sessionDone = 0; renderReview(); $('#review-main').scrollTop = 0; break;
+    case 'review-quit': {
+      const left = dueCards(new Date()).length;
+      ui.reviewStarted = false;
+      renderReview();
+      toast(ui.sessionDone ? `${ui.sessionDone}장 복습했어요. 남은 ${left}장은 언제든 이어서 할 수 있어요.` : '복습을 그만했어요. 언제든 다시 시작할 수 있어요.');
+      break;
+    }
     case 'review-stop': ui.reviewStarted = false; renderReview(); break;
     case 'practice-start':
       practice.started = true; practice.show = false; pickPractice(); renderPractice();

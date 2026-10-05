@@ -585,7 +585,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1079,7 +1079,8 @@ function renderReview() {
       head = `<h2 class="setup-title">지금 복습할 카드가 없어요</h2>
         <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p>`;
     }
-    main.innerHTML = head + setupHTML();
+    // 복습할 카드가 없으면 방향·카테고리는 자유 연습 화면에서 고르므로 여기서는 숨김
+    main.innerHTML = due.length ? head + setupHTML() : `<div class="empty">${MASCOT}${head}</div>`;
     bar.hidden = false;
     bar.innerHTML = due.length
       ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`

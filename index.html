@@ -281,6 +281,9 @@ textarea.eng { font-family: var(--serif); }
 .cat small { margin-left: 5px; opacity: 0.7; }
 .cat[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .cat.ghost { background: none; border-style: dashed; color: var(--muted); }
+.cat.ghost.danger { color: var(--again); }
+.cat-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.cat-tools span { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .seg-btn {
   border: 1px solid var(--line); border-radius: 14px; padding: 12px 10px;
@@ -514,7 +517,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -668,7 +671,7 @@ async function recordActivity(list) {
   const have = new Set(activity.map((a) => a.id));
   activity.push(...list.filter((a) => !have.has(a.id)));
 }
-const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
+const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null, deleting: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, entries: [{ korText, engText, note, category }], korImages, engImages, newCats, catInput, loading, found, checked }
 let scanRemaining = null; // 오늘 남은 자동 입력 횟수 (마지막으로 받은 값)
@@ -842,6 +845,35 @@ async function renameCategory(from, name) {
   ui.cardsCat = name;
   renderAll();
   toast(`카테고리 이름을 '${name}'(으)로 바꿨어요.`);
+}
+
+/** 카테고리 삭제: move = 카드는 기본 카테고리로 옮김, all = 카드와 복습 기록까지 삭제 */
+async function deleteCategory(name, mode) {
+  ui.deleting = null;
+  const targets = cards.filter((c) => catOf(c) === name);
+  const t = Date.now();
+  if (mode === 'all') {
+    if (!confirm(`'${name}'의 카드 ${targets.length}장과 복습 기록을 모두 삭제할까요? 되돌릴 수 없어요.`)) { renderCards(); return; }
+    for (const c of targets) {
+      await removeCard(c.id);
+      syncMeta.deleted[c.id] = t;
+    }
+    const gone = new Set(targets.map((c) => c.id));
+    cards = cards.filter((c) => !gone.has(c.id));
+  } else {
+    for (const c of targets) {
+      Object.assign(c, { category: DEFAULT_CATEGORY, contentAt: t, updatedAt: Math.max(t, studyAt(c)) });
+      await putCard(c);
+    }
+  }
+  if (study.cats) {
+    study.cats = study.cats.filter((c) => c !== name);
+    saveStudy();
+  }
+  ui.cardsCat = null;
+  markChanged();
+  renderAll();
+  toast(mode === 'all' ? `'${name}' 카테고리와 카드 ${targets.length}장을 삭제했어요.` : `'${name}' 카테고리를 삭제하고 카드는 '${catName(DEFAULT_CATEGORY)}'(으)로 옮겼어요.`);
 }
 
 // ================= 카드 표시 =================
@@ -1058,12 +1090,14 @@ function renderCards() {
   const cats = categoryList();
   if (!cats.some((c) => c.name === ui.cardsCat)) ui.cardsCat = null;
   if (ui.renaming !== ui.cardsCat) ui.renaming = null;
+  if (ui.deleting !== ui.cardsCat) ui.deleting = null;
+  const isDefault = ui.cardsCat !== null && cards.some((c) => catOf(c) === ui.cardsCat && catKey(c) === DEFAULT_CATEGORY);
   const filters = $('#cards-filters');
   filters.hidden = cats.length === 0;
   filters.innerHTML = cats.length ? `
     <button class="cat" data-act="cards-cat" aria-pressed="${ui.cardsCat === null}">전체<small>${cards.length}</small></button>
     ${cats.map((c) => `<button class="cat" data-act="cards-cat" data-cat="${esc(c.name)}" aria-pressed="${ui.cardsCat === c.name}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}
-    ${ui.cardsCat !== null ? `<button class="cat ghost" data-act="rename-cat" data-cat="${esc(ui.cardsCat)}">이름 바꾸기</button>` : ''}` : '';
+` : '';
 
   const shown = ui.cardsCat === null ? cards : cards.filter((c) => catOf(c) === ui.cardsCat);
   $('#cards-title').textContent = `표현 ${shown.length}개`;
@@ -1087,7 +1121,20 @@ function renderCards() {
         <button class="btn primary" data-act="rename-save">저장</button>
       </div>
     </div>`;
-  main.innerHTML = `${rename}<ul class="card-list">${list.map((c) => rowHTML(c, now, showCat)).join('')}</ul>`;
+  const del = ui.deleting === null ? '' : `<div class="field">
+      <h3>카테고리 삭제<span>${esc(ui.deleting)} · 카드 ${shown.length}장</span></h3>
+      <p class="sync-line">이 카테고리의 카드는 어떻게 할까요?</p>
+      <button class="btn wide" data-act="delete-cat" data-mode="move">카드는 '${esc(catName(DEFAULT_CATEGORY))}'(으)로 옮기고 카테고리만 삭제</button>
+      <button class="btn danger wide" data-act="delete-cat" data-mode="all">카드 ${shown.length}장까지 모두 삭제</button>
+      <button class="btn wide" data-act="delete-cancel">취소</button>
+    </div>`;
+  // 카테고리를 골랐을 때: 이름 바꾸기·삭제 (칩 줄이 길어져도 보이게 따로 둠)
+  const tools = ui.cardsCat === null || rename || del ? '' : `<div class="cat-tools">
+      <span>'${esc(ui.cardsCat)}' 카테고리</span>
+      <button class="cat ghost" data-act="rename-cat" data-cat="${esc(ui.cardsCat)}">✏️ 이름 바꾸기</button>
+      ${isDefault ? '' : `<button class="cat ghost danger" data-act="delete-cat-ask" data-cat="${esc(ui.cardsCat)}">🗑 삭제</button>`}
+    </div>`;
+  main.innerHTML = `${tools}${rename}${del}<ul class="card-list">${list.map((c) => rowHTML(c, now, showCat)).join('')}</ul>`;
 }
 function saveRename() {
   const from = ui.renaming;
@@ -2019,6 +2066,7 @@ document.addEventListener('click', (ev) => {
     case 'cards-cat': ui.cardsCat = el.dataset.cat ?? null; renderCards(); break;
     case 'rename-cat': {
       ui.renaming = el.dataset.cat;
+      ui.deleting = null;
       renderCards();
       $('#cards-main').scrollTop = 0;
       const input = $('#rename-input');
@@ -2027,6 +2075,9 @@ document.addEventListener('click', (ev) => {
       break;
     }
     case 'rename-cancel': ui.renaming = null; renderCards(); break;
+    case 'delete-cat-ask': ui.deleting = el.dataset.cat; ui.renaming = null; renderCards(); $('#cards-main').scrollTop = 0; break;
+    case 'delete-cancel': ui.deleting = null; renderCards(); break;
+    case 'delete-cat': deleteCategory(ui.deleting, el.dataset.mode).catch((err) => toast(`삭제하지 못했어요. (${errText(err)})`)); break;
     case 'rename-save': saveRename(); break;
     case 'pick-cat': editor.entries[Number(el.dataset.index)].category = el.dataset.cat; editor.popCat = null; renderEditor(); break;
     case 'new-cat': editor.catInput = Number(el.dataset.index); editor.popCat = null; renderEditor(); $('#cat-input')?.focus(); break;

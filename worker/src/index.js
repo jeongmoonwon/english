@@ -15,12 +15,19 @@ const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 // 앱의 언어 모드에 쓰는 언어 (코드 → 영어 이름)
 const LANG_NAMES = { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', vi: 'Vietnamese', th: 'Thai' };
 
-/** 지시문. target: 배울 언어(없으면 한국어가 아닌 모든 외국어), native: 뜻을 쓸 언어 */
-function systemPrompt(target, native) {
-  const learn = target ? LANG_NAMES[target] : 'foreign-language (any language that is not Korean)';
-  const meaningLang = LANG_NAMES[native] || 'Korean';
+/** 언어 코드 → 이름. 앱에서 직접 추가한 언어는 "custom:이름" */
+function langName(code) {
+  if (typeof code !== 'string') return null;
+  if (LANG_NAMES[code]) return LANG_NAMES[code];
+  if (code.startsWith('custom:')) return code.slice(7).replace(/[^\p{L}\p{N} ()'-]/gu, '').trim().slice(0, 30) || null;
+  return null;
+}
+
+/** 지시문. target: 배울 언어 이름(없으면 한국어가 아닌 모든 외국어), meaningLang: 뜻을 쓸 언어 이름 */
+function systemPrompt(target, meaningLang) {
+  const learn = target ? `${target}` : 'foreign-language (any language that is not Korean)';
   return `You help a Korean learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with text.
-The learner is studying ${target ? LANG_NAMES[target] : 'foreign languages'}${meaningLang !== 'Korean' ? ` and wants the meanings in ${meaningLang}` : ''}.
+The learner is studying ${target || 'foreign languages'}${meaningLang !== 'Korean' ? ` and wants the meanings in ${meaningLang}` : ''}.
 
 There may be one or several screenshots. Go through each one and list ${learn} expressions for flashcards, in the order of the screenshots:
 - If the user marked anything in a screenshot (underline, highlight, circle, box, arrow, handwriting), list ONLY the marked expressions from that screenshot and set their "marked" to true.
@@ -112,8 +119,8 @@ export async function handle(request, env, deps = {}) {
 
   // 4. Claude에게 묻기
   try {
-    const target = LANG_NAMES[body.target] ? body.target : null;   // 예전 앱은 언어를 보내지 않음
-    const native = LANG_NAMES[body.native] ? body.native : 'ko';
+    const target = langName(body.target);   // 예전 앱은 언어를 보내지 않음
+    const native = langName(body.native) || 'Korean';
     const result = await askClaude(env, images, target, native);
     return reply(200, { ...result, remaining: DAILY_LIMIT - used - n, limit: DAILY_LIMIT });
   } catch (err) {
@@ -187,8 +194,8 @@ async function handleVoice(request, env, reply, key) {
   const audio = typeof body?.audio === 'string' ? body.audio : '';
   if (!audio || !/^[A-Za-z0-9+/]+=*$/.test(audio)) return reply(400, { error: 'audio' });
   if (audio.length * 0.75 > MAX_AUDIO_BYTES) return reply(413, { error: 'too_large' });
-  const target = LANG_NAMES[body.target] ? body.target : 'en';
-  const native = LANG_NAMES[body.native] ? body.native : 'ko';
+  const target = langName(body.target) || 'English';
+  const native = langName(body.native) || 'Korean';
 
   const used = Number(await env.USAGE.get(key)) || 0;
   if (used >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
@@ -233,7 +240,7 @@ const VOICE_SCHEMA = {
 };
 
 async function askClaudeVoice(env, transcript, language, target, native) {
-  const learn = LANG_NAMES[target], know = LANG_NAMES[native];
+  const learn = target, know = native;   // 언어 이름
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
   const response = await client.messages.create({
     model: MODEL,
@@ -262,7 +269,7 @@ async function askClaude(env, images, target, native) {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 16000,
-    system: systemPrompt(target, native),
+    system: systemPrompt(target, native),   // 언어 이름
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     messages: [{
       role: 'user',
@@ -271,7 +278,7 @@ async function askClaude(env, images, target, native) {
           ...(images.length > 1 ? [{ type: 'text', text: `사진 ${i + 1}` }] : []),
           { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } },
         ]),
-        { type: 'text', text: `${images.length > 1 ? `이 사진 ${images.length}장` : '이 사진'}의 ${target ? `${LANG_NAMES[target]} ` : '외국어 '}표현을 카드로 만들어 주세요.` },
+        { type: 'text', text: `${images.length > 1 ? `이 사진 ${images.length}장` : '이 사진'}의 ${target ? `${target} ` : '외국어 '}표현을 카드로 만들어 주세요.` },
       ],
     }],
   });

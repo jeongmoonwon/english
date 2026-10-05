@@ -632,7 +632,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -876,8 +876,11 @@ const LANGS = {
 const DEFAULT_MODE = 'en>ko';
 const modeOf = (c) => c.lang || DEFAULT_MODE;
 const modeParts = (m) => { const [target, native] = m.split('>'); return { target, native }; };
-const targetLang = (m = prefs.mode) => LANGS[modeParts(m).target] || LANGS.en;
-const nativeLang = (m = prefs.mode) => LANGS[modeParts(m).native] || LANGS.ko;
+/** 언어 코드 → 정보. 목록에 없는 언어는 "custom:이름" (국기 대신 🌐, 음성은 기기가 짐작) */
+const langInfo = (code) => LANGS[code] || (code?.startsWith('custom:') ? { name: code.slice(7), flag: '🌐', speech: '' } : null);
+const cleanLangName = (name) => name.replace(/[>:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30);
+const targetLang = (m = prefs.mode) => langInfo(modeParts(m).target) || LANGS.en;
+const nativeLang = (m = prefs.mode) => langInfo(modeParts(m).native) || LANGS.ko;
 /** 받침에 맞춰 '로'/'으로' (ㄹ 받침은 '로') */
 const ro = (word) => {
   const c = word.charCodeAt(word.length - 1) - 0xAC00;
@@ -2304,8 +2307,9 @@ function renderSettingsPage(page) {
     const select = (field, picked, skip, placeholder) => `<select class="text select" id="new-${field}" data-field="${field}">
       ${placeholder ? `<option value="" ${picked ? '' : 'selected'} disabled>${placeholder}</option>` : ''}
       ${Object.entries(LANGS).filter(([code]) => code !== skip).map(([code, l]) => `<option value="${code}" ${picked === code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
-    </select>`;
-    const exists = nm.target && modeList().some((m) => m.mode === `${nm.target}>${nm.native}`);
+      <option value="custom" ${picked === 'custom' ? 'selected' : ''}>✏️ 목록에 없는 언어 직접 입력</option>
+    </select>
+    ${picked === 'custom' ? `<input class="text" id="new-${field}-name" data-field="${field}" maxlength="30" placeholder="언어 이름 (예: 타갈로그어, Swahili)" value="${esc(nm[`${field}Name`] || '')}">` : ''}`;
     box.innerHTML = `<div class="field">
       <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
       ${modeList().map(({ mode, count }) => `<div class="mode-line">
@@ -2323,9 +2327,33 @@ function renderSettingsPage(page) {
       ${select('target', nm.target, nm.native, '언어를 고르세요')}
       <label class="sub" for="new-native">뜻은 어떤 언어로 볼까요?</label>
       ${select('native', nm.native, nm.target)}
-      <button class="btn primary wide" data-act="mode-create" ${nm.target ? '' : 'disabled'}>${!nm.target ? '공부할 언어를 골라 주세요' : `${studyLabel(`${nm.target}>${nm.native}`)}${exists ? '로 가기' : ' 시작하기'}<small>(${meaningLabel(`${nm.target}>${nm.native}`)})</small>`}</button>
+      <button class="btn primary wide" data-act="mode-create" id="mode-create">${createModeLabel()}</button>
     </div>`;
+    updateCreateMode();
   }
+}
+/** 새 모드 고르기에서 지금 고른 언어 코드 (직접 입력이면 custom:이름, 아직이면 null) */
+function newModeCode(field) {
+  const nm = ui.newMode;
+  if (nm[field] !== 'custom') return nm[field] || null;
+  const name = cleanLangName(nm[`${field}Name`] || '');
+  return name ? `custom:${name}` : null;
+}
+function createModeLabel() {
+  const t = newModeCode('target'), n = newModeCode('native');
+  if (!t) return ui.newMode?.target === 'custom' ? '공부할 언어 이름을 적어 주세요' : '공부할 언어를 골라 주세요';
+  if (!n) return '뜻을 볼 언어 이름을 적어 주세요';
+  if (t === n) return '서로 다른 언어를 골라 주세요';
+  const mode = `${t}>${n}`;
+  const exists = modeList().some((m) => m.mode === mode);
+  return `${studyLabel(mode)}${exists ? '로 가기' : ' 시작하기'}<small>(${meaningLabel(mode)})</small>`;
+}
+function updateCreateMode() {
+  const btn = $('#mode-create');
+  if (!btn) return;
+  const t = newModeCode('target'), n = newModeCode('native');
+  btn.innerHTML = createModeLabel();
+  btn.disabled = !t || !n || t === n;
 }
 let usageState = null;   // { used, remaining, limit } | 'loading' | 'error'
 async function loadUsage() {
@@ -2756,7 +2784,9 @@ document.addEventListener('click', (ev) => {
     case 'fb-send': sendFeedback(); break;
     case 'settings-back': ui.settingsPage = null; renderSettings(); $('#settings-main').scrollTop = 0; break;
     case 'mode-create': {
-      const mode = `${ui.newMode.target}>${ui.newMode.native}`;
+      const t = newModeCode('target'), n = newModeCode('native');
+      if (!t || !n || t === n) break;
+      const mode = `${t}>${n}`;
       if (!modeList().some((m) => m.mode === mode)) setPref('modes', [...prefs.modes, mode]);
       ui.newMode = { target: null, native: 'ko' };
       switchMode(mode);
@@ -2822,6 +2852,11 @@ document.addEventListener('click', (ev) => {
 });
 
 document.addEventListener('input', (ev) => {
+  if (ev.target.matches?.('#new-target-name, #new-native-name')) {
+    ui.newMode[`${ev.target.dataset.field}Name`] = ev.target.value;
+    updateCreateMode();
+    return;
+  }
   if (!editor) return;
   if (ev.target.tagName !== 'TEXTAREA') return;
   const en = editor.entries[Number(ev.target.dataset.index)];
@@ -2848,6 +2883,7 @@ document.addEventListener('change', (ev) => {
   if (!ev.target.matches('#new-target, #new-native')) return;
   ui.newMode[ev.target.dataset.field] = ev.target.value;
   renderSettings();
+  if (ev.target.value === 'custom') $(`#new-${ev.target.dataset.field}-name`)?.focus();
 });
 
 $('#scan-input').addEventListener('change', (ev) => {

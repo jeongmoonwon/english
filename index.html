@@ -517,7 +517,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -671,7 +671,7 @@ async function recordActivity(list) {
   const have = new Set(activity.map((a) => a.id));
   activity.push(...list.filter((a) => !have.has(a.id)));
 }
-const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null, deleting: null };
+const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null, deleting: null, moveTo: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
 let editor = null;        // { cardId, entries: [{ korText, engText, note, category }], korImages, engImages, newCats, catInput, loading, found, checked }
 let scanRemaining = null; // 오늘 남은 자동 입력 횟수 (마지막으로 받은 값)
@@ -847,8 +847,8 @@ async function renameCategory(from, name) {
   toast(`카테고리 이름을 '${name}'(으)로 바꿨어요.`);
 }
 
-/** 카테고리 삭제: move = 카드는 기본 카테고리로 옮김, all = 카드와 복습 기록까지 삭제 */
-async function deleteCategory(name, mode) {
+/** 카테고리 삭제: move = 카드는 to 카테고리로 옮김, all = 카드와 복습 기록까지 삭제 */
+async function deleteCategory(name, mode, to) {
   ui.deleting = null;
   const targets = cards.filter((c) => catOf(c) === name);
   const t = Date.now();
@@ -861,8 +861,9 @@ async function deleteCategory(name, mode) {
     const gone = new Set(targets.map((c) => c.id));
     cards = cards.filter((c) => !gone.has(c.id));
   } else {
+    const key = await keyForName(to);
     for (const c of targets) {
-      Object.assign(c, { category: DEFAULT_CATEGORY, contentAt: t, updatedAt: Math.max(t, studyAt(c)) });
+      Object.assign(c, { category: key, contentAt: t, updatedAt: Math.max(t, studyAt(c)) });
       await putCard(c);
     }
   }
@@ -873,7 +874,7 @@ async function deleteCategory(name, mode) {
   ui.cardsCat = null;
   markChanged();
   renderAll();
-  toast(mode === 'all' ? `'${name}' 카테고리와 카드 ${targets.length}장을 삭제했어요.` : `'${name}' 카테고리를 삭제하고 카드는 '${catName(DEFAULT_CATEGORY)}'(으)로 옮겼어요.`);
+  toast(mode === 'all' ? `'${name}' 카테고리와 카드 ${targets.length}장을 삭제했어요.` : `'${name}' 카테고리를 삭제하고 카드 ${targets.length}장은 '${to}'(으)로 옮겼어요.`);
 }
 
 // ================= 카드 표시 =================
@@ -1123,8 +1124,10 @@ function renderCards() {
     </div>`;
   const del = ui.deleting === null ? '' : `<div class="field">
       <h3>카테고리 삭제<span>${esc(ui.deleting)} · 카드 ${shown.length}장</span></h3>
-      <p class="sync-line">이 카테고리의 카드는 어떻게 할까요?</p>
-      <button class="btn wide" data-act="delete-cat" data-mode="move">카드는 '${esc(catName(DEFAULT_CATEGORY))}'(으)로 옮기고 카테고리만 삭제</button>
+      <p class="sync-line">카드를 옮길 카테고리를 고르세요.</p>
+      <div class="chips">${cats.filter((c) => c.name !== ui.deleting).map((c) => `<button class="cat" data-act="move-to" data-cat="${esc(c.name)}" aria-pressed="${ui.moveTo === c.name}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}</div>
+      <button class="btn primary wide" data-act="delete-cat" data-mode="move">'${esc(ui.moveTo)}'(으)로 옮기고 삭제</button>
+      <p class="sync-line">또는</p>
       <button class="btn danger wide" data-act="delete-cat" data-mode="all">카드 ${shown.length}장까지 모두 삭제</button>
       <button class="btn wide" data-act="delete-cancel">취소</button>
     </div>`;
@@ -2092,9 +2095,16 @@ document.addEventListener('click', (ev) => {
       break;
     }
     case 'rename-cancel': ui.renaming = null; renderCards(); break;
-    case 'delete-cat-ask': ui.deleting = el.dataset.cat; ui.renaming = null; renderCards(); $('#cards-main').scrollTop = 0; break;
+    case 'delete-cat-ask':
+      ui.deleting = el.dataset.cat;
+      ui.moveTo = catName(DEFAULT_CATEGORY);
+      ui.renaming = null;
+      renderCards();
+      $('#cards-main').scrollTop = 0;
+      break;
+    case 'move-to': ui.moveTo = el.dataset.cat; renderCards(); break;
     case 'delete-cancel': ui.deleting = null; renderCards(); break;
-    case 'delete-cat': deleteCategory(ui.deleting, el.dataset.mode).catch((err) => toast(`삭제하지 못했어요. (${errText(err)})`)); break;
+    case 'delete-cat': deleteCategory(ui.deleting, el.dataset.mode, ui.moveTo).catch((err) => toast(`삭제하지 못했어요. (${errText(err)})`)); break;
     case 'rename-save': saveRename(); break;
     case 'pick-cat': editor.entries[Number(el.dataset.index)].category = el.dataset.cat; editor.popCat = null; renderEditor(); break;
     case 'new-cat': editor.catInput = Number(el.dataset.index); editor.popCat = null; renderEditor(); $('#cat-input')?.focus(); break;

@@ -187,7 +187,10 @@ select.select {
   background-position: calc(100% - 20px) 55%, calc(100% - 14px) 55%; background-size: 6px 6px; background-repeat: no-repeat;
 }
 .custom-lang { display: flex; gap: 8px; }
-.custom-lang .flag-input { flex: none; width: 64px; text-align: center; font-size: 24px; padding: 6px; }
+.custom-lang .flag-input { flex: none; width: 64px; text-align: center; font-size: 24px; padding: 6px; caret-color: transparent; cursor: pointer; }
+/* 누르면 🌐 안내를 지우고 테두리로 '여기에 넣는 중'을 보여 줌 (이모지 하나만 넣는 칸이라 커서는 숨김) */
+.custom-lang .flag-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); outline: none; }
+.custom-lang .flag-input:focus::placeholder { color: transparent; }
 .custom-lang input:not(.flag-input) { flex: 1; min-width: 0; }
 .small-note { font-size: 13px; margin-top: -4px; }
 .usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
@@ -636,7 +639,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2327,7 +2330,7 @@ function renderSettingsPage(page) {
       <input class="text flag-input" id="new-${field}-flag" data-field="${field}" maxlength="16" placeholder="🌐" aria-label="국기 이모지" value="${esc(nm[`${field}Flag`] || '')}">
       <input class="text" id="new-${field}-name" data-field="${field}" maxlength="30" placeholder="언어 이름 (예: 타갈로그어, Swahili)" value="${esc(nm[`${field}Name`] || '')}">
     </div>
-    <p class="sync-line small-note">왼쪽 칸을 누르고 이모지 키보드에서 국기를 골라 주세요. 비워 두면 🌐로 보여요.</p>` : ''}`;
+    <p class="sync-line small-note">왼쪽 칸을 누른 뒤 키보드의 이모지 버튼에서 국기를 골라 주세요. 비워 두면 🌐로 보여요.</p>` : ''}`;
     box.innerHTML = `<div class="field">
       <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
       ${modeList().map(({ mode, count }) => `<div class="mode-line">

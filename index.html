@@ -227,11 +227,20 @@ textarea.eng { font-family: var(--serif); }
 .found-item b { font-family: var(--serif); font-size: 17px; font-weight: 600; }
 .found-item span { color: var(--muted); font-size: 15px; }
 .missing { color: var(--muted); font-size: 15px; }
+.found-item { flex-direction: row; align-items: flex-start; gap: 10px; }
+.found-item .check {
+  flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 7px; border: 2px solid var(--line);
+  display: grid; place-items: center; color: var(--accent-ink); font-size: 14px; font-weight: 800; line-height: 1;
+}
+.found-item[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+.found-item[aria-pressed="true"] .check { background: var(--accent); border-color: var(--accent); }
+.found-item .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .found-item small { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 2px; }
-.found-pick { border-radius: 14px; padding: 14px; background: var(--soft); display: flex; flex-direction: column; gap: 4px; }
-.found-pick b { font-family: var(--serif); font-size: 19px; font-weight: 600; }
-.found-pick .mean { font-weight: 650; }
-.found-pick .note { margin: 6px 0 0; color: var(--ink); font-size: 15px; line-height: 1.5; opacity: .85; }
+.entry h3 { display: flex; align-items: center; }
+.entry h3 .x-mini { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 14px; padding: 2px 4px; }
+.entry label { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: -6px; }
+.entry-note { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; line-height: 1.5; }
+.btn.add-entry { background: none; border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); margin-bottom: 18px; }
 .btn.small { padding: 10px 14px; font-size: 15px; }
 /* 사진 읽는 중: 빙글빙글 도는 고리 + 통통 튀는 카드 캐릭터 */
 .scan-wait { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 4px; text-align: center; }
@@ -492,7 +501,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1078,8 +1087,8 @@ function openEditor(cardId = null) {
   const card = cardId ? cards.find((c) => c.id === cardId) : null;
   editor = {
     cardId: card?.id ?? null,
-    korText: card?.korText ?? '',
-    engText: card?.engText ?? '',
+    // 입력 묶음 (새 표현은 여러 개를 한 번에, 수정은 하나). note: 사진에서 받은 설명 (저장하지 않음)
+    entries: [{ korText: card?.korText ?? '', engText: card?.engText ?? '', note: '' }],
     korImages: [...(card?.korImages ?? [])],
     engImages: [...(card?.engImages ?? [])],
     // 새 카드는 카드 탭에서 보고 있던 카테고리에 넣음
@@ -1087,8 +1096,8 @@ function openEditor(cardId = null) {
     catNew: false,
     newCatText: '',
     loading: 0,
-    found: null,   // 사진에서 찾은 표현 [{ expression, meaning, note }]
-    picked: null,  // 그중 이 카드에 넣은 것의 번호
+    found: null,     // 사진에서 찾은 표현 [{ expression, meaning, note }]
+    checked: null,   // 그중 고른 것의 번호 Set
   };
   $('#editor').hidden = false;
   renderEditor();
@@ -1100,16 +1109,26 @@ function closeEditor() {
   if (updateReady) { location.reload(); return; }
 }
 
-function sideEditorHTML(side, title, hint, text, images) {
-  return `<div class="field">
-    <h3>${title}<span>${hint}</span></h3>
-    <textarea class="${side}" data-side="${side}" rows="2" placeholder="직접 입력">${esc(text)}</textarea>
-    ${images.length ? `<div class="thumbs">${images.map((b, i) => `
-      <figure>
-        <img src="${blobURL(b)}" alt="">
-        <figcaption>${i + 1}</figcaption>
-        <button class="x" data-act="remove-photo" data-side="${side}" data-index="${i}" aria-label="${i + 1}번 사진 삭제">×</button>
-      </figure>`).join('')}</div>` : ''}
+const thumbsHTML = (side, images) => (images.length ? `<div class="thumbs">${images.map((b, i) => `
+  <figure>
+    <img src="${blobURL(b)}" alt="">
+    <figcaption>${i + 1}</figcaption>
+    <button class="x" data-act="remove-photo" data-side="${side}" data-index="${i}" aria-label="${i + 1}번 사진 삭제">×</button>
+  </figure>`).join('')}</div>` : '');
+
+/** 카드 하나의 뜻·표현 입력 (사진은 예전 카드를 고칠 때만 보임) */
+function entryHTML(e, en, i) {
+  const many = e.entries.length > 1;
+  return `<div class="field entry">
+    <h3>${many ? `카드 ${i + 1}` : '카드'}
+      ${many ? `<button class="x-mini" data-act="remove-entry" data-index="${i}" aria-label="카드 ${i + 1} 빼기">빼기 ✕</button>` : ''}</h3>
+    <label for="kor-${i}">뜻 · 한국어</label>
+    <textarea class="kor" id="kor-${i}" data-side="kor" data-index="${i}" rows="2" placeholder="한국어 뜻">${esc(en.korText)}</textarea>
+    ${e.cardId ? thumbsHTML('kor', e.korImages) : ''}
+    <label for="eng-${i}">표현 · 외울 말</label>
+    <textarea class="eng" id="eng-${i}" data-side="eng" data-index="${i}" rows="2" placeholder="외울 표현 (ENG 등)">${esc(en.engText)}</textarea>
+    ${e.cardId ? thumbsHTML('eng', e.engImages) : ''}
+    ${en.note ? `<p class="entry-note">💡 ${esc(en.note)}</p>` : ''}
   </div>`;
 }
 
@@ -1128,25 +1147,19 @@ function scanEditorHTML(e) {
       <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · 보통 5~15초 걸려요</p>
     </div>`;
   } else {
-    const pick = e.found && e.picked !== null ? e.found[e.picked] : null;
     let result = '';
-    if (pick) {
-      result = `<div class="found-pick">
-          <b>${esc(pick.expression)}</b>
-          <span class="mean">${esc(pick.meaning)}</span>
-          ${pick.note ? `<p class="note">💡 ${esc(pick.note)}</p>` : ''}
-        </div>
-        <p class="sync-line">표현과 뜻 칸에 채웠어요. 고쳐서 저장해도 돼요.</p>
-        ${e.found.length > 1 ? '<button class="btn small wide" data-act="unpick">다른 표현 고르기</button>' : ''}`;
-    } else if (e.found) {
-      result = `<p class="sync-line">표현을 ${e.found.length}개 찾았어요. 이 카드에 넣을 것을 고르세요.</p>
-        <div class="found">${e.found.map((it, i) => `<button class="found-item" data-act="pick-found" data-index="${i}">
-          <b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</button>`).join('')}</div>
-        ${e.cardId ? '' : `<button class="btn primary wide" data-act="add-all-found">${e.found.length}개 모두 따로 추가</button>`}`;
+    if (e.found) {
+      const n = e.checked.size;
+      result = `<p class="sync-line">표현을 ${e.found.length}개 찾았어요. ${e.cardId ? '이 카드에 넣을 것을 하나 고르세요.' : '추가할 것을 고르세요.'}</p>
+        <div class="found">${e.found.map((it, i) => `<button class="found-item" data-act="toggle-found" data-index="${i}" aria-pressed="${e.checked.has(i)}">
+          <span class="check">${e.checked.has(i) ? '✓' : ''}</span>
+          <span class="txt"><b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</span>
+        </button>`).join('')}</div>
+        <button class="btn primary wide" data-act="use-found" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 입력칸에 넣기` : '넣을 표현을 골라 주세요'}</button>`;
     }
     body = `${result}
       <button class="btn wide" data-act="scan">${e.found ? '다른 사진 고르기' : '사진 고르기'}</button>
-      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 사진은 저장하지 않아요.</p>'}`;
+      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 여러 개면 골라서 한 번에 넣을 수 있어요. 사진은 저장하지 않아요.</p>'}`;
   }
   return `<div class="field">
     <h3>사진으로 자동 입력<span>${left}</span></h3>
@@ -1158,7 +1171,7 @@ function categoryEditorHTML(e) {
   const names = categoryList().map((c) => c.name);
   if (!names.includes(e.category)) names.unshift(e.category);
   return `<div class="field">
-    <h3>카테고리<span>주제나 언어별로 나눠요</span></h3>
+    <h3>카테고리<span>${e.cardId ? '주제나 언어별로 나눠요' : '아래 카드 모두 여기에 들어가요'}</span></h3>
     <div class="chips">
       ${names.map((n) => `<button class="cat" data-act="pick-cat" data-cat="${esc(n)}" aria-pressed="${!e.catNew && e.category === n}">${esc(n)}</button>`).join('')}
       <button class="cat ghost" data-act="new-cat" aria-pressed="${e.catNew}">+ 새 카테고리</button>
@@ -1177,22 +1190,33 @@ function renderEditor() {
     </header>
     <div class="sheet-body">
       ${scanEditorHTML(e)}
-      ${sideEditorHTML('kor', '뜻', '한국어 뜻 (KOR)', e.korText, e.korImages)}
-      ${sideEditorHTML('eng', '표현', '외울 표현 (ENG 등)', e.engText, e.engImages)}
       ${categoryEditorHTML(e)}
+      ${e.entries.map((en, i) => entryHTML(e, en, i)).join('')}
+      ${e.cardId ? '' : '<button class="btn wide add-entry" data-act="add-entry">+ 카드 하나 더</button>'}
       ${e.cardId ? '<button class="btn danger wide" data-act="editor-delete">이 표현 삭제</button>' : ''}
     </div>`;
   updateSaveState();
 }
 
 const hasContent = (text, images) => text.trim().length > 0 || images.length > 0;
+/** 입력 묶음 상태: 'full'(뜻·표현 모두) | 'empty'(둘 다 비어 있음) | 'half'(한쪽만) */
+function entryState(e, en) {
+  const kor = hasContent(en.korText, e.cardId ? e.korImages : []);
+  const eng = hasContent(en.engText, e.cardId ? e.engImages : []);
+  return kor && eng ? 'full' : !kor && !eng ? 'empty' : 'half';
+}
+const fullEntries = (e) => e.entries.filter((en) => entryState(e, en) === 'full');
 function editorValid() {
-  return editor && !editor.loading && hasContent(editor.korText, editor.korImages) && hasContent(editor.engText, editor.engImages)
-    && (!editor.catNew || editor.newCatText.trim().length > 0);
+  const e = editor;
+  return e && !e.loading && fullEntries(e).length > 0 && !e.entries.some((en) => entryState(e, en) === 'half')
+    && (!e.catNew || e.newCatText.trim().length > 0);
 }
 function updateSaveState() {
   const btn = $('#editor-save');
-  if (btn) btn.disabled = !editorValid();
+  if (!btn) return;
+  btn.disabled = !editorValid();
+  const n = fullEntries(editor).length;
+  btn.textContent = !editor.cardId && n > 1 ? `저장 (${n})` : '저장';
 }
 
 const blobBase64 = (b) => new Promise((resolve, reject) => {
@@ -1235,7 +1259,7 @@ async function scanPhoto(file) {
   const e = editor;
   e.loading += 1;
   e.found = null;
-  e.picked = null;
+  e.checked = null;
   e.scanStart = Date.now();
   clearInterval(scanTimer);
   scanTimer = setInterval(() => {
@@ -1268,9 +1292,11 @@ async function scanPhoto(file) {
     if (editor !== e) return;   // 그 사이 편집 화면을 닫은 경우
     const items = Array.isArray(data.items) ? data.items : [];
     if (!items.length) message = '사진에서 외국어 표현을 찾지 못했어요.';
+    else if (items.length === 1) { e.found = items; e.checked = new Set([0]); useFound(e); message = '입력칸에 채웠어요. 고쳐서 저장하세요.'; }
     else {
       e.found = items;
-      if (items.length === 1) pickFound(e, 0);
+      // 사진에 직접 표시한 표현이면 모두 미리 고름 (수정 중에는 하나만)
+      e.checked = new Set(data.marked && !e.cardId ? items.map((_, i) => i) : []);
     }
   } catch (err) {
     if (err instanceof ScanError) message = err.message;
@@ -1284,28 +1310,20 @@ async function scanPhoto(file) {
   }
   if (message) toast(message);
 }
-function pickFound(e, i) {
-  e.picked = i;
-  e.engText = e.found[i].expression;
-  e.korText = e.found[i].meaning;
-}
-/** 찾은 표현을 모두 따로 카드로 추가 (지금 고른 카테고리에) */
-async function addAllFound() {
-  const e = editor;
-  if (!e?.found || e.cardId || (e.catNew && !e.newCatText.trim())) return;
-  const category = await keyForName(e.catNew ? e.newCatText.trim() : e.category);
-  const added = [];
-  for (const it of e.found) {
-    const card = newCard({ korText: it.meaning, engText: it.expression, korImages: [], engImages: [], category });
-    await putCard(card);
-    added.push(card);
+/** 고른 표현을 입력칸에 넣음: 빈 입력 묶음부터 채우고, 모자라면 새로 만듦 (수정 중에는 그 카드 하나에) */
+function useFound(e) {
+  const picked = e.found.filter((_, i) => e.checked.has(i)).map((it) => ({ korText: it.meaning, engText: it.expression, note: it.note || '' }));
+  if (!picked.length) return;
+  if (e.cardId) {
+    e.entries[0] = picked[0];
+  } else {
+    for (const en of picked) {
+      const slot = e.entries.findIndex((x) => entryState(e, x) === 'empty');
+      if (slot >= 0) e.entries[slot] = en; else e.entries.push(en);
+    }
   }
-  await recordActivity(added.map(addActivity));
-  markChanged();
-  closeEditor();
-  renderAll();
-  requestPersist();
-  toast(`표현 ${added.length}개를 추가했어요.`);
+  e.found = null;
+  e.checked = null;
 }
 function newCard(fields) {
   const now = new Date();
@@ -1318,25 +1336,30 @@ function newCard(fields) {
 async function saveEditor() {
   if (!editorValid()) return;
   const e = editor;
-  const fields = {
-    korText: e.korText.trim(), engText: e.engText.trim(),
-    korImages: e.korImages, engImages: e.engImages,
-    category: await keyForName(e.catNew ? e.newCatText.trim() : e.category),
-  };
-  let card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
-  if (card) {
+  const category = await keyForName(e.catNew ? e.newCatText.trim() : e.category);
+  const list = fullEntries(e);
+  if (e.cardId) {
+    const card = cards.find((c) => c.id === e.cardId);
     const t = Date.now();
-    Object.assign(card, fields, { contentAt: t, updatedAt: t });
+    Object.assign(card, {
+      korText: list[0].korText.trim(), engText: list[0].engText.trim(),
+      korImages: e.korImages, engImages: e.engImages, category, contentAt: t, updatedAt: t,
+    });
+    await putCard(card);
   } else {
-    card = newCard(fields);
+    const added = [];
+    for (const en of list) {
+      const card = newCard({ korText: en.korText.trim(), engText: en.engText.trim(), korImages: [], engImages: [], category });
+      await putCard(card);
+      added.push(card);
+    }
+    await recordActivity(added.map(addActivity));
   }
-  await putCard(card);
-  if (!e.cardId) await recordActivity([addActivity(card)]);
   markChanged();
   closeEditor();
   renderAll();
   requestPersist();
-  toast(e.cardId ? '수정했어요.' : '추가했어요.');
+  toast(e.cardId ? '수정했어요.' : list.length > 1 ? `표현 ${list.length}개를 추가했어요.` : '추가했어요.');
 }
 
 async function deleteFromEditor() {
@@ -1982,9 +2005,32 @@ document.addEventListener('click', (ev) => {
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'scan': $('#scan-input').click(); break;
-    case 'pick-found': pickFound(editor, Number(el.dataset.index)); renderEditor(); break;
-    case 'unpick': editor.picked = null; renderEditor(); break;
-    case 'add-all-found': addAllFound().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
+    case 'toggle-found': {
+      const i = Number(el.dataset.index);
+      if (editor.checked.has(i)) editor.checked.delete(i);
+      else if (editor.cardId) editor.checked = new Set([i]);
+      else editor.checked.add(i);
+      renderEditor();
+      break;
+    }
+    case 'use-found': {
+      const n = editor.checked.size;
+      const first = editor.entries.findIndex((x) => entryState(editor, x) === 'empty');
+      useFound(editor);
+      renderEditor();
+      $(`#kor-${first >= 0 ? first : editor.entries.length - n}`)?.closest('.entry')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      toast(n > 1 ? `카드 ${n}장에 채웠어요. 고쳐서 저장하세요.` : '입력칸에 채웠어요. 고쳐서 저장하세요.');
+      break;
+    }
+    case 'add-entry':
+      editor.entries.push({ korText: '', engText: '', note: '' });
+      renderEditor();
+      $(`#kor-${editor.entries.length - 1}`)?.focus();
+      break;
+    case 'remove-entry':
+      editor.entries.splice(Number(el.dataset.index), 1);
+      renderEditor();
+      break;
     case 'remove-photo': {
       const list = el.dataset.side === 'kor' ? editor.korImages : editor.engImages;
       list.splice(Number(el.dataset.index), 1);
@@ -2010,8 +2056,10 @@ document.addEventListener('input', (ev) => {
     return;
   }
   if (ev.target.tagName !== 'TEXTAREA') return;
-  if (ev.target.dataset.side === 'kor') editor.korText = ev.target.value;
-  else editor.engText = ev.target.value;
+  const en = editor.entries[Number(ev.target.dataset.index)];
+  if (!en) return;
+  if (ev.target.dataset.side === 'kor') en.korText = ev.target.value;
+  else en.engText = ev.target.value;
   updateSaveState();
 });
 

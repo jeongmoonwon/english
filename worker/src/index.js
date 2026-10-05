@@ -66,8 +66,10 @@ export async function handle(request, env, deps = {}) {
   const path = new URL(request.url).pathname;
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
-  if (!isUsage && !isVoice && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  const isFeedback = request.method === 'POST' && path === '/feedback';
+  if (!isUsage && !isVoice && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
+  if (isFeedback) return handleFeedback(request, env, reply, deps);
 
   // 1. 로그인 확인
   let user;
@@ -125,6 +127,58 @@ export async function handle(request, env, deps = {}) {
 
 class Refusal extends Error {}
 class NoSpeech extends Error {}
+
+// ----- 의견 보내기: 로그인 없이도 가능, 메일(Resend)로 만든 사람에게 전달 -----
+// 받는 주소(FEEDBACK_TO)와 Resend 키(RESEND_API_KEY)는 Worker 비밀값에만 있음
+const FEEDBACK_KINDS = { bug: '🐛 버그', idea: '💡 제안', question: '❓ 문의', etc: '💬 기타' };
+const FEEDBACK_PER_DAY = 10;   // 같은 곳(IP)에서 하루에 보낼 수 있는 수
+async function handleFeedback(request, env, reply, deps) {
+  if (!env.RESEND_API_KEY || !env.FEEDBACK_TO) return reply(503, { error: 'not_configured' });
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const text = str(body?.text, 3000);
+  if (!text) return reply(400, { error: 'text' });
+  const kind = FEEDBACK_KINDS[body?.kind] ? body.kind : 'etc';
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(body?.email, 200)) ? str(body.email, 200) : '';
+  // 로그인했으면 누가 보냈는지 (토큰이 틀려도 의견은 받음)
+  let who = '로그인 안 함';
+  try {
+    const token = (request.headers.get('Authorization') || '').replace(/^Bearer /, '');
+    if (token) { const u = await verifyIdToken(token, env.FIREBASE_PROJECT_ID, deps); who = `${u.email || '이메일 없음'} (${u.sub})`; }
+  } catch {}
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const key = `fb:${ip}:${koreaDay(deps.now?.() ?? Date.now())}`;
+  const sent = Number(await env.USAGE.get(key)) || 0;
+  if (sent >= FEEDBACK_PER_DAY) return reply(429, { error: 'limit' });
+
+  const firstLine = text.split('\n')[0].slice(0, 40);
+  const res = await (deps.fetch ?? fetch)('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'mooni의 단어장 <onboarding@resend.dev>',
+      to: [env.FEEDBACK_TO],
+      subject: `[mooni의 단어장 문의] ${FEEDBACK_KINDS[kind]} · ${firstLine}`,
+      text: [
+        `종류: ${FEEDBACK_KINDS[kind]}`,
+        `답장 받을 이메일: ${email || '(없음)'}`,
+        `보낸 사람: ${who}`,
+        `앱 버전: ${str(body?.app, 20) || '?'} · 언어 모드: ${str(body?.mode, 20) || '?'}`,
+        `기기: ${str(body?.ua, 300) || '?'}`,
+        '',
+        text,
+      ].join('\n'),
+      ...(email ? { reply_to: email } : {}),
+    }),
+  });
+  if (!res.ok) {
+    console.error('feedback mail failed', res.status, await res.text().catch(() => ''));
+    return reply(502, { error: 'mail' });
+  }
+  await env.USAGE.put(key, String(sent + 1), { expirationTtl: 2 * 86400 });
+  return reply(200, { ok: true });
+}
 
 // ----- 말해서 넣기: 녹음 → Whisper(글자, 언어) → Claude(표현·뜻·설명) -----
 async function handleVoice(request, env, reply, key) {

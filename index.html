@@ -631,7 +631,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2190,7 +2190,7 @@ function renderSettings() {
   else if (page === 'usage') renderUsage();
   else renderSettingsPage(page);
 }
-/** 의견을 Firestore의 feedback 모음에 남김 (보내기만 되고, 읽기는 Firebase 콘솔에서) */
+/** 의견 보내기: Worker가 만든 사람에게 메일로 전달. 메일을 못 보내면 Firestore feedback 모음에 남김 */
 async function sendFeedback() {
   const f = ui.feedback;
   f.text = $('#fb-text').value.trim();
@@ -2199,28 +2199,43 @@ async function sendFeedback() {
   if (!fbReady) { toast('지금은 보낼 수 없어요. 잠시 뒤 다시 시도해 주세요.'); return; }
   f.sending = true;
   renderSettings();
+  const data = { kind: f.kind, text: f.text.slice(0, 3000), email: f.email.slice(0, 200), app: APP_VERSION, mode: prefs.mode, ua: navigator.userAgent.slice(0, 300) };
+  try {
+    const res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) },
+      body: JSON.stringify(data),
+    });
+    if (res.status === 429) throw new ScanError('오늘은 의견을 너무 많이 보냈어요. 내일 다시 보내 주세요.');
+    if (!res.ok) throw new Error(`mail ${res.status}`);
+  } catch (err) {
+    if (err instanceof ScanError) { f.sending = false; renderSettings(); toast(err.message); return; }
+    // 메일을 못 보냈으면 Firestore에 남겨 둠
+    if (!(await saveFeedbackToStore(data))) return;
+  }
+  ui.feedback = null;
+  ui.settingsPage = null;
+  renderSettings();
+  toast('보내 주셔서 고마워요! 💌');
+}
+async function saveFeedbackToStore(data) {
+  const f = ui.feedback;
   try {
     const batch = fb.writeBatch(fstore);
-    batch.set(fb.doc(fb.collection(fstore, 'feedback')), {
-      kind: f.kind, text: f.text.slice(0, 3000), email: f.email.slice(0, 200),
-      app: APP_VERSION, mode: prefs.mode, ua: navigator.userAgent.slice(0, 300),
-      uid: user?.uid ?? null, createdAt: fb.serverTimestamp(),
-    });
+    batch.set(fb.doc(fb.collection(fstore, 'feedback')), { ...data, uid: user?.uid ?? null, createdAt: fb.serverTimestamp() });
     await batch.commit();
-    ui.feedback = null;
-    ui.settingsPage = null;
-    renderSettings();
-    toast('보내 주셔서 고마워요! 💌');
+    return true;
   } catch (err) {
     f.sending = false;
     renderSettings();
-    toast(navigator.onLine === false ? '인터넷에 연결되어 있지 않아요.' : `보내지 못했어요. (${errText(err)})`);
+    toast(navigator.onLine === false ? '인터넷에 연결되어 있지 않아요.' : `보내지 못했어요. 잠시 뒤 다시 시도해 주세요. (${errText(err)})`);
+    return false;
   }
 }
 function openSettingsPage(page, focusNew) {
   ui.settingsPage = page;
   if (page === 'lang') ui.newMode = { target: null, native: 'ko' };
-  if (page === 'feedback' && !ui.feedback) ui.feedback = { kind: 'idea', text: '', email: user?.email || '', sending: false };
+  if (page === 'feedback' && !ui.feedback) ui.feedback = { kind: 'idea', text: '', email: '', sending: false };
   renderSettings();
   $('#settings-main').scrollTop = 0;
   if (page === 'usage') loadUsage();
@@ -2273,9 +2288,9 @@ function renderSettingsPage(page) {
       <label class="sub" for="fb-text">내용</label>
       <textarea id="fb-text" rows="6" maxlength="3000" placeholder="예: 복습할 때 이런 기능이 있으면 좋겠어요.">${esc(f.text)}</textarea>
       <label class="sub" for="fb-email">답장 받을 이메일 (선택)</label>
-      <input class="text" id="fb-email" type="email" maxlength="200" placeholder="비워 두면 답장 없이 보내져요" value="${esc(f.email)}">
+      <input class="text" id="fb-email" type="email" maxlength="200" placeholder="답장이 필요하면 내 이메일을 적어 주세요" value="${esc(f.email)}">
       <button class="btn primary wide" data-act="fb-send" ${f.sending ? 'disabled' : ''}>${f.sending ? '보내는 중…' : '보내기'}</button>
-      <p class="sync-line">앱 버전과 기기 종류가 함께 전달돼요. 카드 내용은 보내지 않아요.</p>
+      <p class="sync-line">만든 사람에게 메일로 전달돼요. 앱 버전과 기기 종류가 함께 가고, 카드 내용은 보내지 않아요.</p>
     </div>`;
   } else if (page === 'lang') {
     const nm = ui.newMode || { target: null, native: 'ko' };

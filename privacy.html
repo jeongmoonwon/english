@@ -28,35 +28,51 @@ code { font-size: 14px; }
 <body>
 <main>
   <h1>개인정보처리방침</h1>
-  <p class="date">mooni의 단어장 · 시행일 2026년 9월 27일</p>
+  <p class="date">mooni의 단어장 · 시행일 2026년 10월 5일</p>
 
   <section>
     <h2>저장하는 정보</h2>
-    <p>이 앱은 사용자가 직접 입력한 단어 카드(뜻, 표현, 첨부한 사진, 카테고리)와 복습·연습 기록만 저장합니다. 이름, 연락처, 위치 같은 다른 개인정보는 수집하지 않습니다.</p>
+    <ul>
+      <li><strong>계정 정보:</strong> Google 계정으로 로그인하면 Google 계정의 이메일 주소, 이름, 프로필 사진 주소와 계정 식별 번호를 받습니다. 로그인과 기기 간 동기화에만 씁니다.</li>
+      <li><strong>학습 데이터:</strong> 사용자가 입력한 단어 카드(뜻, 표현, 카테고리)와 복습·연습 기록.</li>
+      <li><strong>사진:</strong> 이전 버전에서 카드에 붙인 사진은 사용자 기기에만 있고 서버로 보내지 않습니다.</li>
+    </ul>
+    <p>연락처, 위치 같은 다른 개인정보는 수집하지 않으며, 광고나 분석 도구를 쓰지 않습니다.</p>
   </section>
 
   <section>
     <h2>저장 위치</h2>
     <ul>
-      <li><strong>사용자 기기:</strong> 모든 데이터는 먼저 사용자 기기의 브라우저 저장소에 저장됩니다.</li>
-      <li><strong>사용자 본인의 Google Drive:</strong> Google 계정으로 로그인하면, 같은 데이터가 사용자 본인 Google Drive의 앱 전용 숨김 폴더에 저장되어 기기 간에 동기화됩니다.</li>
+      <li><strong>사용자 기기:</strong> 모든 데이터는 먼저 사용자 기기의 브라우저 저장소에 저장됩니다. 로그인하지 않으면 데이터는 기기 밖으로 나가지 않습니다.</li>
+      <li><strong>동기화 서버(Google Firebase):</strong> 로그인하면 카드의 글과 학습 기록이 Google LLC가 운영하는 Firebase(Authentication, Cloud Firestore)에 저장되어 같은 계정의 기기들 사이에서 동기화됩니다. 데이터는 Google의 해외 데이터센터에 저장될 수 있습니다.</li>
     </ul>
-    <p>이 앱에는 별도의 서버가 없습니다. 데이터는 사용자 기기와 사용자 본인의 Google Drive 사이에서만 오가며, 앱 제작자를 포함한 다른 누구에게도 전송되거나 공유되지 않습니다.</p>
+    <p>각 사용자의 데이터는 그 계정으로 로그인한 경우에만 읽고 쓸 수 있도록 설정되어 있습니다. 데이터를 판매하거나 다른 곳에 제공하지 않습니다.</p>
+  </section>
+
+  <section>
+    <h2>사진으로 자동 입력</h2>
+    <p>"사진으로 자동 입력"을 쓰면, 고른 사진을 Cloudflare(Worker)를 거쳐 Anthropic PBC의 Claude API로 보내 사진 속 외국어 표현과 한국어 뜻을 받아 옵니다.</p>
+    <ul>
+      <li>사진은 결과를 받는 데에만 쓰며 이 앱의 서버에 저장하지 않습니다. Anthropic은 <a href="https://www.anthropic.com/legal/commercial-terms">상업 약관</a>에 따라 API로 받은 데이터를 모델 학습에 쓰지 않으며, 정해진 기간 동안만 보관합니다.</li>
+      <li>하루 사용 횟수를 세기 위해 계정 식별 번호와 날짜별 사용 횟수를 Cloudflare에 이틀 동안 보관합니다.</li>
+      <li>사진에 다른 사람의 개인정보가 담기지 않도록 주의해 주세요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>보관 기간과 삭제</h2>
+    <ul>
+      <li>서버의 데이터는 계정을 삭제할 때까지 보관합니다.</li>
+      <li>앱에서 카드를 삭제하면 기기와 서버에서 함께 삭제됩니다.</li>
+      <li>앱의 <strong>동기화 · 백업 → 계정 삭제</strong>를 누르면 서버에 저장된 카드, 기록과 계정이 바로 삭제됩니다. 이 기기에 있는 카드는 남습니다.</li>
+      <li>Google 계정 설정 → 보안 → 타사 앱 액세스에서 이 앱의 로그인 권한을 언제든 해제할 수 있습니다.</li>
+    </ul>
   </section>
 
   <section>
     <h2>Google 계정 권한</h2>
-    <p>Google 로그인 시 <code>drive.appdata</code> 권한만 요청합니다. 이 권한으로는 이 앱이 만든 앱 전용 폴더에만 접근할 수 있으며, 사용자의 다른 Drive 파일은 보거나 수정할 수 없습니다.</p>
+    <p>Google 로그인 시 기본 정보(<code>openid</code>, <code>email</code>, <code>profile</code>)만 요청합니다. Google Drive, Gmail 등 다른 Google 서비스의 데이터에는 접근하지 않습니다.</p>
     <p>Google API에서 받은 정보는 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 서비스 사용자 데이터 정책</a>(제한적 사용 요구사항 포함)을 따릅니다.</p>
-  </section>
-
-  <section>
-    <h2>데이터 삭제</h2>
-    <ul>
-      <li>앱에서 카드를 삭제하면 기기와 Drive에서 함께 삭제됩니다.</li>
-      <li>Drive에 저장된 앱 데이터 전체는 Google Drive 설정 → 앱 관리 → mooni의 단어장 → "숨겨진 앱 데이터 삭제"로 지울 수 있습니다.</li>
-      <li>Google 계정 설정 → 보안 → 타사 앱 액세스에서 이 앱의 권한을 언제든 해제할 수 있습니다.</li>
-    </ul>
   </section>
 
   <section>

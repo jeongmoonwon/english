@@ -1,2 +1,5 @@
 .DS_Store
 vibe-coding-blog.md
+node_modules/
+.wrangler/
+.dev.vars

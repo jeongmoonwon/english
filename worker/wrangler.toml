@@ -1,0 +1,14 @@
+# 사진 → 표현·뜻 Worker. 배포 방법은 README의 "사진으로 자동 입력 (Cloudflare Worker)"를 보세요.
+name = "mooni-scan"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FIREBASE_PROJECT_ID = "mooni-wordbook-66dd9"
+ALLOWED_ORIGINS = "https://jeongmoonwon.github.io,http://localhost:8000"
+
+# 하루 사용량 기록. `npx wrangler kv namespace create USAGE`로 만든 id를 넣으세요
+[[kv_namespaces]]
+binding = "USAGE"
+id = "52092527be724991a2c1b994ac997896"

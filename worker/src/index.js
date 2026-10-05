@@ -15,6 +15,7 @@ There may be one or several screenshots. Go through each one and list foreign-la
 - If the user marked anything in a screenshot (underline, highlight, circle, box, arrow, handwriting), list ONLY the marked expressions from that screenshot and set their "marked" to true.
 - For a screenshot with no marks, list the expressions worth learning that are shown, such as the subtitle line or idioms and phrases in it, with "marked" false. Prefer the full phrase as it is used over single easy words.
 - Ignore Korean text, including Korean subtitles, except as a hint for what the foreign text means.
+- The screenshots are in order and are often consecutive frames or a scrolled page. If a sentence or expression is cut off at the edge of one screenshot or split across subtitle frames and continues in the next, join it into ONE complete item instead of listing the pieces.
 - At most 5 items per screenshot, and don't list the same expression twice. "expression": keep it in the original language and script, exactly as it appears; only fix obvious recognition errors and drop speaker labels or timestamps.
 - "meaning": a natural Korean translation that fits the context, the way a Korean speaker would actually say it, not a word-for-word gloss. Keep it short.
 - "note": 1-2 short Korean sentences in friendly 해요체 that help the learner remember it: the nuance, when people use it, or what a tricky word or idiom literally means. Don't repeat the meaning.

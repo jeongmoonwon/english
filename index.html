@@ -114,7 +114,11 @@ img { max-width: 100%; }
 :root[data-size="xlarge"] :is(.prompt-text, .face-text) { font-size: 32px; }
 :root[data-size="xlarge"] .face-text.serif { font-size: 36px; }
 /* ---------- 플래시카드 (앞면 → 뒤집으면 뒷면) ---------- */
-.flash { perspective: 1200px; }
+/* 카드가 남는 화면 높이를 채움 (내용이 더 길면 그만큼 늘어나고 스크롤) */
+:is(#review-main, #practice-body):has(.flash) { display: flex; flex-direction: column; }
+.flash { perspective: 1200px; flex: 1 0 auto; display: flex; flex-direction: column; }
+.flash .face { flex: 1 0 auto; min-height: 340px; }
+#practice-body .chip { align-self: flex-start; }
 .face.out { animation: flip-out .17s ease-in forwards; }
 .face.in { animation: flip-in .32s cubic-bezier(.2, .8, .3, 1.25); }
 @keyframes flip-out { to { transform: rotateY(90deg) scale(.97); } }
@@ -128,8 +132,8 @@ img { max-width: 100%; }
 .face.back { background: color-mix(in srgb, var(--soft) 45%, var(--surface)); }
 .face .shots { width: 100%; }
 .face-tag { position: absolute; top: 14px; left: 16px; padding: 2px 10px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 700; }
-.face-text { margin: 0; font-size: 24px; line-height: 1.45; font-weight: 650; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
-.face-text.serif { font-family: var(--serif); font-weight: 500; font-size: 27px; }
+.face-text { margin: 0; font-size: 26px; line-height: 1.45; font-weight: 650; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.face-text.serif { font-family: var(--serif); font-weight: 500; font-size: 29px; }
 .face-ask { margin: 4px 0 0; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 15px; width: 100%; }
 .flip-hint { position: absolute; bottom: 12px; color: var(--muted); font-size: 13px; }
 .face .speak-row { margin-top: 0; }
@@ -586,7 +590,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

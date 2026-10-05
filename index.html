@@ -186,6 +186,10 @@ select.select {
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 20px) 55%, calc(100% - 14px) 55%; background-size: 6px 6px; background-repeat: no-repeat;
 }
+.custom-lang { display: flex; gap: 8px; }
+.custom-lang .flag-input { flex: none; width: 64px; text-align: center; font-size: 24px; padding: 6px; }
+.custom-lang input:not(.flag-input) { flex: 1; min-width: 0; }
+.small-note { font-size: 13px; margin-top: -4px; }
 .usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .usage-meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .tab[aria-selected="true"] { color: var(--accent); }
@@ -632,7 +636,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -876,9 +880,19 @@ const LANGS = {
 const DEFAULT_MODE = 'en>ko';
 const modeOf = (c) => c.lang || DEFAULT_MODE;
 const modeParts = (m) => { const [target, native] = m.split('>'); return { target, native }; };
-/** 언어 코드 → 정보. 목록에 없는 언어는 "custom:이름" (국기 대신 🌐, 음성은 기기가 짐작) */
-const langInfo = (code) => LANGS[code] || (code?.startsWith('custom:') ? { name: code.slice(7), flag: '🌐', speech: '' } : null);
-const cleanLangName = (name) => name.replace(/[>:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30);
+/** 언어 코드 → 정보. 목록에 없는 언어는 "custom:이름|이모지" (이모지가 없으면 🌐, 음성은 기기가 짐작) */
+function langInfo(code) {
+  if (LANGS[code]) return LANGS[code];
+  if (!code?.startsWith('custom:')) return null;
+  const [name, flag] = code.slice(7).split('|');
+  return { name, flag: flag || '🌐', speech: '' };
+}
+const cleanLangName = (name) => name.replace(/[>:|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30);
+/** 입력한 글자 중 첫 이모지 하나 (국기는 두 글자짜리라 글자 묶음 단위로 셈). 없으면 '' */
+function firstEmoji(text) {
+  const seg = typeof Intl.Segmenter === 'function' ? [...new Intl.Segmenter().segment(text || '')].map((x) => x.segment) : [...(text || '')];
+  return seg.find((g) => /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g)) || '';
+}
 const targetLang = (m = prefs.mode) => langInfo(modeParts(m).target) || LANGS.en;
 const nativeLang = (m = prefs.mode) => langInfo(modeParts(m).native) || LANGS.ko;
 /** 받침에 맞춰 '로'/'으로' (ㄹ 받침은 '로') */
@@ -2309,7 +2323,11 @@ function renderSettingsPage(page) {
       ${Object.entries(LANGS).filter(([code]) => code !== skip).map(([code, l]) => `<option value="${code}" ${picked === code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
       <option value="custom" ${picked === 'custom' ? 'selected' : ''}>✏️ 목록에 없는 언어 직접 입력</option>
     </select>
-    ${picked === 'custom' ? `<input class="text" id="new-${field}-name" data-field="${field}" maxlength="30" placeholder="언어 이름 (예: 타갈로그어, Swahili)" value="${esc(nm[`${field}Name`] || '')}">` : ''}`;
+    ${picked === 'custom' ? `<div class="custom-lang">
+      <input class="text flag-input" id="new-${field}-flag" data-field="${field}" maxlength="16" placeholder="🌐" aria-label="국기 이모지" value="${esc(nm[`${field}Flag`] || '')}">
+      <input class="text" id="new-${field}-name" data-field="${field}" maxlength="30" placeholder="언어 이름 (예: 타갈로그어, Swahili)" value="${esc(nm[`${field}Name`] || '')}">
+    </div>
+    <p class="sync-line small-note">왼쪽 칸을 누르고 이모지 키보드에서 국기를 골라 주세요. 비워 두면 🌐로 보여요.</p>` : ''}`;
     box.innerHTML = `<div class="field">
       <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
       ${modeList().map(({ mode, count }) => `<div class="mode-line">
@@ -2337,7 +2355,8 @@ function newModeCode(field) {
   const nm = ui.newMode;
   if (nm[field] !== 'custom') return nm[field] || null;
   const name = cleanLangName(nm[`${field}Name`] || '');
-  return name ? `custom:${name}` : null;
+  const flag = firstEmoji(nm[`${field}Flag`] || '');
+  return name ? `custom:${name}${flag ? `|${flag}` : ''}` : null;
 }
 function createModeLabel() {
   const t = newModeCode('target'), n = newModeCode('native');
@@ -2854,6 +2873,14 @@ document.addEventListener('click', (ev) => {
 document.addEventListener('input', (ev) => {
   if (ev.target.matches?.('#new-target-name, #new-native-name')) {
     ui.newMode[`${ev.target.dataset.field}Name`] = ev.target.value;
+    updateCreateMode();
+    return;
+  }
+  if (ev.target.matches?.('#new-target-flag, #new-native-flag')) {
+    // 국기 칸에는 이모지 하나만 남김
+    const emoji = firstEmoji(ev.target.value);
+    if (ev.target.value !== emoji && !ev.isComposing) ev.target.value = emoji;
+    ui.newMode[`${ev.target.dataset.field}Flag`] = emoji;
     updateCreateMode();
     return;
   }

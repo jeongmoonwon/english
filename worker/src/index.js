@@ -19,7 +19,7 @@ const LANG_NAMES = { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese',
 function langName(code) {
   if (typeof code !== 'string') return null;
   if (LANG_NAMES[code]) return LANG_NAMES[code];
-  if (code.startsWith('custom:')) return code.slice(7).replace(/[^\p{L}\p{N} ()'-]/gu, '').trim().slice(0, 30) || null;
+  if (code.startsWith('custom:')) return code.slice(7).split('|')[0].replace(/[^\p{L}\p{N} ()'-]/gu, '').trim().slice(0, 30) || null;
   return null;
 }
 

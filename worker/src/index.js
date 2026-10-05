@@ -51,7 +51,9 @@ export async function handle(request, env, deps = {}) {
   const cors = corsHeaders(request, env);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   const reply = (status, body) => Response.json(body, { status, headers: cors });
-  if (request.method !== 'POST' || new URL(request.url).pathname !== '/scan') return reply(404, { error: 'not_found' });
+  const path = new URL(request.url).pathname;
+  const isUsage = request.method === 'GET' && path === '/usage';
+  if (!isUsage && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
 
   // 1. 로그인 확인
@@ -61,6 +63,13 @@ export async function handle(request, env, deps = {}) {
     user = await verifyIdToken(token, env.FIREBASE_PROJECT_ID, deps);
   } catch {
     return reply(401, { error: 'auth' });
+  }
+  const key = `use:${user.sub}:${koreaDay(deps.now?.() ?? Date.now())}`;
+
+  // 오늘 사용량만 알려 주기 (설정 화면)
+  if (isUsage) {
+    const used = Number(await env.USAGE.get(key)) || 0;
+    return reply(200, { used, remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT });
   }
 
   // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
@@ -75,7 +84,6 @@ export async function handle(request, env, deps = {}) {
 
   // 3. 하루 사용량: 먼저 장수만큼 쓰고, Claude가 실패하면 돌려줌
   const n = images.length;
-  const key = `use:${user.sub}:${koreaDay(deps.now?.() ?? Date.now())}`;
   const used = Number(await env.USAGE.get(key)) || 0;
   if (used + n > DAILY_LIMIT) return reply(429, { error: 'limit', remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT });
   await env.USAGE.put(key, String(used + n), { expirationTtl: 2 * 86400 });
@@ -163,7 +171,7 @@ export async function verifyIdToken(token, projectId, { keys = googleKeys, now =
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
   const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const headers = { 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' };
+  const headers = { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' };
   if (allowed.includes(origin)) headers['Access-Control-Allow-Origin'] = origin;
   return headers;
 }

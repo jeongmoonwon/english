@@ -13,9 +13,19 @@
 <link rel="apple-touch-icon" href="icons/mooni-180.png">
 <link rel="icon" href="icons/mooni-192.png">
 <title>mooni의 단어장</title>
+<script>
+  // 화면 모드·글자 크기 (설정 탭). 그리기 전에 적용
+  try {
+    const p = JSON.parse(localStorage.getItem('freedom-prefs')) || {};
+    if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
+    if (p.size && p.size !== 'normal') document.documentElement.dataset.size = p.size;
+    if (p.font) document.documentElement.style.setProperty('--kfont', `"${p.font}"`);
+    if (p.engFont === 'same') document.documentElement.dataset.eng = 'same';
+  } catch {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poor+Story&family=Gowun+Dodum&family=Gaegu&family=Hi+Melody&family=Gamja+Flower&family=Jua&display=swap">
 <style>
 :root {
   --bg: #EEF1F4;
@@ -98,6 +108,26 @@ img { max-width: 100%; }
 .tab-dot { position: absolute; top: 6px; left: calc(50% + 10px); width: 8px; height: 8px; border-radius: 50%; background: var(--hard); }
 #settings-main .field + .field { margin-top: 0; }
 .version a { color: inherit; }
+/* 복습 글자 크기 (설정) */
+:root[data-size="large"] .prompt-text { font-size: 26px; }
+:root[data-size="large"] .caption { font-size: 29px; }
+:root[data-size="xlarge"] .prompt-text { font-size: 30px; }
+:root[data-size="xlarge"] .caption { font-size: 34px; }
+/* 읽어 주기 버튼 */
+.speak { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; width: 40px; height: 40px; font-size: 19px; line-height: 40px; padding: 0; flex: none; }
+.speak-row { display: flex; justify-content: center; margin-top: 12px; }
+.prompt .speak-row { justify-content: flex-start; }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.field label.sub { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: -4px; }
+.seg-btn.small { font-size: 15px; padding: 10px 6px; }
+.size-sample { margin: 0; text-align: center; font-family: var(--serif); }
+.font-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.font-opt { border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; background: var(--bg); color: var(--ink); text-align: left; font-size: 18px; display: flex; flex-direction: column; gap: 2px; }
+.font-opt small { font-size: 14px; color: var(--muted); }
+.font-opt[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); color: var(--accent); }
+.eng-sample { font-size: 22px; }
+.usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.usage-meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .tab[aria-selected="true"] { color: var(--accent); }
 
 /* ---------- 카드 앞면(뜻) / 뒷면(자막) ---------- */
@@ -365,16 +395,22 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   --accent: #FF7A59; --accent-ink: #FFFFFF; --soft: #FFE8DD;
   --again: #E5534B; --hard: #E0901A; --good: #36A66B; --easy: #4C8BE0;
 }
+/* 설정에서 '항상 어둡게'를 고른 경우 */
+:root[data-skin="peach"][data-theme="dark"] { --bg: #221A17; --surface: #2E2420; --ink: #F8EAE4; --muted: #BFA59C; --line: #47372F; --accent: #FF9A7E; --accent-ink: #2A1510; --soft: #4A2E25; }
 @media (prefers-color-scheme: dark) {
   :root[data-skin="peach"]:not([data-theme="light"]) { --bg: #221A17; --surface: #2E2420; --ink: #F8EAE4; --muted: #BFA59C; --line: #47372F; --accent: #FF9A7E; --accent-ink: #2A1510; --soft: #4A2E25; }
 }
 /* 동글동글, 부드러운 그림자, 둥근 글꼴(주아체), 눌리면 통통 */
 :root[data-skin] {
+  --kfont: "Poor Story";   /* 본문 글씨체 (설정에서 바꿈) */
   --round: "Jua", var(--sans);
-  /* 본문은 둥글둥글한 고운돋움. 영어 표현은 명조(세리프)로 두되, 한글이 섞이면 고운돋움으로 */
-  --sans: "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
-  --serif: "New York", "Iowan Old Style", Georgia, "Gowun Dodum", "Apple SD Gothic Neo", serif;
+  --sans: var(--kfont), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  /* 영어 표현은 명조(세리프)로 두되, 한글이 섞이면 본문 글씨체로 */
+  --serif: "New York", "Iowan Old Style", Georgia, var(--kfont), "Apple SD Gothic Neo", serif;
 }
+/* 설정에서 '영어 표현도 같은 글씨체'를 고른 경우 */
+:root[data-skin][data-eng="same"] { --serif: var(--sans); }
+textarea::placeholder { font-family: var(--sans); }
 :root[data-skin] body {
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
@@ -457,6 +493,8 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
     </header>
     <main class="scroll" id="settings-main">
       <div id="sync-box"></div>
+      <div id="usage-box"></div>
+      <div id="prefs-box"></div>
       <div class="field">
         <h3>파일로 백업</h3>
         <p class="sync-line">동기화와 별개로, 지금 데이터를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
@@ -523,8 +561,10 @@ const DIRECTIONS = {
   reverse: { label: '표현 → 뜻', sides: ['eng', 'kor'] },
 };
 const STUDY_KEY = 'freedom-study';
+// 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
+const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v23';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -884,6 +924,65 @@ async function deleteCategory(name, mode, to) {
   toast(mode === 'all' ? `'${name}' 카테고리와 카드 ${targets.length}장을 삭제했어요.` : `'${name}' 카테고리를 삭제하고 카드 ${targets.length}장은 '${to}'(으)로 옮겼어요.`);
 }
 
+// ================= 설정값 · 소리 =================
+const prefs = (() => {
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif' };
+  try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; } catch { return base; }
+})();
+function setPref(key, value) {
+  prefs[key] = value;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
+  applyPrefs();
+}
+const THEME_BG = { light: '#FFF6EE', dark: '#221A17' };
+const FONTS = [['Poor Story', '푸어스토리'], ['Gowun Dodum', '고운돋움'], ['Gaegu', '개구'], ['Hi Melody', '하이멜로디'], ['Gamja Flower', '감자꽃'], ['Jua', '주아']];
+function applyPrefs() {
+  const root = document.documentElement;
+  if (prefs.theme === 'system') delete root.dataset.theme; else root.dataset.theme = prefs.theme;
+  if (prefs.size === 'normal') delete root.dataset.size; else root.dataset.size = prefs.size;
+  root.style.setProperty('--kfont', `"${prefs.font}"`);
+  if (prefs.engFont === 'same') root.dataset.eng = 'same'; else delete root.dataset.eng;
+  // 휴대폰 위쪽 상태 표시줄 색
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+    const dark = m.media.includes('dark');
+    m.content = prefs.theme === 'system' ? THEME_BG[dark ? 'dark' : 'light'] : THEME_BG[prefs.theme];
+  });
+}
+
+const canSpeak = 'speechSynthesis' in window;
+/** 글자로 언어 짐작 (기기 음성 고르기용) */
+function speechLang(t) {
+  if (/[\u3040-\u30ff]/.test(t)) return 'ja-JP';
+  if (/[\u4e00-\u9fff]/.test(t)) return 'zh-CN';
+  if (/[\u0400-\u04ff]/.test(t)) return 'ru-RU';
+  if (/[¿¡ñ]/i.test(t)) return 'es-ES';
+  if (/[àâçèêëîïôûùœ]/i.test(t)) return 'fr-FR';
+  if (/[äöüß]/i.test(t)) return 'de-DE';
+  return 'en-US';
+}
+function speak(text) {
+  if (!canSpeak || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = speechLang(text);
+  const voices = speechSynthesis.getVoices();
+  const voice = voices.find((v) => v.lang.replace('_', '-') === u.lang) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
+  if (voice) u.voice = voice;
+  u.rate = prefs.rate;
+  speechSynthesis.speak(u);
+}
+const speakHTML = (text) => (canSpeak && text ? `<div class="speak-row"><button class="speak" data-act="speak" data-text="${esc(text)}" aria-label="소리로 듣기">🔊</button></div>` : '');
+/** '자동으로 읽기'를 켰으면, 표현 면이 처음 보일 때 한 번 읽음 */
+let spokenKey = '';
+function autoSpeak(key, card, shown) {
+  if (!prefs.speak || !card?.engText) return;
+  const engFirst = DIRECTIONS[study.dir].sides[0] === 'eng';
+  if (!engFirst && !shown) return;
+  if (key === spokenKey) return;
+  spokenKey = key;
+  speak(card.engText);
+}
+
 // ================= 카드 표시 =================
 const imagesHTML = (list) => list.map((b) => `<img src="${blobURL(b)}" alt="">`).join('');
 const sideOf = (card, side) => ({ side, text: card[`${side}Text`], images: card[`${side}Images`] });
@@ -898,6 +997,7 @@ function promptHTML(card) {
   return `<section class="prompt">
     ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
     ${s.text ? `<p class="prompt-text${s.side === 'eng' ? ' serif' : ''}">${esc(s.text)}</p>` : ''}
+    ${s.side === 'eng' ? speakHTML(s.text) : ''}
     ${missingHTML(s)}
   </section>`;
 }
@@ -912,6 +1012,7 @@ function answerHTML(card) {
   return `<section class="answer reveal">
     ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
     ${text}
+    ${s.side === 'eng' ? speakHTML(s.text) : ''}
     ${missingHTML(s)}
   </section>`;
 }
@@ -966,6 +1067,7 @@ function renderReview() {
   const card = due[0];
   if (ui.reviewCardId !== card.id) { ui.reviewCardId = card.id; ui.reviewShow = false; }
   main.innerHTML = promptHTML(card) + (ui.reviewShow ? answerHTML(card) : '');
+  autoSpeak(`r|${card.id}|${card.srs.reps}|${card.srs.lapses}|${ui.reviewShow && DIRECTIONS[study.dir].sides[0] !== 'eng'}`, card, ui.reviewShow);
   bar.hidden = false;
   if (!ui.reviewShow) {
     bar.innerHTML = '<button class="btn primary wide" data-act="reveal">정답 보기</button>';
@@ -1053,6 +1155,7 @@ function renderPractice() {
   body.innerHTML = `<span class="chip">${catLabel}연습 점수 ${card.practiceScore}</span>
     ${promptHTML(card)}
     ${practice.show ? answerHTML(card) : ''}`;
+  autoSpeak(`p|${card.id}|${practice.solved}|${practice.show && DIRECTIONS[study.dir].sides[0] !== 'eng'}`, card, practice.show);
   bar.hidden = false;
   bar.innerHTML = actions;
 }
@@ -1797,6 +1900,74 @@ async function syncNow({ quiet = true, announce = false } = {}) {
   }
 }
 
+const segHTML = (key, options) => `<div class="seg ${options.length === 3 ? 'three' : ''}">${options.map(([value, label]) =>
+  `<button class="seg-btn small" data-act="pref" data-key="${key}" data-value="${value}" aria-pressed="${String(prefs[key]) === String(value)}">${label}</button>`).join('')}</div>`;
+function renderPrefs() {
+  const box = $('#prefs-box');
+  if (!box) return;
+  box.innerHTML = `<div class="field">
+      <h3>화면</h3>
+      <label class="sub">화면 모드</label>
+      ${segHTML('theme', [['system', '기기 설정 따라'], ['light', '항상 밝게'], ['dark', '항상 어둡게']])}
+      <label class="sub">복습 글자 크기</label>
+      ${segHTML('size', [['normal', '보통'], ['large', '크게'], ['xlarge', '아주 크게']])}
+      <p class="prompt-text size-sample">Let's call it a day.</p>
+    </div>
+    <div class="field">
+      <h3>글씨체</h3>
+      <div class="font-list">${FONTS.map(([f, label]) => `<button class="font-opt" data-act="pref" data-key="font" data-value="${f}" aria-pressed="${prefs.font === f}" style="font-family:'${f}'">${label}<small>오늘도 한 문장씩 🍑</small></button>`).join('')}</div>
+      <label class="sub">영어 표현 글씨체</label>
+      ${segHTML('engFont', [['serif', '명조 (또렷하게)'], ['same', '위와 같은 글씨체']])}
+      <p class="size-sample eng-sample">Let's call it a day.</p>
+    </div>
+    <div class="field">
+      <h3>소리</h3>
+      ${canSpeak ? `
+      <label class="sub">정답을 볼 때 표현을 자동으로 읽어 주기</label>
+      ${segHTML('speak', [[false, '끄기'], [true, '켜기']])}
+      <label class="sub">읽기 속도</label>
+      ${segHTML('rate', [[0.7, '느리게'], [0.9, '보통'], [1.1, '빠르게']])}
+      <button class="btn wide" data-act="speak" data-text="Let's call it a day.">🔊 미리 듣기</button>
+      <p class="sync-line">끄더라도 카드의 🔊 버튼을 누르면 언제든 들을 수 있어요. 기기에 있는 음성으로 읽어서 비용이 들지 않아요.</p>`
+      : '<p class="sync-line">이 기기에서는 소리로 읽기를 쓸 수 없어요.</p>'}
+    </div>`;
+}
+let usageState = null;   // { used, remaining, limit } | 'loading' | 'error'
+async function loadUsage() {
+  if (!SCAN_URL || !user) return;
+  usageState = 'loading';
+  renderUsage();
+  try {
+    const res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/usage`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+    if (!res.ok) throw new Error(res.status);
+    usageState = await res.json();
+    scanRemaining = usageState.remaining;
+  } catch {
+    usageState = 'error';
+  }
+  renderUsage();
+}
+function renderUsage() {
+  const box = $('#usage-box');
+  if (!box) return;
+  if (!SCAN_URL || !user) { box.innerHTML = ''; return; }
+  let body;
+  if (usageState === 'loading' || usageState === null) body = '<p class="sync-line">확인하는 중이에요…</p>';
+  else if (usageState === 'error') body = '<p class="sync-line">사용량을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>';
+  else {
+    const { used, remaining, limit } = usageState;
+    body = `<p class="sync-line">오늘 <b>${used}장</b> 썼어요 · <b>${remaining}장</b> 남았어요</p>
+      <div class="usage-meter" role="img" aria-label="${limit}장 중 ${used}장 사용"><i style="width:${Math.min(100, (used / limit) * 100)}%"></i></div>
+      <p class="sync-line">하루 ${limit}장까지 쓸 수 있고, 매일 자정(한국 시간)에 다시 채워져요.</p>`;
+  }
+  box.innerHTML = `<div class="field"><h3>사진으로 자동 입력</h3>${body}</div>`;
+}
+function renderSettings() {
+  renderSyncStatus();
+  renderUsage();
+  renderPrefs();
+}
+
 function agoText(ts) {
   const sec = (Date.now() - ts) / 1000;
   if (sec < 60) return '방금';
@@ -2052,7 +2223,7 @@ function setTab(tab) {
   if (tab === 'stats') { ui.calMonth = null; ui.calDay = null; }
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
   renderAll();
-  if (tab === 'settings') renderSyncStatus();
+  if (tab === 'settings') { renderSettings(); loadUsage(); }
 }
 function renderAll() {
   renderStats();
@@ -2125,6 +2296,15 @@ document.addEventListener('click', (ev) => {
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'scan': $('#scan-input').click(); break;
+    case 'speak': speak(el.dataset.text); break;
+    case 'pref': {
+      const raw = el.dataset.value;
+      const value = raw === 'true' ? true : raw === 'false' ? false : /^[\d.]+$/.test(raw) ? Number(raw) : raw;
+      setPref(el.dataset.key, value);
+      renderPrefs();
+      if (el.dataset.key === 'speak' && value) speak("Let's call it a day.");
+      break;
+    }
     case 'toggle-found': {
       const i = Number(el.dataset.index);
       if (editor.checked.has(i)) editor.checked.delete(i);
@@ -2223,6 +2403,7 @@ function reloadForUpdate() {
 
 // ================= 시작 =================
 async function init() {
+  applyPrefs();
   db = await openDB();
   cards = await getAll('cards');
   const catRows = await getAll('categories');
@@ -2248,6 +2429,7 @@ async function init() {
       const changed = u?.uid !== user?.uid;
       user = u;
       renderSyncStatus();
+      if (ui.tab === 'settings') { renderUsage(); if (changed) loadUsage(); }
       if (u && changed) syncNow({ announce: login === 'ok' });
     });
   }

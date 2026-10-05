@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-skin="peach">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#EEF1F4" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13161B" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FFF6EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#221A17" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,6 +13,9 @@
 <link rel="apple-touch-icon" href="icons/mooni-180.png">
 <link rel="icon" href="icons/mooni-192.png">
 <title>mooni의 단어장</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
 <style>
 :root {
   --bg: #EEF1F4;
@@ -224,6 +227,29 @@ textarea.eng { font-family: var(--serif); }
 .found-item b { font-family: var(--serif); font-size: 17px; font-weight: 600; }
 .found-item span { color: var(--muted); font-size: 15px; }
 .missing { color: var(--muted); font-size: 15px; }
+.found-item small { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 2px; }
+.found-pick { border-radius: 14px; padding: 14px; background: var(--soft); display: flex; flex-direction: column; gap: 4px; }
+.found-pick b { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.found-pick .mean { font-weight: 650; }
+.found-pick .note { margin: 6px 0 0; color: var(--ink); font-size: 15px; line-height: 1.5; opacity: .85; }
+.btn.small { padding: 10px 14px; font-size: 15px; }
+/* 사진 읽는 중: 빙글빙글 도는 고리 + 통통 튀는 카드 캐릭터 */
+.scan-wait { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 4px; text-align: center; }
+.spinner { position: relative; width: 92px; height: 92px; display: grid; place-items: center; margin-bottom: 6px; }
+.spinner::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 6px solid var(--soft); border-top-color: var(--accent); border-right-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+.spinner .mascot { width: 52px; animation: bob 1.1s ease-in-out infinite; }
+.scan-wait b { font-size: 17px; }
+.dots i { font-style: normal; animation: blink 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .2s; }
+.dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes bob { 0%, 100% { transform: translateY(2px) rotate(-6deg); } 50% { transform: translateY(-5px) rotate(6deg); } }
+@keyframes blink { 0%, 100% { opacity: .15; } 40% { opacity: 1; } }
+.mascot { display: block; height: auto; }
 .chip { display: inline-block; margin-bottom: 12px; padding: 3px 11px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 600; }
 
 /* ---------- 학습 방향 / 카테고리 칩 ---------- */
@@ -309,8 +335,54 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
 }
 
+/* ---------- 말랑 피치 테마 (data-skin="peach") ---------- */
+:root[data-skin="peach"] {
+  --bg: #FFF6EE; --surface: #FFFFFF; --ink: #3D2B26; --muted: #9C8178; --line: #F4DED2;
+  --accent: #FF7A59; --accent-ink: #FFFFFF; --soft: #FFE8DD;
+  --again: #E5534B; --hard: #E0901A; --good: #36A66B; --easy: #4C8BE0;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="peach"]:not([data-theme="light"]) { --bg: #221A17; --surface: #2E2420; --ink: #F8EAE4; --muted: #BFA59C; --line: #47372F; --accent: #FF9A7E; --accent-ink: #2A1510; --soft: #4A2E25; }
+}
+/* 동글동글, 부드러운 그림자, 둥근 글꼴(주아체), 눌리면 통통 */
+:root[data-skin] { --round: "Jua", var(--sans); }
+:root[data-skin] body {
+  background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
+  background-size: 22px 22px;
+}
+:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list,
+:root[data-skin] .streak, :root[data-skin] .tile, :root[data-skin] .cal {
+  border-radius: 26px; border-color: transparent;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 13%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+:root[data-skin] .btn, :root[data-skin] .grade, :root[data-skin] .seg-btn { border-radius: 18px; }
+:root[data-skin] .btn.primary, :root[data-skin] .pill.solid { box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 60%, #000); }
+:root[data-skin] textarea, :root[data-skin] input.text { border-radius: 14px; }
+:root[data-skin] .topbar h1, :root[data-skin] .sheet-head h2, :root[data-skin] .empty h2,
+:root[data-skin] .setup-title, :root[data-skin] .streak b, :root[data-skin] .tile b,
+:root[data-skin] .cal-head h2, :root[data-skin] .grade span, :root[data-skin] .field h3,
+:root[data-skin] .btn, :root[data-skin] .pill, :root[data-skin] .tab, :root[data-skin] .scan-wait b {
+  font-family: var(--round); font-weight: 400; letter-spacing: 0;
+}
+:root[data-skin] .tabbar { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+:root[data-skin] .tab[aria-selected="true"] svg { background: var(--soft); border-radius: 12px; padding: 2px 10px; width: 44px; box-sizing: content-box; }
+:root[data-skin] .grade { padding: 10px 4px 12px; gap: 3px; }
+:root[data-skin] .grade::before { font-size: 22px; line-height: 1; }
+:root[data-skin] .grade.again::before { content: '😵'; }
+:root[data-skin] .grade.hard::before { content: '🤔'; }
+:root[data-skin] .grade.good::before { content: '🙂'; }
+:root[data-skin] .grade.easy::before { content: '😆'; }
+:root[data-skin] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item) { transition: transform .12s cubic-bezier(.3, 1.6, .5, 1); }
+:root[data-skin] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item):active { transform: scale(.94); }
+:root[data-skin] .day { border-radius: 12px; }
+.empty .mascot { display: none; }
+:root[data-skin] .empty .mascot { display: block; width: 128px; margin: 0 auto 16px; animation: bob 2.4s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .reveal, .sheet { animation: none; }
+  :root[data-skin] .empty .mascot { animation: none; }
+  .spinner::before { animation-duration: 2.4s; }
+  .spinner .mascot, .dots i { animation: none; }
 }
 @media (min-width: 700px) {
   .scroll, .sheet-body, .actions, .filters { padding-left: max(20px, calc(50% - 300px)); padding-right: max(20px, calc(50% - 300px)); }
@@ -420,7 +492,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -800,7 +872,7 @@ function renderReview() {
 
   if (!cards.length) {
     filters.hidden = true;
-    main.innerHTML = `<div class="empty">
+    main.innerHTML = `<div class="empty">${MASCOT}
       <h2>아직 표현이 없어요</h2>
       <p>카드 탭에서 유튜브에서 본 표현을 추가해 보세요.</p>
       <button class="btn primary" data-act="add">표현 추가하기</button>
@@ -905,7 +977,7 @@ function renderPractice() {
   filters.hidden = false;
   filters.innerHTML = studySummaryHTML('practice-stop');
   if (!card) {
-    body.innerHTML = '<div class="empty"><h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div>';
+    body.innerHTML = `<div class="empty">${MASCOT}<h2>연습할 카드가 없어요</h2><p>카드 탭에서 표현을 먼저 추가해 주세요.</p></div>`;
     bar.hidden = true;
     return;
   }
@@ -975,7 +1047,7 @@ function renderCards() {
   $('#cards-title').textContent = `표현 ${shown.length}개`;
   const main = $('#cards-main');
   if (!cards.length) {
-    main.innerHTML = `<div class="empty">
+    main.innerHTML = `<div class="empty">${MASCOT}
       <h2>아직 표현이 없어요</h2>
       <p>유튜브에서 본 표현을 캡처해서 추가해 보세요.</p>
       <button class="btn primary" data-act="add">표현 추가하기</button>
@@ -1015,7 +1087,8 @@ function openEditor(cardId = null) {
     catNew: false,
     newCatText: '',
     loading: 0,
-    found: null,   // 사진에서 찾은 표현이 여러 개일 때 [{ expression, meaning }]
+    found: null,   // 사진에서 찾은 표현 [{ expression, meaning, note }]
+    picked: null,  // 그중 이 카드에 넣은 것의 번호
   };
   $('#editor').hidden = false;
   renderEditor();
@@ -1049,14 +1122,31 @@ function scanEditorHTML(e) {
     body = `<p class="sync-line">로그인하면 쓸 수 있어요.</p>
       ${fbReady ? '<button class="btn wide" data-act="login">Google로 로그인</button>' : ''}`;
   } else if (e.loading) {
-    body = '<p class="sync-line">사진을 읽는 중이에요…</p>';
+    body = `<div class="scan-wait" role="status" aria-live="polite">
+      <div class="spinner">${MASCOT}</div>
+      <b>${SCAN_STAGES[e.scanStage ?? 0]}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
+      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · 보통 5~15초 걸려요</p>
+    </div>`;
   } else {
-    body = `${e.found ? `<p class="sync-line">표현을 ${e.found.length}개 찾았어요. 이 카드에 넣을 것을 고르세요.</p>
-      <div class="found">${e.found.map((it, i) => `<button class="found-item" data-act="pick-found" data-index="${i}">
-        <b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span></button>`).join('')}</div>
-      ${e.cardId ? '' : `<button class="btn primary wide" data-act="add-all-found">${e.found.length}개 모두 따로 추가</button>`}` : ''}
+    const pick = e.found && e.picked !== null ? e.found[e.picked] : null;
+    let result = '';
+    if (pick) {
+      result = `<div class="found-pick">
+          <b>${esc(pick.expression)}</b>
+          <span class="mean">${esc(pick.meaning)}</span>
+          ${pick.note ? `<p class="note">💡 ${esc(pick.note)}</p>` : ''}
+        </div>
+        <p class="sync-line">표현과 뜻 칸에 채웠어요. 고쳐서 저장해도 돼요.</p>
+        ${e.found.length > 1 ? '<button class="btn small wide" data-act="unpick">다른 표현 고르기</button>' : ''}`;
+    } else if (e.found) {
+      result = `<p class="sync-line">표현을 ${e.found.length}개 찾았어요. 이 카드에 넣을 것을 고르세요.</p>
+        <div class="found">${e.found.map((it, i) => `<button class="found-item" data-act="pick-found" data-index="${i}">
+          <b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</button>`).join('')}</div>
+        ${e.cardId ? '' : `<button class="btn primary wide" data-act="add-all-found">${e.found.length}개 모두 따로 추가</button>`}`;
+    }
+    body = `${result}
       <button class="btn wide" data-act="scan">${e.found ? '다른 사진 고르기' : '사진 고르기'}</button>
-      <p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 사진은 저장하지 않아요.</p>`;
+      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 사진은 저장하지 않아요.</p>'}`;
   }
   return `<div class="field">
     <h3>사진으로 자동 입력<span>${left}</span></h3>
@@ -1111,6 +1201,27 @@ const blobBase64 = (b) => new Promise((resolve, reject) => {
   r.onerror = () => reject(r.error);
   r.readAsDataURL(b);
 });
+const SCAN_STAGES = ['사진을 준비하고 있어요', '사진을 보내고 있어요', '표현과 뜻을 찾고 있어요'];
+let scanTimer = null;
+function setScanStage(e, stage) {
+  e.scanStage = stage;
+  if (editor === e) renderEditor();
+}
+// 웃는 복숭아 캐릭터 (빈 화면, 사진 읽는 중)
+const MASCOT = `<svg class="mascot" viewBox="0 0 120 116" aria-hidden="true">
+  <ellipse cx="60" cy="110" rx="34" ry="5" fill="#3D2B26" opacity=".08"/>
+  <path d="M60 26 C38 12 8 28 10 62 C12 92 38 106 60 106 C82 106 108 92 110 62 C112 28 82 12 60 26 Z" fill="#FFB49A"/>
+  <path d="M60 26 C82 12 112 28 110 62 C109 80 99 93 86 100 C98 86 102 70 100 56 C97 38 80 26 60 26 Z" fill="#FF8F70" opacity=".55"/>
+  <ellipse cx="34" cy="46" rx="10" ry="6" fill="#fff" opacity=".55" transform="rotate(-30 34 46)"/>
+  <path d="M60 27 C55 36 55 46 58 54" fill="none" stroke="#F0795A" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+  <path d="M60 26 C59 19 56 14 52 10" fill="none" stroke="#8A5A44" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M58 20 C62 8 76 2 90 6 C84 18 72 24 58 20 Z" fill="#7CCB8F"/>
+  <path d="M62 18 C70 13 78 10 86 8" fill="none" stroke="#5AAE70" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="45" cy="66" rx="5.5" ry="7" fill="#3D2B26"/><ellipse cx="75" cy="66" rx="5.5" ry="7" fill="#3D2B26"/>
+  <circle cx="47" cy="63" r="2.2" fill="#fff"/><circle cx="77" cy="63" r="2.2" fill="#fff"/>
+  <ellipse cx="33" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/><ellipse cx="87" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/>
+  <path d="M54 77 q6 7 12 0" fill="none" stroke="#3D2B26" stroke-width="3.5" stroke-linecap="round"/>
+</svg>`;
 class ScanError extends Error {}   // 사용자에게 그대로 보여 줄 안내
 const SCAN_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
@@ -1124,37 +1235,59 @@ async function scanPhoto(file) {
   const e = editor;
   e.loading += 1;
   e.found = null;
-  renderEditor();
+  e.picked = null;
+  e.scanStart = Date.now();
+  clearInterval(scanTimer);
+  scanTimer = setInterval(() => {
+    const el = $('#scan-secs');
+    if (el) el.textContent = Math.floor((Date.now() - e.scanStart) / 1000);
+  }, 1000);
+  setScanStage(e, 0);
   let message = null;
   try {
     const blob = await compressImage(file);
     if (!blob) throw new ScanError('사진을 열지 못했어요. 다른 사진으로 해 주세요.');
-    const res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/scan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ image: await blobBase64(blob), mediaType: blob.type || 'image/jpeg' }),
-    });
+    setScanStage(e, 1);
+    const body = JSON.stringify({ image: await blobBase64(blob), mediaType: blob.type || 'image/jpeg' });
+    const token = await user.getIdToken();
+    // 사진이 다 올라갈 즈음(작은 사진이라 금방) '표현 찾기'로 넘김
+    const reading = setTimeout(() => setScanStage(e, 2), 700);
+    let res;
+    try {
+      res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body,
+      });
+    } finally {
+      clearTimeout(reading);
+    }
     const data = await res.json().catch(() => ({}));
     if (typeof data.remaining === 'number') scanRemaining = data.remaining;
     if (!res.ok) throw new ScanError(SCAN_ERRORS[res.status] || '사진을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.');
     if (editor !== e) return;   // 그 사이 편집 화면을 닫은 경우
     const items = Array.isArray(data.items) ? data.items : [];
     if (!items.length) message = '사진에서 외국어 표현을 찾지 못했어요.';
-    else if (items.length === 1) { fillFound(e, items[0]); message = '채웠어요. 확인하고 저장하세요.'; }
-    else e.found = items;
+    else {
+      e.found = items;
+      if (items.length === 1) pickFound(e, 0);
+    }
   } catch (err) {
     if (err instanceof ScanError) message = err.message;
     else if (navigator.onLine === false) message = '인터넷에 연결되어 있지 않아요.';
     else message = `사진을 읽지 못했어요. (${errText(err)})`;
   } finally {
+    clearInterval(scanTimer);
     e.loading -= 1;
+    e.scanStage = null;
     if (editor === e) renderEditor();
   }
   if (message) toast(message);
 }
-function fillFound(e, item) {
-  e.engText = item.expression;
-  e.korText = item.meaning;
+function pickFound(e, i) {
+  e.picked = i;
+  e.engText = e.found[i].expression;
+  e.korText = e.found[i].meaning;
 }
 /** 찾은 표현을 모두 따로 카드로 추가 (지금 고른 카테고리에) */
 async function addAllFound() {
@@ -1849,7 +1982,8 @@ document.addEventListener('click', (ev) => {
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'scan': $('#scan-input').click(); break;
-    case 'pick-found': fillFound(editor, editor.found[Number(el.dataset.index)]); editor.found = null; renderEditor(); break;
+    case 'pick-found': pickFound(editor, Number(el.dataset.index)); renderEditor(); break;
+    case 'unpick': editor.picked = null; renderEditor(); break;
     case 'add-all-found': addAllFound().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'remove-photo': {
       const list = el.dataset.side === 'kor' ? editor.korImages : editor.engImages;

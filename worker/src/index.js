@@ -16,6 +16,7 @@ Look at the image and list foreign-language expressions for flashcards:
 - Ignore Korean text, including Korean subtitles, except as a hint for what the foreign text means.
 - At most 5 items. "expression": keep it in the original language and script, exactly as it appears; only fix obvious recognition errors and drop speaker labels or timestamps.
 - "meaning": a natural Korean translation that fits the context, the way a Korean speaker would actually say it, not a word-for-word gloss. Keep it short.
+- "note": 1-2 short Korean sentences in friendly 해요체 that help the learner remember it: the nuance, when people use it, or what a tricky word or idiom literally means. Don't repeat the meaning.
 - If there is no foreign-language text, return an empty list.`;
 
 const SCHEMA = {
@@ -29,8 +30,9 @@ const SCHEMA = {
         properties: {
           expression: { type: 'string' },
           meaning: { type: 'string' },
+          note: { type: 'string' },
         },
-        required: ['expression', 'meaning'],
+        required: ['expression', 'meaning', 'note'],
         additionalProperties: false,
       },
     },
@@ -108,7 +110,7 @@ async function askClaude(env, image, mediaType) {
   const text = response.content.find((b) => b.type === 'text')?.text;
   const out = JSON.parse(text);
   const items = out.items
-    .map((it) => ({ expression: it.expression.trim(), meaning: it.meaning.trim() }))
+    .map((it) => ({ expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim() }))
     .filter((it) => it.expression)
     .slice(0, 5);
   return { marked: !!out.marked, items };

@@ -9,17 +9,26 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;     // Claude 이미지 한 장 한도
 const MAX_IMAGES = 5;                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-const SYSTEM = `You help a Korean learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with foreign-language text (English, Japanese, Chinese, Spanish, or any other language that is not Korean).
+// 앱의 언어 모드에 쓰는 언어 (코드 → 영어 이름)
+const LANG_NAMES = { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', vi: 'Vietnamese', th: 'Thai' };
 
-There may be one or several screenshots. Go through each one and list foreign-language expressions for flashcards, in the order of the screenshots:
+/** 지시문. target: 배울 언어(없으면 한국어가 아닌 모든 외국어), native: 뜻을 쓸 언어 */
+function systemPrompt(target, native) {
+  const learn = target ? LANG_NAMES[target] : 'foreign-language (any language that is not Korean)';
+  const meaningLang = LANG_NAMES[native] || 'Korean';
+  return `You help a Korean learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with text.
+The learner is studying ${target ? LANG_NAMES[target] : 'foreign languages'}${meaningLang !== 'Korean' ? ` and wants the meanings in ${meaningLang}` : ''}.
+
+There may be one or several screenshots. Go through each one and list ${learn} expressions for flashcards, in the order of the screenshots:
 - If the user marked anything in a screenshot (underline, highlight, circle, box, arrow, handwriting), list ONLY the marked expressions from that screenshot and set their "marked" to true.
 - For a screenshot with no marks, list the expressions worth learning that are shown, such as the subtitle line or idioms and phrases in it, with "marked" false. Prefer the full phrase as it is used over single easy words.
-- Ignore Korean text, including Korean subtitles, except as a hint for what the foreign text means.
+- Only list ${learn} text. Use text in other languages (for example ${meaningLang} subtitles) only as a hint for what it means.
 - The screenshots are in order and are often consecutive frames or a scrolled page. If a sentence or expression is cut off at the edge of one screenshot or split across subtitle frames and continues in the next, join it into ONE complete item instead of listing the pieces.
 - At most 5 items per screenshot, and don't list the same expression twice. "expression": keep it in the original language and script, exactly as it appears; only fix obvious recognition errors and drop speaker labels or timestamps.
-- "meaning": a natural Korean translation that fits the context, the way a Korean speaker would actually say it, not a word-for-word gloss. Keep it short.
+- "meaning": a natural ${meaningLang} translation that fits the context, the way a native ${meaningLang} speaker would actually say it, not a word-for-word gloss. Keep it short.
 - "note": 1-2 short Korean sentences in friendly 해요체 that help the learner remember it: the nuance, when people use it, or what a tricky word or idiom literally means. Don't repeat the meaning.
-- If there is no foreign-language text at all, return an empty list.`;
+- If there is no ${learn} text at all, return an empty list.`;
+}
 
 const SCHEMA = {
   type: 'object',
@@ -90,7 +99,9 @@ export async function handle(request, env, deps = {}) {
 
   // 4. Claude에게 묻기
   try {
-    const result = await askClaude(env, images);
+    const target = LANG_NAMES[body.target] ? body.target : null;   // 예전 앱은 언어를 보내지 않음
+    const native = LANG_NAMES[body.native] ? body.native : 'ko';
+    const result = await askClaude(env, images, target, native);
     return reply(200, { ...result, remaining: DAILY_LIMIT - used - n, limit: DAILY_LIMIT });
   } catch (err) {
     await env.USAGE.put(key, String(used), { expirationTtl: 2 * 86400 });
@@ -103,12 +114,12 @@ export async function handle(request, env, deps = {}) {
 
 class Refusal extends Error {}
 
-async function askClaude(env, images) {
+async function askClaude(env, images, target, native) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 16000,
-    system: SYSTEM,
+    system: systemPrompt(target, native),
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     messages: [{
       role: 'user',
@@ -117,7 +128,7 @@ async function askClaude(env, images) {
           ...(images.length > 1 ? [{ type: 'text', text: `사진 ${i + 1}` }] : []),
           { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } },
         ]),
-        { type: 'text', text: images.length > 1 ? `이 사진 ${images.length}장의 외국어 표현을 카드로 만들어 주세요.` : '이 사진의 외국어 표현을 카드로 만들어 주세요.' },
+        { type: 'text', text: `${images.length > 1 ? `이 사진 ${images.length}장` : '이 사진'}의 ${target ? `${LANG_NAMES[target]} ` : '외국어 '}표현을 카드로 만들어 주세요.` },
       ],
     }],
   });

@@ -151,6 +151,33 @@ img { max-width: 100%; }
 .font-opt small { font-size: 14px; color: var(--muted); }
 .font-opt[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); color: var(--accent); }
 .eng-sample { font-size: 22px; }
+.set-list { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.set-row { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; text-align: left; padding: 14px 16px; color: var(--ink); position: relative; }
+.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-icon { font-size: 22px; width: 30px; text-align: center; }
+.set-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.set-txt b { font-size: 16px; font-weight: 600; }
+.set-txt small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-go { color: var(--muted); font-size: 22px; }
+.tab-dot.static { position: static; flex: none; }
+.back-btn { border: 0; background: var(--soft); color: var(--accent); width: 38px; height: 38px; border-radius: 50%; font-size: 26px; line-height: 34px; padding: 0; flex: none; }
+.mode-line { display: flex; align-items: center; gap: 6px; }
+.mode-line .x-mini { border: 0; background: none; color: var(--muted); font-size: 16px; padding: 8px; }
+.mode-pill { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.head-mode { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
+.pop { position: fixed; inset: 0; z-index: 30; }
+.pop-dim { position: absolute; inset: 0; background: rgba(40, 25, 20, .35); animation: fade .2s; }
+.pop-card { position: absolute; left: 0; right: 0; bottom: 0; max-height: 80%; overflow-y: auto; background: var(--surface); border-radius: 26px 26px 0 0;
+  padding: 12px 18px calc(env(safe-area-inset-bottom, 0px) + 20px); display: flex; flex-direction: column; gap: 8px; animation: slideup .24s ease-out; }
+.pop-card h3 { margin: 0 0 4px; font-size: 17px; }
+.grab { width: 40px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 6px; }
+@keyframes fade { from { opacity: 0; } }
+.mode-opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 16px; padding: 11px 14px; background: var(--bg); color: var(--ink); }
+.mode-opt[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+.mode-opt .flag { font-size: 24px; }
+.mode-opt .txt { flex: 1; display: flex; flex-direction: column; }
+.mode-opt small { color: var(--muted); font-size: 13px; }
+.mode-opt .n { color: var(--muted); font-size: 13px; }
 .usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .usage-meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .tab[aria-selected="true"] { color: var(--accent); }
@@ -440,7 +467,7 @@ textarea::placeholder { font-family: var(--sans); }
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
 }
-:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list, :root[data-skin] .face,
+:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list, :root[data-skin] .face, :root[data-skin] .set-list,
 :root[data-skin] .streak, :root[data-skin] .tile, :root[data-skin] .cal {
   border-radius: 26px; border-color: transparent;
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 13%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 6%, transparent);
@@ -485,6 +512,7 @@ textarea::placeholder { font-family: var(--sans); }
   <section class="view" id="view-review">
     <header class="topbar">
       <h1>복습</h1>
+      <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
       <span class="count" id="due-count"></span>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
       <button class="pill" data-act="review-quit" id="review-quit" hidden>그만하기</button>
@@ -498,6 +526,7 @@ textarea::placeholder { font-family: var(--sans); }
   <section class="view" id="view-cards" hidden>
     <header class="topbar">
       <h1 id="cards-title">표현</h1>
+      <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
       <button class="pill solid" data-act="add" aria-label="표현 추가">추가</button>
     </header>
     <div class="filters" id="cards-filters" hidden></div>
@@ -515,20 +544,10 @@ textarea::placeholder { font-family: var(--sans); }
   <!-- 설정 (동기화·백업) -->
   <section class="view" id="view-settings" hidden>
     <header class="topbar">
-      <h1>설정</h1>
+      <button class="back-btn" data-act="settings-back" id="settings-back" hidden>‹</button>
+      <h1 id="settings-title">설정</h1>
     </header>
-    <main class="scroll" id="settings-main">
-      <div id="sync-box"></div>
-      <div id="usage-box"></div>
-      <div id="prefs-box"></div>
-      <div class="field">
-        <h3>파일로 백업</h3>
-        <p class="sync-line">동기화와 별개로, 지금 데이터를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
-        <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
-        <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
-      </div>
-      <p class="version"><span id="app-version"></span> · <a href="privacy.html">개인정보처리방침</a></p>
-    </main>
+    <main class="scroll" id="settings-main"></main>
   </section>
 
   <nav class="tabbar" role="tablist">
@@ -552,6 +571,7 @@ textarea::placeholder { font-family: var(--sans); }
   </nav>
 </div>
 
+<div class="pop" id="mode-sheet" hidden></div>
 <div class="sheet" id="editor" hidden></div>
 <div class="sheet" id="practice" hidden></div>
 <input type="file" id="scan-input" accept="image/*" multiple hidden>
@@ -590,7 +610,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -815,6 +835,41 @@ function compressImage(file) {
   });
 }
 
+// ================= 언어 모드 =================
+// 모드 = "배울 언어>아는 언어" (예: en>ko). 카드마다 lang에 저장하고, 없으면(예전 카드) 영어>한국어
+const LANGS = {
+  ko: { name: '한국어', flag: '🇰🇷', speech: 'ko-KR' },
+  en: { name: '영어', flag: '🇺🇸', speech: 'en-US' },
+  ja: { name: '일본어', flag: '🇯🇵', speech: 'ja-JP' },
+  zh: { name: '중국어', flag: '🇨🇳', speech: 'zh-CN' },
+  es: { name: '스페인어', flag: '🇪🇸', speech: 'es-ES' },
+  fr: { name: '프랑스어', flag: '🇫🇷', speech: 'fr-FR' },
+  de: { name: '독일어', flag: '🇩🇪', speech: 'de-DE' },
+  it: { name: '이탈리아어', flag: '🇮🇹', speech: 'it-IT' },
+  pt: { name: '포르투갈어', flag: '🇧🇷', speech: 'pt-BR' },
+  ru: { name: '러시아어', flag: '🇷🇺', speech: 'ru-RU' },
+  vi: { name: '베트남어', flag: '🇻🇳', speech: 'vi-VN' },
+  th: { name: '태국어', flag: '🇹🇭', speech: 'th-TH' },
+};
+const DEFAULT_MODE = 'en>ko';
+const modeOf = (c) => c.lang || DEFAULT_MODE;
+const modeParts = (m) => { const [target, native] = m.split('>'); return { target, native }; };
+const targetLang = (m = prefs.mode) => LANGS[modeParts(m).target] || LANGS.en;
+const nativeLang = (m = prefs.mode) => LANGS[modeParts(m).native] || LANGS.ko;
+const modeLabel = (m = prefs.mode, short = false) => {
+  const t = targetLang(m), n = nativeLang(m);
+  return short ? `${t.flag} ${t.name} → ${n.flag}` : `${t.flag} ${t.name} → ${n.flag} ${n.name}`;
+};
+/** 쓸 수 있는 모드: 카드가 있는 모드 + 이 기기에서 만든 빈 모드 + 지금 모드 */
+function modeList() {
+  const counts = new Map();
+  for (const c of cards) counts.set(modeOf(c), (counts.get(modeOf(c)) || 0) + 1);
+  const all = new Set([DEFAULT_MODE, ...counts.keys(), ...prefs.modes, prefs.mode]);
+  return [...all].map((m) => ({ mode: m, count: counts.get(m) || 0 }));
+}
+/** 지금 언어 모드의 카드 */
+const modeCards = () => cards.filter((c) => modeOf(c) === prefs.mode);
+
 // ================= 카테고리 =================
 const catKey = (c) => c.category || DEFAULT_CATEGORY;
 const catName = (key) => catNames.get(key) ?? key;
@@ -822,9 +877,11 @@ const catOf = (c) => catName(catKey(c));
 
 /** 이름으로 카테고리 키 찾기. 없으면 새 키를 만들고, 키와 이름이 다르면 이름도 저장 */
 async function keyForName(name) {
-  const keys = new Set([...cards.map(catKey), ...catNames.keys()]);
-  const found = [...keys].find((k) => catName(k) === name);
+  // 같은 이름이라도 다른 언어 모드의 카테고리와는 따로 (지금 모드 안에서만 찾음)
+  const mine = [...new Set(modeCards().map(catKey))];
+  const found = mine.find((k) => catName(k) === name);
   if (found) return found;
+  const keys = new Set([...cards.map(catKey), ...catNames.keys()]);
   const key = keys.has(name) ? `${name}~${uid().slice(0, 8)}` : name;
   if (key !== name) {
     const updatedAt = Date.now();
@@ -837,7 +894,7 @@ async function keyForName(name) {
 
 function categoryList() {
   const counts = new Map();
-  cards.forEach((c) => counts.set(catOf(c), (counts.get(catOf(c)) || 0) + 1));
+  modeCards().forEach((c) => counts.set(catOf(c), (counts.get(catOf(c)) || 0) + 1));
   return [...counts.keys()]
     .sort((a, b) => (a === DEFAULT_CATEGORY ? -1 : b === DEFAULT_CATEGORY ? 1 : a.localeCompare(b, 'ko')))
     .map((name) => ({ name, count: counts.get(name) }));
@@ -850,7 +907,8 @@ function selectedCats() {
 }
 function studyCards() {
   const sel = new Set(selectedCats());
-  return sel.size ? cards.filter((c) => sel.has(catOf(c))) : cards;
+  const list = modeCards();
+  return sel.size ? list.filter((c) => sel.has(catOf(c))) : list;
 }
 
 function toggleStudyCat(name) {
@@ -906,7 +964,7 @@ function studySummaryHTML(stopAct) {
 async function renameCategory(from, name) {
   ui.renaming = null;
   if (!name || name === from) { renderCards(); return; }
-  const keys = [...new Set([...cards.map(catKey), ...catNames.keys()])].filter((k) => catName(k) === from);
+  const keys = [...new Set(modeCards().map(catKey))].filter((k) => catName(k) === from);
   const updatedAt = Date.now();
   await putCategoryNames(keys.map((key) => ({ key, name, updatedAt })));
   keys.forEach((key) => { catNames.set(key, name); catStamps.set(key, updatedAt); });
@@ -923,7 +981,7 @@ async function renameCategory(from, name) {
 /** 카테고리 삭제: move = 카드는 to 카테고리로 옮김, all = 카드와 복습 기록까지 삭제 */
 async function deleteCategory(name, mode, to) {
   ui.deleting = null;
-  const targets = cards.filter((c) => catOf(c) === name);
+  const targets = modeCards().filter((c) => catOf(c) === name);
   const t = Date.now();
   if (mode === 'all') {
     if (!confirm(`'${name}'의 카드 ${targets.length}장과 복습 기록을 모두 삭제할까요? 되돌릴 수 없어요.`)) { renderCards(); return; }
@@ -952,7 +1010,8 @@ async function deleteCategory(name, mode, to) {
 
 // ================= 설정값 · 소리 =================
 const prefs = (() => {
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif' };
+  // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [] };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; } catch { return base; }
 })();
 function setPref(key, value) {
@@ -986,18 +1045,18 @@ function speechLang(t) {
   if (/[äöüß]/i.test(t)) return 'de-DE';
   return 'en-US';
 }
-function speak(text) {
+function speak(text, lang) {
   if (!canSpeak || !text) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = speechLang(text);
+  u.lang = lang || speechLang(text);
   const voices = speechSynthesis.getVoices();
   const voice = voices.find((v) => v.lang.replace('_', '-') === u.lang) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
   if (voice) u.voice = voice;
   u.rate = prefs.rate;
   speechSynthesis.speak(u);
 }
-const speakHTML = (text) => (canSpeak && text ? `<div class="speak-row"><button class="speak" data-act="speak" data-text="${esc(text)}" aria-label="소리로 듣기">🔊</button></div>` : '');
+const speakHTML = (text, lang = targetLang().speech) => (canSpeak && text ? `<div class="speak-row"><button class="speak" data-act="speak" data-text="${esc(text)}" data-lang="${lang}" aria-label="소리로 듣기">🔊</button></div>` : '');
 /** '자동으로 읽기'를 켰으면, 표현 면이 처음 보일 때 한 번 읽음 */
 let spokenKey = '';
 function autoSpeak(key, card, shown) {
@@ -1006,7 +1065,7 @@ function autoSpeak(key, card, shown) {
   if (!engFirst && !shown) return;
   if (key === spokenKey) return;
   spokenKey = key;
-  speak(card.engText);
+  speak(card.engText, targetLang(modeOf(card)).speech);
 }
 
 // ================= 카드 표시 =================
@@ -1059,14 +1118,14 @@ function renderReview() {
   const due = dueCards(now);
   ui.reviewSig = due.map((c) => c.id).join(',');
   $('#due-count').textContent = due.length ? `${due.length}장 남음` : '';
-  $('#practice-open').disabled = cards.length === 0;
+  $('#practice-open').disabled = modeCards().length === 0;
   const main = $('#review-main'), bar = $('#review-actions'), filters = $('#review-filters');
   if (!due.length) ui.reviewStarted = false;
   // 복습 중에는 '자유 연습' 대신 '그만하기'
   $('#practice-open').hidden = ui.reviewStarted;
   $('#review-quit').hidden = !ui.reviewStarted;
 
-  if (!cards.length) {
+  if (!modeCards().length) {
     filters.hidden = true;
     main.innerHTML = `<div class="empty">${MASCOT}
       <h2>아직 표현이 없어요</h2>
@@ -1240,20 +1299,21 @@ function renderCards() {
   if (!cats.some((c) => c.name === ui.cardsCat)) ui.cardsCat = null;
   if (ui.renaming !== ui.cardsCat) ui.renaming = null;
   if (ui.deleting !== ui.cardsCat) ui.deleting = null;
-  const isDefault = ui.cardsCat !== null && cards.some((c) => catOf(c) === ui.cardsCat && catKey(c) === DEFAULT_CATEGORY);
+  const mine = modeCards();
+  const isDefault = ui.cardsCat !== null && mine.some((c) => catOf(c) === ui.cardsCat && catKey(c) === DEFAULT_CATEGORY);
   const filters = $('#cards-filters');
   filters.hidden = cats.length === 0;
   filters.innerHTML = cats.length ? `
-    <button class="cat" data-act="cards-cat" aria-pressed="${ui.cardsCat === null}">전체<small>${cards.length}</small></button>
+    <button class="cat" data-act="cards-cat" aria-pressed="${ui.cardsCat === null}">전체<small>${mine.length}</small></button>
     ${cats.map((c) => `<button class="cat" data-act="cards-cat" data-cat="${esc(c.name)}" aria-pressed="${ui.cardsCat === c.name}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}
 ` : '';
 
-  const shown = ui.cardsCat === null ? cards : cards.filter((c) => catOf(c) === ui.cardsCat);
+  const shown = ui.cardsCat === null ? mine : mine.filter((c) => catOf(c) === ui.cardsCat);
   $('#cards-title').textContent = `표현 ${shown.length}개`;
   const main = $('#cards-main');
-  if (!cards.length) {
+  if (!mine.length) {
     main.innerHTML = `<div class="empty">${MASCOT}
-      <h2>아직 표현이 없어요</h2>
+      <h2>${cards.length ? `${targetLang().name} 표현이 아직 없어요` : '아직 표현이 없어요'}</h2>
       <p>유튜브에서 본 표현을 캡처해서 추가해 보세요.</p>
       <button class="btn primary" data-act="add">표현 추가하기</button>
     </div>`;
@@ -1298,6 +1358,7 @@ function openEditor(cardId = null) {
   const card = cardId ? cards.find((c) => c.id === cardId) : null;
   editor = {
     cardId: card?.id ?? null,
+    mode: card ? modeOf(card) : prefs.mode,   // 이 카드의 언어 모드
     // 입력 묶음 (새 표현은 여러 개를 한 번에, 수정은 하나). note: 사진에서 받은 설명 (저장하지 않음)
     // 새 카드는 카드 탭에서 보고 있던 카테고리로 시작
     entries: [{ korText: card?.korText ?? '', engText: card?.engText ?? '', note: '', category: card ? catOf(card) : (ui.cardsCat ?? DEFAULT_CATEGORY) }],
@@ -1333,11 +1394,11 @@ function entryHTML(e, en, i) {
   return `<div class="field entry">
     <h3>${many ? `카드 ${i + 1}` : '카드'}
       ${many ? `<button class="x-mini" data-act="remove-entry" data-index="${i}" aria-label="카드 ${i + 1} 빼기">빼기 ✕</button>` : ''}</h3>
-    <label for="kor-${i}">뜻 · 한국어</label>
-    <textarea class="kor" id="kor-${i}" data-side="kor" data-index="${i}" rows="2" placeholder="한국어 뜻">${esc(en.korText)}</textarea>
+    <label for="kor-${i}">뜻 · ${nativeLang(e.mode).flag} ${nativeLang(e.mode).name}</label>
+    <textarea class="kor" id="kor-${i}" data-side="kor" data-index="${i}" rows="2" placeholder="${nativeLang(e.mode).name} 뜻">${esc(en.korText)}</textarea>
     ${e.cardId ? thumbsHTML('kor', e.korImages) : ''}
-    <label for="eng-${i}">표현 · 외울 말</label>
-    <textarea class="eng" id="eng-${i}" data-side="eng" data-index="${i}" rows="2" placeholder="외울 표현 (ENG 등)">${esc(en.engText)}</textarea>
+    <label for="eng-${i}">표현 · ${targetLang(e.mode).flag} ${targetLang(e.mode).name}</label>
+    <textarea class="eng" id="eng-${i}" data-side="eng" data-index="${i}" rows="2" placeholder="외울 ${targetLang(e.mode).name} 표현">${esc(en.engText)}</textarea>
     ${e.cardId ? thumbsHTML('eng', e.engImages) : ''}
     ${en.note ? `<p class="entry-note">💡 ${esc(en.note)}</p>` : ''}
     ${entryCatsHTML(e, en, i)}
@@ -1402,7 +1463,7 @@ function renderEditor() {
   $('#editor').innerHTML = `
     <header class="sheet-head">
       <button class="link start" data-act="editor-cancel">취소</button>
-      <h2>${e.cardId ? '표현 수정' : '새 표현'}</h2>
+      <h2>${e.cardId ? '표현 수정' : '새 표현'}<small class="head-mode">${modeLabel(e.mode)}</small></h2>
       <button class="link strong end" data-act="editor-save" id="editor-save">저장</button>
     </header>
     <div class="sheet-body">
@@ -1504,7 +1565,8 @@ async function scanPhotos(files) {
     if (blobs.length < files.length) toast(`사진 ${files.length - blobs.length}장은 열지 못해서 빼고 읽을게요.`);
     setScanStage(e, 1);
     const images = await Promise.all(blobs.map(async (b) => ({ data: await blobBase64(b), mediaType: b.type || 'image/jpeg' })));
-    const body = JSON.stringify({ images });
+    const { target, native } = modeParts(e.mode);
+    const body = JSON.stringify({ images, target, native });
     const token = await user.getIdToken();
     // 사진이 다 올라갈 즈음(작은 사진이라 금방) '표현 찾기'로 넘김
     const reading = setTimeout(() => setScanStage(e, 2), 700);
@@ -1577,7 +1639,7 @@ function addCategory() {
 function newCard(fields) {
   const now = new Date();
   const t = now.getTime();
-  const card = { id: uid(), createdAt: now, contentAt: t, studyAt: t, updatedAt: t, ...fields, srs: createEmptyCard(now), practiceScore: 0, practiceCount: 0 };
+  const card = { id: uid(), createdAt: now, contentAt: t, studyAt: t, updatedAt: t, lang: prefs.mode, ...fields, srs: createEmptyCard(now), practiceScore: 0, practiceCount: 0 };
   cards.push(card);
   return card;
 }
@@ -1810,7 +1872,7 @@ async function runSync() {
     const studyFields = { srs: study.srs, practiceScore: study.practiceScore, practiceCount: study.practiceCount, studyAt: studyAt(study) };
     if (local) {
       Object.assign(local, studyFields);
-      if (newContent) Object.assign(local, { korText: rc.korText ?? '', engText: rc.engText ?? '', category: rc.category, contentAt: contentAt(rc) });
+      if (newContent) Object.assign(local, { korText: rc.korText ?? '', engText: rc.engText ?? '', category: rc.category, lang: rc.lang, contentAt: contentAt(rc) });
       local.updatedAt = touchedAt(local);
       await putCard(local);
     } else {
@@ -1873,7 +1935,7 @@ async function runSync() {
     }
     const data = plain({
       id: c.id, createdAt: c.createdAt, updatedAt: touchedAt(c), contentAt: contentAt(c), studyAt: studyAt(c),
-      korText: c.korText, engText: c.engText, category: c.category,
+      korText: c.korText, engText: c.engText, category: c.category, lang: c.lang,
       srs: c.srs, practiceScore: c.practiceScore, practiceCount: c.practiceCount,
     });
     writes.push((b) => b.set(ref, { ...data, syncAt: fb.serverTimestamp() }));
@@ -1940,35 +2002,115 @@ async function syncNow({ quiet = true, announce = false } = {}) {
 
 const segHTML = (key, options) => `<div class="seg ${options.length === 3 ? 'three' : ''}">${options.map(([value, label]) =>
   `<button class="seg-btn small" data-act="pref" data-key="${key}" data-value="${value}" aria-pressed="${String(prefs[key]) === String(value)}">${label}</button>`).join('')}</div>`;
-function renderPrefs() {
-  const box = $('#prefs-box');
+const THEME_NAMES = { system: '기기 설정 따라', light: '항상 밝게', dark: '항상 어둡게' };
+const SIZE_NAMES = { normal: '보통', large: '크게', xlarge: '아주 크게' };
+const RATE_NAMES = { 0.7: '느리게', 0.9: '보통', 1.1: '빠르게' };
+const SAMPLE = { en: "Let's call it a day.", ja: '今日はここまでにしよう。', zh: '今天就到这里吧。', es: 'Lo dejamos aquí por hoy.', fr: "On s'arrête là pour aujourd'hui.", de: 'Machen wir für heute Schluss.', it: 'Per oggi basta così.', pt: 'Vamos parar por hoje.', ru: 'На сегодня хватит.', vi: 'Hôm nay đến đây thôi.', th: 'วันนี้พอแค่นี้', ko: '오늘은 여기까지 하자.' };
+const sampleOf = (m = prefs.mode) => SAMPLE[modeParts(m).target] || SAMPLE.en;
+/** 설정 목록: [페이지, 아이콘, 이름, 지금 상태] */
+const SETTINGS = [
+  ['sync', '☁️', '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
+  ['usage', '📷', '사진 자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 ${usageState.remaining}장 남음` : '하루 10장')],
+  ['lang', '🌏', '언어 모드', () => modeLabel()],
+  ['theme', '🌗', '화면 테마', () => THEME_NAMES[prefs.theme]],
+  ['text', '🔤', '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
+  ['sound', '🔊', '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
+  ['backup', '💾', '백업', () => '파일로 저장 · 복원'],
+];
+function renderSettings() {
+  const page = ui.settingsPage;
+  const item = SETTINGS.find(([p]) => p === page);
+  $('#settings-title').textContent = item ? item[2] : '설정';
+  $('#settings-back').hidden = !item;
+  const main = $('#settings-main');
+  if (!item) {
+    main.innerHTML = `<div class="set-list">${SETTINGS.filter(([p]) => p !== 'usage' || SCAN_URL).map(([p, icon, name, now]) => `
+      <button class="set-row" data-act="settings-open" data-page="${p}">
+        <span class="set-icon">${icon}</span>
+        <span class="set-txt"><b>${name}</b><small>${esc(now())}</small></span>
+        ${p === 'sync' && !$('#settings-dot').hidden ? '<span class="tab-dot static"></span>' : ''}
+        <span class="set-go">›</span>
+      </button>`).join('')}</div>
+      <p class="version">앱 버전 ${APP_VERSION} · <a href="privacy.html">개인정보처리방침</a></p>`;
+    return;
+  }
+  const boxes = { sync: '<div id="sync-box"></div>', usage: '<div id="usage-box"></div>' };
+  main.innerHTML = boxes[page] || '<div id="page-box"></div>';
+  if (page === 'sync') renderSyncStatus();
+  else if (page === 'usage') renderUsage();
+  else renderSettingsPage(page);
+}
+function openSettingsPage(page, focusNew) {
+  ui.settingsPage = page;
+  if (page === 'lang') ui.newMode = { target: null, native: 'ko' };
+  renderSettings();
+  $('#settings-main').scrollTop = 0;
+  if (page === 'usage') loadUsage();
+  if (focusNew) $('#new-mode')?.scrollIntoView({ block: 'start' });
+}
+function renderSettingsPage(page) {
+  const box = $('#page-box');
   if (!box) return;
-  box.innerHTML = `<div class="field">
-      <h3>화면</h3>
+  if (page === 'theme') {
+    box.innerHTML = `<div class="field">
       <label class="sub">화면 모드</label>
       ${segHTML('theme', [['system', '기기 설정 따라'], ['light', '항상 밝게'], ['dark', '항상 어둡게']])}
-      <label class="sub">복습 글자 크기</label>
+      <p class="sync-line">'기기 설정 따라'를 고르면 휴대폰이 다크 모드일 때 앱도 어두워져요.</p>
+    </div>`;
+  } else if (page === 'text') {
+    box.innerHTML = `<div class="field">
+      <label class="sub">복습 카드 글자 크기</label>
       ${segHTML('size', [['normal', '보통'], ['large', '크게'], ['xlarge', '아주 크게']])}
-      <p class="prompt-text size-sample">Let's call it a day.</p>
+      <p class="prompt-text size-sample">오늘은 여기까지 하자</p>
     </div>
     <div class="field">
-      <h3>글씨체</h3>
+      <label class="sub">글씨체</label>
       <div class="font-list">${FONTS.map(([f, label]) => `<button class="font-opt" data-act="pref" data-key="font" data-value="${f}" aria-pressed="${prefs.font === f}" style="font-family:'${f}'">${label}<small>오늘도 한 문장씩 🍑</small></button>`).join('')}</div>
-      <label class="sub">영어 표현 글씨체</label>
+      <label class="sub">외국어 표현 글씨체</label>
       ${segHTML('engFont', [['serif', '명조 (또렷하게)'], ['same', '위와 같은 글씨체']])}
       <p class="size-sample eng-sample">Let's call it a day.</p>
-    </div>
-    <div class="field">
-      <h3>소리</h3>
-      ${canSpeak ? `
+    </div>`;
+  } else if (page === 'sound') {
+    box.innerHTML = `<div class="field">${canSpeak ? `
       <label class="sub">정답을 볼 때 표현을 자동으로 읽어 주기</label>
       ${segHTML('speak', [[false, '끄기'], [true, '켜기']])}
       <label class="sub">읽기 속도</label>
       ${segHTML('rate', [[0.7, '느리게'], [0.9, '보통'], [1.1, '빠르게']])}
-      <button class="btn wide" data-act="speak" data-text="Let's call it a day.">🔊 미리 듣기</button>
-      <p class="sync-line">끄더라도 카드의 🔊 버튼을 누르면 언제든 들을 수 있어요. 기기에 있는 음성으로 읽어서 비용이 들지 않아요.</p>`
+      <button class="btn wide" data-act="speak" data-text="${esc(sampleOf())}" data-lang="${targetLang().speech}">🔊 미리 듣기 (${targetLang().name})</button>
+      <p class="sync-line">끄더라도 카드의 🔊 버튼을 누르면 언제든 들을 수 있어요. 지금 언어 모드의 언어로, 기기에 있는 음성으로 읽어서 비용이 들지 않아요.</p>`
       : '<p class="sync-line">이 기기에서는 소리로 읽기를 쓸 수 없어요.</p>'}
     </div>`;
+  } else if (page === 'backup') {
+    box.innerHTML = `<div class="field">
+      <p class="sync-line">동기화와 별개로, 지금 데이터(모든 언어 모드)를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
+      <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
+      <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
+    </div>`;
+  } else if (page === 'lang') {
+    const nm = ui.newMode || { target: null, native: 'ko' };
+    const chips = (field, picked, skip) => Object.entries(LANGS).filter(([code]) => code !== skip)
+      .map(([code, l]) => `<button class="cat" data-act="new-mode-lang" data-field="${field}" data-code="${code}" aria-pressed="${picked === code}">${l.flag} ${l.name}</button>`).join('');
+    const exists = nm.target && modeList().some((m) => m.mode === `${nm.target}>${nm.native}`);
+    box.innerHTML = `<div class="field">
+      <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
+      ${modeList().map(({ mode, count }) => `<div class="mode-line">
+        <button class="mode-opt" data-act="mode-pick" data-mode="${mode}" aria-pressed="${mode === prefs.mode}">
+          <span class="flag">${targetLang(mode).flag}</span>
+          <span class="txt"><b>${targetLang(mode).name}</b><small>뜻은 ${nativeLang(mode).flag} ${nativeLang(mode).name}</small></span>
+          <span class="n">${count}장</span>
+        </button>
+        ${count === 0 && mode !== DEFAULT_MODE ? `<button class="x-mini" data-act="mode-remove" data-mode="${mode}" aria-label="이 모드 지우기">✕</button>` : ''}
+      </div>`).join('')}
+    </div>
+    <div class="field" id="new-mode">
+      <h3>새 언어 모드</h3>
+      <label class="sub">배울 언어 (표현)</label>
+      <div class="chips">${chips('target', nm.target, nm.native)}</div>
+      <label class="sub">아는 언어 (뜻)</label>
+      <div class="chips">${chips('native', nm.native, nm.target)}</div>
+      <button class="btn primary wide" data-act="mode-create" ${nm.target ? '' : 'disabled'}>${!nm.target ? '배울 언어를 골라 주세요' : exists ? `${modeLabel(`${nm.target}>${nm.native}`)} 모드로 가기` : `${modeLabel(`${nm.target}>${nm.native}`)} 만들기`}</button>
+    </div>`;
+  }
 }
 let usageState = null;   // { used, remaining, limit } | 'loading' | 'error'
 async function loadUsage() {
@@ -1986,6 +2128,7 @@ async function loadUsage() {
   renderUsage();
 }
 function renderUsage() {
+  if (ui.tab === 'settings' && !ui.settingsPage) { renderSettings(); return; }
   const box = $('#usage-box');
   if (!box) return;
   if (!SCAN_URL || !user) { box.innerHTML = ''; return; }
@@ -2000,11 +2143,6 @@ function renderUsage() {
   }
   box.innerHTML = `<div class="field"><h3>사진으로 자동 입력</h3>${body}</div>`;
 }
-function renderSettings() {
-  renderSyncStatus();
-  renderUsage();
-  renderPrefs();
-}
 
 function agoText(ts) {
   const sec = (Date.now() - ts) / 1000;
@@ -2017,6 +2155,7 @@ function renderSyncStatus() {
   const pending = pendingCount();
   const needsAttention = !!user && !!sync.error && !sync.running;
   $('#settings-dot').hidden = !needsAttention;
+  if (ui.tab === 'settings' && !ui.settingsPage) { renderSettings(); return; }
   const box = $('#sync-box');
   if (!box || ui.tab !== 'settings') return;
   if (!fbReady) {
@@ -2261,9 +2400,37 @@ function setTab(tab) {
   if (tab === 'stats') { ui.calMonth = null; ui.calDay = null; }
   document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
   renderAll();
-  if (tab === 'settings') { renderSettings(); loadUsage(); }
+  if (tab === 'settings') { ui.settingsPage = null; renderSettings(); loadUsage(); }
 }
+function renderModePills() {
+  document.querySelectorAll('.mode-pill').forEach((b) => { b.textContent = `${modeLabel(prefs.mode, true)} ▾`; });
+}
+/** 아래에서 올라오는 언어 모드 목록 */
+function renderModeSheet() {
+  const el = $('#mode-sheet');
+  el.innerHTML = `<div class="pop-dim" data-act="mode-close"></div>
+    <div class="pop-card" role="dialog" aria-label="언어 모드">
+      <div class="grab"></div>
+      <h3>언어 모드</h3>
+      ${modeList().map(({ mode, count }) => `<button class="mode-opt" data-act="mode-pick" data-mode="${mode}" aria-pressed="${mode === prefs.mode}">
+        <span class="flag">${targetLang(mode).flag}</span>
+        <span class="txt"><b>${targetLang(mode).name}</b><small>뜻은 ${nativeLang(mode).flag} ${nativeLang(mode).name}</small></span>
+        <span class="n">${count}장</span></button>`).join('')}
+      <button class="btn wide" data-act="mode-new">+ 새 언어 모드</button>
+    </div>`;
+  el.hidden = false;
+}
+function switchMode(mode) {
+  if (mode === prefs.mode) return;
+  setPref('mode', mode);
+  ui.cardsCat = null; ui.renaming = null; ui.deleting = null;
+  ui.reviewStarted = false; ui.reviewShow = false; ui.reviewCardId = null;
+  renderAll();
+  toast(`${modeLabel(mode)} 모드로 바꿨어요.`);
+}
+
 function renderAll() {
+  renderModePills();
   renderStats();
   renderReview();
   renderCards();
@@ -2283,7 +2450,7 @@ document.addEventListener('click', (ev) => {
       flipOut('#review-main', () => { ui.flipping = false; ui.reviewShow = true; ui.flipNow = true; renderReview(); });
       break;
     case 'grade': gradeCard(Number(el.dataset.r)).catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
-    case 'practice': if (cards.length) openPractice(); break;
+    case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'set-dir': setDirection(el.dataset.dir); break;
     case 'review-start': ui.reviewStarted = true; ui.sessionDone = 0; renderReview(); $('#review-main').scrollTop = 0; break;
@@ -2349,13 +2516,40 @@ document.addEventListener('click', (ev) => {
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'scan': $('#scan-input').click(); break;
-    case 'speak': speak(el.dataset.text); break;
+    case 'speak': speak(el.dataset.text, el.dataset.lang); break;
+    case 'mode-sheet': renderModeSheet(); break;
+    case 'mode-close': $('#mode-sheet').hidden = true; break;
+    case 'mode-pick':
+      $('#mode-sheet').hidden = true;
+      switchMode(el.dataset.mode);
+      if (ui.tab === 'settings') renderSettings();
+      break;
+    case 'settings-open': openSettingsPage(el.dataset.page); break;
+    case 'settings-back': ui.settingsPage = null; renderSettings(); $('#settings-main').scrollTop = 0; break;
+    case 'new-mode-lang': ui.newMode[el.dataset.field] = el.dataset.code; renderSettings(); break;
+    case 'mode-create': {
+      const mode = `${ui.newMode.target}>${ui.newMode.native}`;
+      if (!modeList().some((m) => m.mode === mode)) setPref('modes', [...prefs.modes, mode]);
+      ui.newMode = { target: null, native: 'ko' };
+      switchMode(mode);
+      renderSettings();
+      break;
+    }
+    case 'mode-remove': {
+      const mode = el.dataset.mode;
+      setPref('modes', prefs.modes.filter((m) => m !== mode));
+      if (prefs.mode === mode) switchMode(DEFAULT_MODE);
+      renderSettings();
+      toast(`${modeLabel(mode)} 모드를 지웠어요.`);
+      break;
+    }
+    case 'mode-new': $('#mode-sheet').hidden = true; setTab('settings'); openSettingsPage('lang', true); break;
     case 'pref': {
       const raw = el.dataset.value;
       const value = raw === 'true' ? true : raw === 'false' ? false : /^[\d.]+$/.test(raw) ? Number(raw) : raw;
       setPref(el.dataset.key, value);
-      renderPrefs();
-      if (el.dataset.key === 'speak' && value) speak("Let's call it a day.");
+      renderSettingsPage(ui.settingsPage);
+      if (el.dataset.key === 'speak' && value) speak(sampleOf(), targetLang().speech);
       break;
     }
     case 'toggle-found': {
@@ -2486,7 +2680,6 @@ async function init() {
       if (u && changed) syncNow({ announce: login === 'ok' });
     });
   }
-  $('#app-version').textContent = `앱 버전 ${APP_VERSION}`;
   if ('serviceWorker' in navigator) {
     // 처음 설치될 때는 이미 최신이므로 새로고침하지 않음
     const hadController = !!navigator.serviceWorker.controller;

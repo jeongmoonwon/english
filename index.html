@@ -109,10 +109,31 @@ img { max-width: 100%; }
 #settings-main .field + .field { margin-top: 0; }
 .version a { color: inherit; }
 /* 복습 글자 크기 (설정) */
-:root[data-size="large"] .prompt-text { font-size: 26px; }
-:root[data-size="large"] .caption { font-size: 29px; }
-:root[data-size="xlarge"] .prompt-text { font-size: 30px; }
-:root[data-size="xlarge"] .caption { font-size: 34px; }
+:root[data-size="large"] :is(.prompt-text, .face-text) { font-size: 28px; }
+:root[data-size="large"] .face-text.serif { font-size: 31px; }
+:root[data-size="xlarge"] :is(.prompt-text, .face-text) { font-size: 32px; }
+:root[data-size="xlarge"] .face-text.serif { font-size: 36px; }
+/* ---------- 플래시카드 (앞면 → 뒤집으면 뒷면) ---------- */
+.flash { perspective: 1200px; }
+.face.out { animation: flip-out .17s ease-in forwards; }
+.face.in { animation: flip-in .32s cubic-bezier(.2, .8, .3, 1.25); }
+@keyframes flip-out { to { transform: rotateY(90deg) scale(.97); } }
+@keyframes flip-in { from { transform: rotateY(-90deg) scale(.97); } }
+.face {
+  position: relative; min-height: 260px; padding: 40px 22px 26px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+}
+.face.front { cursor: pointer; }
+.face.back { background: color-mix(in srgb, var(--soft) 45%, var(--surface)); }
+.face .shots { width: 100%; }
+.face-tag { position: absolute; top: 14px; left: 16px; padding: 2px 10px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 700; }
+.face-text { margin: 0; font-size: 24px; line-height: 1.45; font-weight: 650; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.face-text.serif { font-family: var(--serif); font-weight: 500; font-size: 27px; }
+.face-ask { margin: 4px 0 0; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 15px; width: 100%; }
+.flip-hint { position: absolute; bottom: 12px; color: var(--muted); font-size: 13px; }
+.face .speak-row { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .face.out, .face.in { animation: none; } }
 /* 읽어 주기 버튼 */
 .speak { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; width: 40px; height: 40px; font-size: 19px; line-height: 40px; padding: 0; flex: none; }
 .speak-row { display: flex; justify-content: center; margin-top: 12px; }
@@ -415,7 +436,7 @@ textarea::placeholder { font-family: var(--sans); }
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
 }
-:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list,
+:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list, :root[data-skin] .face,
 :root[data-skin] .streak, :root[data-skin] .tile, :root[data-skin] .cal {
   border-radius: 26px; border-color: transparent;
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 13%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 6%, transparent);
@@ -564,7 +585,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -991,30 +1012,34 @@ const MISSING = '사진은 다른 기기에 있어요';
 const missingHTML = (s) => (!s.text && !s.images.length ? `<p class="missing">${MISSING}</p>` : '');
 const sideLabel = (text, images) => (text ? esc(text) : images.length ? `사진 ${images.length}장` : MISSING);
 
-/** 문제 면: 방향에 따라 뜻(kor) 또는 표현(eng) */
-function promptHTML(card) {
-  const s = sideOf(card, DIRECTIONS[study.dir].sides[0]);
-  return `<section class="prompt">
-    ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
-    ${s.text ? `<p class="prompt-text${s.side === 'eng' ? ' serif' : ''}">${esc(s.text)}</p>` : ''}
+/** 카드 한 면의 내용 */
+function faceBody(s) {
+  return `${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
+    ${s.text ? `<p class="face-text${s.side === 'eng' ? ' serif' : ''}">${esc(s.text)}</p>` : ''}
     ${s.side === 'eng' ? speakHTML(s.text) : ''}
-    ${missingHTML(s)}
-  </section>`;
+    ${missingHTML(s)}`;
 }
-function answerHTML(card) {
-  const s = sideOf(card, DIRECTIONS[study.dir].sides[1]);
-  let text = '';
-  if (s.text) {
-    text = s.side === 'eng'
-      ? `<p class="caption"><span>${esc(s.text)}</span></p>`
-      : `<p class="prompt-text answer-text">${esc(s.text)}</p>`;
-  }
-  return `<section class="answer reveal">
-    ${s.images.length ? `<div class="shots">${imagesHTML(s.images)}</div>` : ''}
-    ${text}
-    ${s.side === 'eng' ? speakHTML(s.text) : ''}
-    ${missingHTML(s)}
-  </section>`;
+/** 플래시카드 한 장: 정답 전에는 앞면(문제), 뒤집으면 뒷면(정답). 면마다 자기 내용만큼의 크기 */
+function flashHTML(card, shown, revealAct) {
+  const [a, b] = DIRECTIONS[study.dir].sides;
+  const front = sideOf(card, a), back = sideOf(card, b);
+  const tag = (side) => `<span class="face-tag">${side === 'kor' ? '뜻' : '표현'}</span>`;
+  return `<div class="flash">${shown
+    ? `<section class="face back">${tag(b)}${faceBody(back)}${front.text ? `<p class="face-ask">${esc(front.text)}</p>` : ''}</section>`
+    : `<section class="face front" data-act="${revealAct}" role="button" aria-label="뒤집어서 정답 보기">${tag(a)}${faceBody(front)}<span class="flip-hint">↻ 눌러서 뒤집기</span></section>`
+  }</div>`;
+}
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** 앞면이 옆으로 돌아 사라진 뒤(반 바퀴) done()으로 뒷면을 그림 */
+function flipOut(scope, done) {
+  const face = $(`${scope} .face.front`);
+  if (!face || reducedMotion()) { done(); return; }
+  face.classList.add('out');
+  setTimeout(done, 170);
+}
+/** 방금 뒤집었으면 뒷면이 돌아 나오는 모습 */
+function flipIn(scope) {
+  if (!reducedMotion()) $(`${scope} .face.back`)?.classList.add('in');
 }
 
 // ================= 복습 =================
@@ -1066,7 +1091,8 @@ function renderReview() {
   filters.innerHTML = studySummaryHTML('review-stop');
   const card = due[0];
   if (ui.reviewCardId !== card.id) { ui.reviewCardId = card.id; ui.reviewShow = false; }
-  main.innerHTML = promptHTML(card) + (ui.reviewShow ? answerHTML(card) : '');
+  main.innerHTML = flashHTML(card, ui.reviewShow, 'reveal');
+  if (ui.flipNow) { ui.flipNow = false; flipIn('#review-main'); }
   autoSpeak(`r|${card.id}|${card.srs.reps}|${card.srs.lapses}|${ui.reviewShow && DIRECTIONS[study.dir].sides[0] !== 'eng'}`, card, ui.reviewShow);
   bar.hidden = false;
   if (!ui.reviewShow) {
@@ -1153,8 +1179,8 @@ function renderPractice() {
     : '<button class="btn primary wide" data-act="practice-reveal">정답 보기</button>';
   const catLabel = categoryList().length > 1 ? `${esc(catOf(card))} · ` : '';
   body.innerHTML = `<span class="chip">${catLabel}연습 점수 ${card.practiceScore}</span>
-    ${promptHTML(card)}
-    ${practice.show ? answerHTML(card) : ''}`;
+    ${flashHTML(card, practice.show, 'practice-reveal')}`;
+  if (practice.flipNow) { practice.flipNow = false; flipIn('#practice-body'); }
   autoSpeak(`p|${card.id}|${practice.solved}|${practice.show && DIRECTIONS[study.dir].sides[0] !== 'eng'}`, card, practice.show);
   bar.hidden = false;
   bar.innerHTML = actions;
@@ -2239,7 +2265,11 @@ document.addEventListener('click', (ev) => {
   if (!el || el.disabled) return;
   const act = el.dataset.act;
   switch (act) {
-    case 'reveal': ui.reviewShow = true; renderReview(); break;
+    case 'reveal':
+      if (ui.reviewShow || ui.flipping) break;
+      ui.flipping = true;
+      flipOut('#review-main', () => { ui.flipping = false; ui.reviewShow = true; ui.flipNow = true; renderReview(); });
+      break;
     case 'grade': gradeCard(Number(el.dataset.r)).catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'practice': if (cards.length) openPractice(); break;
     case 'practice-close': closePractice(); break;
@@ -2288,7 +2318,11 @@ document.addEventListener('click', (ev) => {
     case 'new-cat': editor.catInput = Number(el.dataset.index); editor.popCat = null; renderEditor(); $('#cat-input')?.focus(); break;
     case 'add-cat': addCategory(); break;
     case 'cancel-cat': editor.catInput = null; renderEditor(); break;
-    case 'practice-reveal': practice.show = true; renderPractice(); break;
+    case 'practice-reveal':
+      if (practice.show || practice.flipping) break;
+      practice.flipping = true;
+      flipOut('#practice-body', () => { practice.flipping = false; practice.show = true; practice.flipNow = true; renderPractice(); });
+      break;
     case 'practice-answer': answerPractice(el.dataset.correct === '1').catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'add': openEditor(); break;
     case 'edit': openEditor(el.dataset.id); break;

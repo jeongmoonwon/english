@@ -163,6 +163,7 @@ img { max-width: 100%; }
 .back-btn { border: 0; background: var(--soft); color: var(--accent); width: 38px; height: 38px; border-radius: 50%; font-size: 26px; line-height: 34px; padding: 0; flex: none; }
 .mode-line { display: flex; align-items: center; gap: 6px; }
 .mode-line .x-mini { border: 0; background: none; color: var(--muted); font-size: 16px; padding: 8px; }
+[data-act="mode-create"] small { display: block; font-size: 13px; font-weight: 500; opacity: .85; margin-top: 2px; }
 .mode-pill { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
 .head-mode { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
 .pop { position: fixed; inset: 0; z-index: 30; }
@@ -631,7 +632,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -877,10 +878,16 @@ const modeOf = (c) => c.lang || DEFAULT_MODE;
 const modeParts = (m) => { const [target, native] = m.split('>'); return { target, native }; };
 const targetLang = (m = prefs.mode) => LANGS[modeParts(m).target] || LANGS.en;
 const nativeLang = (m = prefs.mode) => LANGS[modeParts(m).native] || LANGS.ko;
-const modeLabel = (m = prefs.mode, short = false) => {
-  const t = targetLang(m), n = nativeLang(m);
-  return short ? `${t.flag} ${t.name} → ${n.flag}` : `${t.flag} ${t.name} → ${n.flag} ${n.name}`;
+/** 받침에 맞춰 '로'/'으로' (ㄹ 받침은 '로') */
+const ro = (word) => {
+  const c = word.charCodeAt(word.length - 1) - 0xAC00;
+  return c >= 0 && c <= 11171 && c % 28 !== 0 && c % 28 !== 8 ? '으로' : '로';
 };
+/** 공부하는 언어: "🇺🇸 영어 공부" */
+const studyLabel = (m = prefs.mode) => `${targetLang(m).flag} ${targetLang(m).name} 공부`;
+/** 뜻 언어: "한국어로 뜻 보기" */
+const meaningLabel = (m = prefs.mode) => `${nativeLang(m).name}${ro(nativeLang(m).name)} 뜻 보기`;
+const modeLabel = (m = prefs.mode) => `${studyLabel(m)} · ${meaningLabel(m)}`;
 /** 쓸 수 있는 모드: 카드가 있는 모드 + 이 기기에서 만든 빈 모드 + 지금 모드 */
 function modeList() {
   const counts = new Map();
@@ -1501,7 +1508,7 @@ function renderEditor() {
   $('#editor').innerHTML = `
     <header class="sheet-head">
       <button class="link start" data-act="editor-cancel">취소</button>
-      <h2>${e.cardId ? '표현 수정' : '새 표현'}<small class="head-mode">${modeLabel(e.mode)}</small></h2>
+      <h2>${e.cardId ? '표현 수정' : '새 표현'}<small class="head-mode">${studyLabel(e.mode)} · 뜻은 ${nativeLang(e.mode).name}</small></h2>
       <button class="link strong end" data-act="editor-save" id="editor-save">저장</button>
     </header>
     <div class="sheet-body">
@@ -2304,7 +2311,7 @@ function renderSettingsPage(page) {
       ${modeList().map(({ mode, count }) => `<div class="mode-line">
         <button class="mode-opt" data-act="mode-pick" data-mode="${mode}" aria-pressed="${mode === prefs.mode}">
           <span class="flag">${targetLang(mode).flag}</span>
-          <span class="txt"><b>${targetLang(mode).name}</b><small>뜻은 ${nativeLang(mode).flag} ${nativeLang(mode).name}</small></span>
+          <span class="txt"><b>${targetLang(mode).name}</b><small>${meaningLabel(mode)}</small></span>
           <span class="n">${count}장</span>
         </button>
         ${count === 0 && mode !== DEFAULT_MODE ? `<button class="x-mini" data-act="mode-remove" data-mode="${mode}" aria-label="이 모드 지우기">✕</button>` : ''}
@@ -2312,11 +2319,11 @@ function renderSettingsPage(page) {
     </div>
     <div class="field" id="new-mode">
       <h3>새 언어 모드</h3>
-      <label class="sub" for="new-target">배울 언어 (표현)</label>
+      <label class="sub" for="new-target">무엇을 공부할까요?</label>
       ${select('target', nm.target, nm.native, '언어를 고르세요')}
-      <label class="sub" for="new-native">아는 언어 (뜻)</label>
+      <label class="sub" for="new-native">뜻은 어떤 언어로 볼까요?</label>
       ${select('native', nm.native, nm.target)}
-      <button class="btn primary wide" data-act="mode-create" ${nm.target ? '' : 'disabled'}>${!nm.target ? '배울 언어를 골라 주세요' : exists ? `${modeLabel(`${nm.target}>${nm.native}`)} 모드로 가기` : `${modeLabel(`${nm.target}>${nm.native}`)} 만들기`}</button>
+      <button class="btn primary wide" data-act="mode-create" ${nm.target ? '' : 'disabled'}>${!nm.target ? '공부할 언어를 골라 주세요' : `${studyLabel(`${nm.target}>${nm.native}`)}${exists ? '로 가기' : ' 시작하기'}<small>(${meaningLabel(`${nm.target}>${nm.native}`)})</small>`}</button>
     </div>`;
   }
 }
@@ -2616,7 +2623,7 @@ function setTab(tab) {
   if (tab === 'settings') { ui.settingsPage = null; renderSettings(); loadUsage(); }
 }
 function renderModePills() {
-  document.querySelectorAll('.mode-pill').forEach((b) => { b.textContent = `${modeLabel(prefs.mode, true)} ▾`; });
+  document.querySelectorAll('.mode-pill').forEach((b) => { b.textContent = `${studyLabel()} ▾`; });
 }
 /** 아래에서 올라오는 언어 모드 목록 */
 function renderModeSheet() {
@@ -2627,7 +2634,7 @@ function renderModeSheet() {
       <h3>언어 모드</h3>
       ${modeList().map(({ mode, count }) => `<button class="mode-opt" data-act="mode-pick" data-mode="${mode}" aria-pressed="${mode === prefs.mode}">
         <span class="flag">${targetLang(mode).flag}</span>
-        <span class="txt"><b>${targetLang(mode).name}</b><small>뜻은 ${nativeLang(mode).flag} ${nativeLang(mode).name}</small></span>
+        <span class="txt"><b>${targetLang(mode).name}</b><small>${meaningLabel(mode)}</small></span>
         <span class="n">${count}장</span></button>`).join('')}
       <button class="btn wide" data-act="mode-new">+ 새 언어 모드</button>
     </div>`;
@@ -2639,7 +2646,7 @@ function switchMode(mode) {
   ui.cardsCat = null; ui.renaming = null; ui.deleting = null;
   ui.reviewStarted = false; ui.reviewShow = false; ui.reviewCardId = null;
   renderAll();
-  toast(`${modeLabel(mode)} 모드로 바꿨어요.`);
+  toast(`${studyLabel(mode)}${ro(targetLang(mode).name + ' 공부')} 바꿨어요. (${meaningLabel(mode)})`);
 }
 
 function renderAll() {
@@ -2761,7 +2768,7 @@ document.addEventListener('click', (ev) => {
       setPref('modes', prefs.modes.filter((m) => m !== mode));
       if (prefs.mode === mode) switchMode(DEFAULT_MODE);
       renderSettings();
-      toast(`${modeLabel(mode)} 모드를 지웠어요.`);
+      toast(`${studyLabel(mode)}(${meaningLabel(mode)})를 지웠어요.`);
       break;
     }
     case 'mode-new': $('#mode-sheet').hidden = true; setTab('settings'); openSettingsPage('lang', true); break;

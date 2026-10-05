@@ -483,7 +483,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   </div>
 </div>
 
-<input type="file" id="scan-input" accept="image/*" hidden>
+<input type="file" id="scan-input" accept="image/*" multiple hidden>
 <input type="file" id="backup-input" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -517,7 +517,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1204,8 +1204,8 @@ function scanEditorHTML(e) {
   } else if (e.loading) {
     body = `<div class="scan-wait" role="status" aria-live="polite">
       <div class="spinner">${MASCOT}</div>
-      <b>${SCAN_STAGES[e.scanStage ?? 0]}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
-      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · 보통 5~15초 걸려요</p>
+      <b>${SCAN_STAGES[e.scanStage ?? 0](e.scanCount)}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
+      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · ${e.scanCount > 1 ? '사진이 많으면 조금 더 걸려요' : '보통 5~15초 걸려요'}</p>
     </div>`;
   } else {
     let result = '';
@@ -1219,8 +1219,8 @@ function scanEditorHTML(e) {
         <button class="btn primary wide" data-act="use-found" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 입력칸에 넣기` : '넣을 표현을 골라 주세요'}</button>`;
     }
     body = `${result}
-      <button class="btn wide" data-act="scan">${e.found ? '다른 사진 고르기' : '사진 고르기'}</button>
-      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 여러 개면 골라서 한 번에 넣을 수 있어요. 사진은 저장하지 않아요.</p>'}`;
+      <button class="btn wide" data-act="scan">${e.found ? '다른 사진 고르기' : `사진 고르기 (한 번에 ${SCAN_MAX}장까지)`}</button>
+      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 찾은 표현 중 원하는 것만 골라 넣을 수 있어요. 사진은 저장하지 않아요.</p>'}`;
   }
   return `<div class="field">
     <h3>사진으로 자동 입력<span>${left}</span></h3>
@@ -1290,7 +1290,12 @@ const blobBase64 = (b) => new Promise((resolve, reject) => {
   r.onerror = () => reject(r.error);
   r.readAsDataURL(b);
 });
-const SCAN_STAGES = ['사진을 준비하고 있어요', '사진을 보내고 있어요', '표현과 뜻을 찾고 있어요'];
+const SCAN_MAX = 5;   // 한 번에 읽을 수 있는 사진 수 (Worker와 같게)
+const SCAN_STAGES = [
+  (n) => `사진${n > 1 ? ` ${n}장을` : '을'} 준비하고 있어요`,
+  (n) => `사진${n > 1 ? ` ${n}장을` : '을'} 보내고 있어요`,
+  (n) => `${n > 1 ? `사진 ${n}장에서 ` : ''}표현과 뜻을 찾고 있어요`,
+];
 let scanTimer = null;
 function setScanStage(e, stage) {
   e.scanStage = stage;
@@ -1316,12 +1321,21 @@ const SCAN_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
   413: '사진이 너무 커요. 다른 사진으로 해 주세요.',
   422: '이 사진은 읽을 수 없어요. 다른 사진으로 해 주세요.',
-  429: '오늘 쓸 수 있는 10장을 모두 썼어요. 내일 다시 쓸 수 있어요.',
+  429: '오늘 쓸 수 있는 10장을 모두 썼어요. 내일 다시 쓸 수 있어요.',   // 남은 장수가 있으면 scanPhotos에서 따로 안내
   503: '지금 요청이 많아요. 잠시 뒤 다시 시도해 주세요.',
 };
-async function scanPhoto(file) {
+async function scanPhotos(files) {
   if (!editor || !user || editor.loading) return;
   const e = editor;
+  if (files.length > SCAN_MAX) {
+    toast(`한 번에 ${SCAN_MAX}장까지 읽을 수 있어요. 앞의 ${SCAN_MAX}장만 읽을게요.`);
+    files = files.slice(0, SCAN_MAX);
+  }
+  if (scanRemaining !== null && files.length > scanRemaining) {
+    toast(scanRemaining ? `오늘 남은 횟수는 ${scanRemaining}장이에요. ${scanRemaining}장 이하로 골라 주세요.` : SCAN_ERRORS[429]);
+    return;
+  }
+  e.scanCount = files.length;
   e.loading += 1;
   e.found = null;
   e.checked = null;
@@ -1334,10 +1348,12 @@ async function scanPhoto(file) {
   setScanStage(e, 0);
   let message = null;
   try {
-    const blob = await compressImage(file);
-    if (!blob) throw new ScanError('사진을 열지 못했어요. 다른 사진으로 해 주세요.');
+    const blobs = (await Promise.all(files.map(compressImage))).filter(Boolean);
+    if (!blobs.length) throw new ScanError('사진을 열지 못했어요. 다른 사진으로 해 주세요.');
+    if (blobs.length < files.length) toast(`사진 ${files.length - blobs.length}장은 열지 못해서 빼고 읽을게요.`);
     setScanStage(e, 1);
-    const body = JSON.stringify({ image: await blobBase64(blob), mediaType: blob.type || 'image/jpeg' });
+    const images = await Promise.all(blobs.map(async (b) => ({ data: await blobBase64(b), mediaType: b.type || 'image/jpeg' })));
+    const body = JSON.stringify({ images });
     const token = await user.getIdToken();
     // 사진이 다 올라갈 즈음(작은 사진이라 금방) '표현 찾기'로 넘김
     const reading = setTimeout(() => setScanStage(e, 2), 700);
@@ -1353,6 +1369,7 @@ async function scanPhoto(file) {
     }
     const data = await res.json().catch(() => ({}));
     if (typeof data.remaining === 'number') scanRemaining = data.remaining;
+    if (res.status === 429 && data.remaining > 0) throw new ScanError(`오늘 남은 횟수는 ${data.remaining}장이에요. ${data.remaining}장 이하로 골라 주세요.`);
     if (!res.ok) throw new ScanError(SCAN_ERRORS[res.status] || '사진을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.');
     if (editor !== e) return;   // 그 사이 편집 화면을 닫은 경우
     const items = Array.isArray(data.items) ? data.items : [];
@@ -1360,8 +1377,8 @@ async function scanPhoto(file) {
     else if (items.length === 1) { e.found = items; e.checked = new Set([0]); useFound(e); message = '입력칸에 채웠어요. 고쳐서 저장하세요.'; }
     else {
       e.found = items;
-      // 사진에 직접 표시한 표현이면 모두 미리 고름 (수정 중에는 하나만)
-      e.checked = new Set(data.marked && !e.cardId ? items.map((_, i) => i) : []);
+      // 사진에 직접 표시한 표현은 미리 고름 (수정 중에는 직접 하나 고름)
+      e.checked = new Set(e.cardId ? [] : items.flatMap((it, i) => ((it.marked ?? data.marked) ? [i] : [])));
     }
   } catch (err) {
     if (err instanceof ScanError) message = err.message;
@@ -2157,9 +2174,9 @@ document.addEventListener('keydown', (ev) => {
 });
 
 $('#scan-input').addEventListener('change', (ev) => {
-  const file = ev.target.files[0];
+  const files = [...ev.target.files];
   ev.target.value = '';
-  if (file) scanPhoto(file);
+  if (files.length) scanPhotos(files);
 });
 $('#backup-input').addEventListener('change', (ev) => {
   const file = ev.target.files[0];

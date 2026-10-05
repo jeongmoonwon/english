@@ -6,23 +6,23 @@ import Anthropic from '@anthropic-ai/sdk';
 const MODEL = 'claude-sonnet-5';
 const DAILY_LIMIT = 10;                      // 1인당 하루 사진 수 (한국 시간 기준 자정에 초기화)
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;     // Claude 이미지 한 장 한도
+const MAX_IMAGES = 5;                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const SYSTEM = `You help a Korean learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with foreign-language text (English, Japanese, Chinese, Spanish, or any other language that is not Korean).
 
-Look at the image and list foreign-language expressions for flashcards:
-- If the user marked anything in the image (underline, highlight, circle, box, arrow, handwriting), list ONLY the marked expressions and set "marked" to true.
-- Otherwise list the expressions worth learning that are shown, such as the subtitle line or idioms and phrases in it, and set "marked" to false. Prefer the full phrase as it is used over single easy words.
+There may be one or several screenshots. Go through each one and list foreign-language expressions for flashcards, in the order of the screenshots:
+- If the user marked anything in a screenshot (underline, highlight, circle, box, arrow, handwriting), list ONLY the marked expressions from that screenshot and set their "marked" to true.
+- For a screenshot with no marks, list the expressions worth learning that are shown, such as the subtitle line or idioms and phrases in it, with "marked" false. Prefer the full phrase as it is used over single easy words.
 - Ignore Korean text, including Korean subtitles, except as a hint for what the foreign text means.
-- At most 5 items. "expression": keep it in the original language and script, exactly as it appears; only fix obvious recognition errors and drop speaker labels or timestamps.
+- At most 5 items per screenshot, and don't list the same expression twice. "expression": keep it in the original language and script, exactly as it appears; only fix obvious recognition errors and drop speaker labels or timestamps.
 - "meaning": a natural Korean translation that fits the context, the way a Korean speaker would actually say it, not a word-for-word gloss. Keep it short.
 - "note": 1-2 short Korean sentences in friendly 해요체 that help the learner remember it: the nuance, when people use it, or what a tricky word or idiom literally means. Don't repeat the meaning.
-- If there is no foreign-language text, return an empty list.`;
+- If there is no foreign-language text at all, return an empty list.`;
 
 const SCHEMA = {
   type: 'object',
   properties: {
-    marked: { type: 'boolean' },
     items: {
       type: 'array',
       items: {
@@ -31,13 +31,14 @@ const SCHEMA = {
           expression: { type: 'string' },
           meaning: { type: 'string' },
           note: { type: 'string' },
+          marked: { type: 'boolean' },
         },
-        required: ['expression', 'meaning', 'note'],
+        required: ['expression', 'meaning', 'note', 'marked'],
         additionalProperties: false,
       },
     },
   },
-  required: ['marked', 'items'],
+  required: ['items'],
   additionalProperties: false,
 };
 
@@ -61,24 +62,27 @@ export async function handle(request, env, deps = {}) {
     return reply(401, { error: 'auth' });
   }
 
-  // 2. 사진 확인
+  // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
   let body;
   try { body = await request.json(); } catch { body = null; }
-  const image = typeof body?.image === 'string' ? body.image : '';
-  const mediaType = MEDIA_TYPES.includes(body?.mediaType) ? body.mediaType : null;
-  if (!image || !mediaType || !/^[A-Za-z0-9+/]+=*$/.test(image)) return reply(400, { error: 'image' });
-  if (image.length * 0.75 > MAX_IMAGE_BYTES) return reply(413, { error: 'too_large' });
+  const images = Array.isArray(body?.images) ? body.images : body?.image ? [{ data: body.image, mediaType: body.mediaType }] : [];
+  if (!images.length || images.length > MAX_IMAGES) return reply(400, { error: 'image' });
+  for (const img of images) {
+    if (typeof img?.data !== 'string' || !MEDIA_TYPES.includes(img.mediaType) || !/^[A-Za-z0-9+/]+=*$/.test(img.data)) return reply(400, { error: 'image' });
+    if (img.data.length * 0.75 > MAX_IMAGE_BYTES) return reply(413, { error: 'too_large' });
+  }
 
-  // 3. 하루 사용량: 먼저 한 칸 쓰고, Claude가 실패하면 돌려줌
+  // 3. 하루 사용량: 먼저 장수만큼 쓰고, Claude가 실패하면 돌려줌
+  const n = images.length;
   const key = `use:${user.sub}:${koreaDay(deps.now?.() ?? Date.now())}`;
   const used = Number(await env.USAGE.get(key)) || 0;
-  if (used >= DAILY_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: DAILY_LIMIT });
-  await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+  if (used + n > DAILY_LIMIT) return reply(429, { error: 'limit', remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT });
+  await env.USAGE.put(key, String(used + n), { expirationTtl: 2 * 86400 });
 
   // 4. Claude에게 묻기
   try {
-    const result = await askClaude(env, image, mediaType);
-    return reply(200, { ...result, remaining: DAILY_LIMIT - used - 1, limit: DAILY_LIMIT });
+    const result = await askClaude(env, images);
+    return reply(200, { ...result, remaining: DAILY_LIMIT - used - n, limit: DAILY_LIMIT });
   } catch (err) {
     await env.USAGE.put(key, String(used), { expirationTtl: 2 * 86400 });
     if (err instanceof Refusal) return reply(422, { error: 'refused' });
@@ -90,18 +94,21 @@ export async function handle(request, env, deps = {}) {
 
 class Refusal extends Error {}
 
-async function askClaude(env, image, mediaType) {
+async function askClaude(env, images) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 8000,
+    max_tokens: 16000,
     system: SYSTEM,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-        { type: 'text', text: '이 사진의 외국어 표현을 카드로 만들어 주세요.' },
+        ...images.flatMap((img, i) => [
+          ...(images.length > 1 ? [{ type: 'text', text: `사진 ${i + 1}` }] : []),
+          { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } },
+        ]),
+        { type: 'text', text: images.length > 1 ? `이 사진 ${images.length}장의 외국어 표현을 카드로 만들어 주세요.` : '이 사진의 외국어 표현을 카드로 만들어 주세요.' },
       ],
     }],
   });
@@ -110,10 +117,11 @@ async function askClaude(env, image, mediaType) {
   const text = response.content.find((b) => b.type === 'text')?.text;
   const out = JSON.parse(text);
   const items = out.items
-    .map((it) => ({ expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim() }))
+    .map((it) => ({ expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim(), marked: !!it.marked }))
     .filter((it) => it.expression)
-    .slice(0, 5);
-  return { marked: !!out.marked, items };
+    .slice(0, 5 * images.length);
+  // marked: 예전 앱용 (하나라도 표시가 있었는지)
+  return { marked: items.some((it) => it.marked), items };
 }
 
 // ----- Firebase 로그인 토큰(ID 토큰) 확인 -----

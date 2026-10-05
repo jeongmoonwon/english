@@ -12,3 +12,7 @@ ALLOWED_ORIGINS = "https://jeongmoonwon.github.io,http://localhost:8000"
 [[kv_namespaces]]
 binding = "USAGE"
 id = "52092527be724991a2c1b994ac997896"
+
+# 말해서 넣기의 음성 인식 (Workers AI Whisper, 하루 무료 사용량 안에서)
+[ai]
+binding = "AI"

@@ -178,6 +178,13 @@ img { max-width: 100%; }
 .mode-opt .txt { flex: 1; display: flex; flex-direction: column; }
 .mode-opt small { color: var(--muted); font-size: 13px; }
 .mode-opt .n { color: var(--muted); font-size: 13px; }
+select.select {
+  width: 100%; font: 17px/1.4 var(--sans); color: var(--ink); background-color: var(--bg);
+  border: 1px solid var(--line); border-radius: 14px; padding: 11px 36px 11px 12px;
+  appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 55%, calc(100% - 14px) 55%; background-size: 6px 6px; background-repeat: no-repeat;
+}
 .usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .usage-meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .tab[aria-selected="true"] { color: var(--accent); }
@@ -312,6 +319,20 @@ textarea.eng { font-family: var(--serif); }
 }
 .found-item b { font-family: var(--serif); font-size: 17px; font-weight: 600; }
 .found-item span { color: var(--muted); font-size: 15px; }
+.fill-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fill-btns .btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px; font-size: 17px; }
+.fill-btns .btn small { font-size: 12px; font-weight: 500; opacity: .75; }
+.heard { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--bg); color: var(--muted); font-size: 14px; }
+.rec { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 6px 0; }
+.rec b { font-size: 17px; }
+.rec-btn { position: relative; width: 96px; height: 96px; border-radius: 50%; border: 0; margin: 10px 0 4px; background: var(--again); display: grid; place-items: center;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--again) 40%, transparent); animation: rec-pulse 1.4s ease-out infinite; }
+.rec-square { width: 30px; height: 30px; border-radius: 8px; background: #fff; }
+@keyframes rec-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--again) 45%, transparent); } 100% { box-shadow: 0 0 0 26px transparent; } }
+.rec-time { margin: 0; font-variant-numeric: tabular-nums; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--again); animation: blink 1s infinite; }
+.rec-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 6px; }
+.center-note { text-align: center; }
 .missing { color: var(--muted); font-size: 15px; }
 .found-item { flex-direction: row; align-items: flex-start; gap: 10px; }
 .found-item .check {
@@ -499,7 +520,7 @@ textarea::placeholder { font-family: var(--sans); }
   .reveal, .sheet { animation: none; }
   :root[data-skin] .empty .mascot { animation: none; }
   .spinner::before { animation-duration: 2.4s; }
-  .spinner .mascot, .dots i { animation: none; }
+  .spinner .mascot, .dots i, .rec-btn, .rec-dot { animation: none; }
 }
 @media (min-width: 700px) {
   .scroll, .sheet-body, .actions, .filters { padding-left: max(20px, calc(50% - 300px)); padding-right: max(20px, calc(50% - 300px)); }
@@ -610,7 +631,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1375,6 +1396,7 @@ function openEditor(cardId = null) {
   renderEditor();
 }
 function closeEditor() {
+  if (editor?.recording) stopVoice(true);
   editor = null;
   $('#editor').hidden = true;
   $('#editor').innerHTML = '';
@@ -1408,22 +1430,35 @@ function entryHTML(e, en, i) {
 /** 사진으로 자동 입력: 사진 속 외국어 표현과 한국어 뜻을 Claude가 찾아 채워 줌 (사진은 저장하지 않음) */
 function scanEditorHTML(e) {
   if (!SCAN_URL) return '';
-  const left = scanRemaining === null ? '하루 10장' : `오늘 ${scanRemaining}장 남음`;
+  const left = [scanRemaining === null ? '사진 하루 10장' : `사진 ${scanRemaining}장`, voiceRemaining === null ? '말하기 하루 10번' : `말하기 ${voiceRemaining}번 남음`].join(' · ');
   let body;
   if (!fbReady || !user) {
     body = `<p class="sync-line">로그인하면 쓸 수 있어요.</p>
       ${fbReady ? '<button class="btn wide" data-act="login">Google로 로그인</button>' : ''}`;
+  } else if (e.recording) {
+    body = `<div class="rec" role="status" aria-live="polite">
+      <b>${targetLang(e.mode).name}나 ${nativeLang(e.mode).name}로 말해 보세요</b>
+      <p class="sync-line">어느 쪽으로 말해도 나머지 칸을 채워 줘요</p>
+      <button class="rec-btn on" data-act="voice-stop" aria-label="녹음 끝내기"><span class="rec-square"></span></button>
+      <p class="rec-time"><span class="rec-dot"></span><span id="rec-secs">0:00</span> / 0:${VOICE_MAX_SEC}</p>
+      <div class="rec-actions">
+        <button class="btn small" data-act="voice-cancel">취소</button>
+        <button class="btn small primary" data-act="voice-stop">다 말했어요</button>
+      </div>
+    </div>`;
   } else if (e.loading) {
+    const stages = e.busy === 'voice' ? VOICE_STAGES : SCAN_STAGES;
     body = `<div class="scan-wait" role="status" aria-live="polite">
       <div class="spinner">${MASCOT}</div>
-      <b>${SCAN_STAGES[e.scanStage ?? 0](e.scanCount)}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
-      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · ${e.scanCount > 1 ? '사진이 많으면 조금 더 걸려요' : '보통 5~15초 걸려요'}</p>
+      <b>${stages[e.scanStage ?? 0](e.scanCount)}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
+      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · ${e.busy === 'voice' ? '보통 5~10초 걸려요' : e.scanCount > 1 ? '사진이 많으면 조금 더 걸려요' : '보통 5~15초 걸려요'}</p>
     </div>`;
   } else {
     let result = '';
     if (e.found) {
       const n = e.checked.size;
-      result = `<p class="sync-line">표현을 ${e.found.length}개 찾았어요. ${e.cardId ? '이 카드에 넣을 것을 하나 고르세요.' : '추가할 것을 고르세요.'}</p>
+      result = `${e.heard ? `<p class="heard">🎙 들린 말: “${esc(e.heard)}”</p>` : ''}
+        <p class="sync-line">표현을 ${e.found.length}개 찾았어요. ${e.cardId ? '이 카드에 넣을 것을 하나 고르세요.' : '추가할 것을 고르세요.'}</p>
         <div class="found">${e.found.map((it, i) => `<button class="found-item" data-act="toggle-found" data-index="${i}" aria-pressed="${e.checked.has(i)}">
           <span class="check">${e.checked.has(i) ? '✓' : ''}</span>
           <span class="txt"><b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</span>
@@ -1431,11 +1466,14 @@ function scanEditorHTML(e) {
         <button class="btn primary wide" data-act="use-found" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 입력칸에 넣기` : '넣을 표현을 골라 주세요'}</button>`;
     }
     body = `${result}
-      <button class="btn wide" data-act="scan">${e.found ? '다른 사진 고르기' : `사진 고르기 (한 번에 ${SCAN_MAX}장까지)`}</button>
-      ${e.found ? '' : '<p class="sync-line">밑줄이나 형광펜으로 표시한 게 있으면 그 표현만 가져와요. 찾은 표현 중 원하는 것만 골라 넣을 수 있어요. 사진은 저장하지 않아요.</p>'}`;
+      <div class="fill-btns">
+        <button class="btn" data-act="scan">📷 사진<small>한 번에 ${SCAN_MAX}장까지</small></button>
+        <button class="btn" data-act="voice-start" ${canRecord ? '' : 'disabled'}>🎙 말하기<small>누르고 말한 뒤 끝내기</small></button>
+      </div>
+      ${e.found ? '' : `<p class="sync-line">사진은 밑줄 친 표현만 골라 오고, 말하기는 ${targetLang(e.mode).name}나 ${nativeLang(e.mode).name}로 말하면 나머지를 채워 줘요. 사진과 녹음은 저장하지 않아요.</p>`}`;
   }
   return `<div class="field">
-    <h3>사진으로 자동 입력<span>${left}</span></h3>
+    <h3>자동으로 채우기<span>${left}</span></h3>
     ${body}
   </div>`;
 }
@@ -1528,6 +1566,113 @@ const MASCOT = `<svg class="mascot" viewBox="0 0 120 116" aria-hidden="true">
   <ellipse cx="33" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/><ellipse cx="87" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/>
   <path d="M54 77 q6 7 12 0" fill="none" stroke="#3D2B26" stroke-width="3.5" stroke-linecap="round"/>
 </svg>`;
+// ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(Whisper + Claude) ----------
+const VOICE_MAX_SEC = 30;
+const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+const VOICE_STAGES = [() => '녹음을 준비하고 있어요', () => '말한 내용을 보내고 있어요', () => '듣고 뜻을 찾고 있어요'];
+let voiceRemaining = null;
+const rec = { recorder: null, stream: null, chunks: [], timer: null, start: 0, cancelled: false };
+function recMime() {
+  // Whisper에서 확인한 형식: webm(opus), mp4(AAC, 아이폰)
+  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) if (MediaRecorder.isTypeSupported?.(t)) return t;
+  return '';
+}
+async function startVoice() {
+  const e = editor;
+  if (!e || !user || e.loading || e.recording) return;
+  if (voiceRemaining === 0) { toast(VOICE_ERRORS[429]); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    toast('마이크를 쓸 수 없어요. 휴대폰 설정에서 마이크 권한을 허용해 주세요.');
+    return;
+  }
+  if (editor !== e) { stream.getTracks().forEach((t) => t.stop()); return; }
+  const mime = recMime();
+  const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  Object.assign(rec, { recorder, stream, chunks: [], start: Date.now(), cancelled: false });
+  recorder.ondataavailable = (ev) => { if (ev.data.size) rec.chunks.push(ev.data); };
+  recorder.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    clearInterval(rec.timer);
+    e.recording = false;
+    if (rec.cancelled || editor !== e) { if (editor === e) renderEditor(); return; }
+    sendVoice(e, new Blob(rec.chunks, { type: recorder.mimeType || mime || 'audio/mp4' }));
+  };
+  recorder.start();
+  e.recording = true;
+  e.found = null; e.checked = null; e.heard = null;
+  renderEditor();
+  rec.timer = setInterval(() => {
+    const sec = Math.floor((Date.now() - rec.start) / 1000);
+    const el = $('#rec-secs');
+    if (el) el.textContent = `0:${String(sec).padStart(2, '0')}`;
+    if (sec >= VOICE_MAX_SEC) stopVoice();
+  }, 250);
+}
+function stopVoice(cancel = false) {
+  if (!rec.recorder || rec.recorder.state === 'inactive') return;
+  rec.cancelled = cancel;
+  rec.recorder.stop();
+}
+const VOICE_ERRORS = {
+  401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
+  413: '녹음이 너무 길어요. 30초 안으로 말해 주세요.',
+  422: '말소리를 알아듣지 못했어요. 조금 더 크고 또렷하게 다시 말해 주세요.',
+  429: '오늘 쓸 수 있는 말하기 10번을 모두 썼어요. 내일 다시 쓸 수 있어요.',
+  503: '지금 요청이 많아요. 잠시 뒤 다시 시도해 주세요.',
+};
+async function sendVoice(e, blob) {
+  if (Date.now() - rec.start < 600 || blob.size < 1000) { toast('녹음이 너무 짧아요. 말한 뒤에 끝내기를 눌러 주세요.'); renderEditor(); return; }
+  e.busy = 'voice';
+  e.scanCount = 1;
+  e.loading += 1;
+  e.scanStart = Date.now();
+  clearInterval(scanTimer);
+  scanTimer = setInterval(() => {
+    const el = $('#scan-secs');
+    if (el) el.textContent = Math.floor((Date.now() - e.scanStart) / 1000);
+  }, 1000);
+  setScanStage(e, 1);
+  let message = null;
+  try {
+    const { target, native } = modeParts(e.mode);
+    const body = JSON.stringify({ audio: await blobBase64(blob), mediaType: blob.type, target, native });
+    const reading = setTimeout(() => setScanStage(e, 2), 600);
+    let res;
+    try {
+      res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+        body,
+      });
+    } finally {
+      clearTimeout(reading);
+    }
+    const data = await res.json().catch(() => ({}));
+    if (typeof data.remaining === 'number') voiceRemaining = data.remaining;
+    if (!res.ok) throw new ScanError(VOICE_ERRORS[res.status] || '말한 내용을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    if (editor !== e) return;
+    const items = Array.isArray(data.items) ? data.items : [];
+    e.heard = data.transcript || '';
+    if (!items.length) message = '표현을 만들지 못했어요. 다시 말해 주세요.';
+    else if (items.length === 1) { e.found = items; e.checked = new Set([0]); useFound(e); message = `입력칸에 채웠어요. 들린 말: “${e.heard}”`; }
+    else { e.found = items; e.checked = new Set(e.cardId ? [] : items.map((_, i) => i)); }
+  } catch (err) {
+    if (err instanceof ScanError) message = err.message;
+    else if (navigator.onLine === false) message = '인터넷에 연결되어 있지 않아요.';
+    else message = `말한 내용을 처리하지 못했어요. (${errText(err)})`;
+  } finally {
+    clearInterval(scanTimer);
+    e.loading -= 1;
+    e.scanStage = null;
+    e.busy = null;
+    if (editor === e) renderEditor();
+  }
+  if (message) toast(message);
+}
+
 class ScanError extends Error {}   // 사용자에게 그대로 보여 줄 안내
 const SCAN_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
@@ -1548,9 +1693,11 @@ async function scanPhotos(files) {
     return;
   }
   e.scanCount = files.length;
+  e.busy = 'scan';
   e.loading += 1;
   e.found = null;
   e.checked = null;
+  e.heard = null;
   e.scanStart = Date.now();
   clearInterval(scanTimer);
   scanTimer = setInterval(() => {
@@ -1601,6 +1748,7 @@ async function scanPhotos(files) {
     clearInterval(scanTimer);
     e.loading -= 1;
     e.scanStage = null;
+    e.busy = null;
     if (editor === e) renderEditor();
   }
   if (message) toast(message);
@@ -2010,13 +2158,15 @@ const sampleOf = (m = prefs.mode) => SAMPLE[modeParts(m).target] || SAMPLE.en;
 /** 설정 목록: [페이지, 아이콘, 이름, 지금 상태] */
 const SETTINGS = [
   ['sync', '☁️', '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', '📷', '사진 자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 ${usageState.remaining}장 남음` : '하루 10장')],
+  ['usage', '📷', '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 남음` : '사진 하루 10장 · 말하기 하루 10번')],
   ['lang', '🌏', '언어 모드', () => modeLabel()],
   ['theme', '🌗', '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', '🔤', '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
   ['sound', '🔊', '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
   ['backup', '💾', '백업', () => '파일로 저장 · 복원'],
+  ['feedback', '💌', '의견 보내기', () => '버그 · 제안 · 문의'],
 ];
+const FEEDBACK_KINDS = [['bug', '🐛 버그'], ['idea', '💡 제안'], ['question', '❓ 문의'], ['etc', '💬 기타']];
 function renderSettings() {
   const page = ui.settingsPage;
   const item = SETTINGS.find(([p]) => p === page);
@@ -2040,9 +2190,37 @@ function renderSettings() {
   else if (page === 'usage') renderUsage();
   else renderSettingsPage(page);
 }
+/** 의견을 Firestore의 feedback 모음에 남김 (보내기만 되고, 읽기는 Firebase 콘솔에서) */
+async function sendFeedback() {
+  const f = ui.feedback;
+  f.text = $('#fb-text').value.trim();
+  f.email = $('#fb-email').value.trim();
+  if (!f.text) { toast('내용을 적어 주세요.'); $('#fb-text').focus(); return; }
+  if (!fbReady) { toast('지금은 보낼 수 없어요. 잠시 뒤 다시 시도해 주세요.'); return; }
+  f.sending = true;
+  renderSettings();
+  try {
+    const batch = fb.writeBatch(fstore);
+    batch.set(fb.doc(fb.collection(fstore, 'feedback')), {
+      kind: f.kind, text: f.text.slice(0, 3000), email: f.email.slice(0, 200),
+      app: APP_VERSION, mode: prefs.mode, ua: navigator.userAgent.slice(0, 300),
+      uid: user?.uid ?? null, createdAt: fb.serverTimestamp(),
+    });
+    await batch.commit();
+    ui.feedback = null;
+    ui.settingsPage = null;
+    renderSettings();
+    toast('보내 주셔서 고마워요! 💌');
+  } catch (err) {
+    f.sending = false;
+    renderSettings();
+    toast(navigator.onLine === false ? '인터넷에 연결되어 있지 않아요.' : `보내지 못했어요. (${errText(err)})`);
+  }
+}
 function openSettingsPage(page, focusNew) {
   ui.settingsPage = page;
   if (page === 'lang') ui.newMode = { target: null, native: 'ko' };
+  if (page === 'feedback' && !ui.feedback) ui.feedback = { kind: 'idea', text: '', email: user?.email || '', sending: false };
   renderSettings();
   $('#settings-main').scrollTop = 0;
   if (page === 'usage') loadUsage();
@@ -2086,10 +2264,25 @@ function renderSettingsPage(page) {
       <button class="btn primary wide" data-act="export">백업 파일 만들기</button>
       <button class="btn wide" data-act="import">백업 파일에서 복원하기</button>
     </div>`;
+  } else if (page === 'feedback') {
+    const f = ui.feedback;
+    box.innerHTML = `<div class="field">
+      <p class="sync-line">불편한 점, 바라는 기능, 궁금한 점을 자유롭게 보내 주세요. 만든 사람이 직접 읽어요.</p>
+      <label class="sub">종류</label>
+      <div class="chips">${FEEDBACK_KINDS.map(([k, label]) => `<button class="cat" data-act="fb-kind" data-kind="${k}" aria-pressed="${f.kind === k}">${label}</button>`).join('')}</div>
+      <label class="sub" for="fb-text">내용</label>
+      <textarea id="fb-text" rows="6" maxlength="3000" placeholder="예: 복습할 때 이런 기능이 있으면 좋겠어요.">${esc(f.text)}</textarea>
+      <label class="sub" for="fb-email">답장 받을 이메일 (선택)</label>
+      <input class="text" id="fb-email" type="email" maxlength="200" placeholder="비워 두면 답장 없이 보내져요" value="${esc(f.email)}">
+      <button class="btn primary wide" data-act="fb-send" ${f.sending ? 'disabled' : ''}>${f.sending ? '보내는 중…' : '보내기'}</button>
+      <p class="sync-line">앱 버전과 기기 종류가 함께 전달돼요. 카드 내용은 보내지 않아요.</p>
+    </div>`;
   } else if (page === 'lang') {
     const nm = ui.newMode || { target: null, native: 'ko' };
-    const chips = (field, picked, skip) => Object.entries(LANGS).filter(([code]) => code !== skip)
-      .map(([code, l]) => `<button class="cat" data-act="new-mode-lang" data-field="${field}" data-code="${code}" aria-pressed="${picked === code}">${l.flag} ${l.name}</button>`).join('');
+    const select = (field, picked, skip, placeholder) => `<select class="text select" id="new-${field}" data-field="${field}">
+      ${placeholder ? `<option value="" ${picked ? '' : 'selected'} disabled>${placeholder}</option>` : ''}
+      ${Object.entries(LANGS).filter(([code]) => code !== skip).map(([code, l]) => `<option value="${code}" ${picked === code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
+    </select>`;
     const exists = nm.target && modeList().some((m) => m.mode === `${nm.target}>${nm.native}`);
     box.innerHTML = `<div class="field">
       <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
@@ -2104,10 +2297,10 @@ function renderSettingsPage(page) {
     </div>
     <div class="field" id="new-mode">
       <h3>새 언어 모드</h3>
-      <label class="sub">배울 언어 (표현)</label>
-      <div class="chips">${chips('target', nm.target, nm.native)}</div>
-      <label class="sub">아는 언어 (뜻)</label>
-      <div class="chips">${chips('native', nm.native, nm.target)}</div>
+      <label class="sub" for="new-target">배울 언어 (표현)</label>
+      ${select('target', nm.target, nm.native, '언어를 고르세요')}
+      <label class="sub" for="new-native">아는 언어 (뜻)</label>
+      ${select('native', nm.native, nm.target)}
       <button class="btn primary wide" data-act="mode-create" ${nm.target ? '' : 'disabled'}>${!nm.target ? '배울 언어를 골라 주세요' : exists ? `${modeLabel(`${nm.target}>${nm.native}`)} 모드로 가기` : `${modeLabel(`${nm.target}>${nm.native}`)} 만들기`}</button>
     </div>`;
   }
@@ -2122,6 +2315,7 @@ async function loadUsage() {
     if (!res.ok) throw new Error(res.status);
     usageState = await res.json();
     scanRemaining = usageState.remaining;
+    if (usageState.voice) voiceRemaining = usageState.voice.remaining;
   } catch {
     usageState = 'error';
   }
@@ -2136,12 +2330,16 @@ function renderUsage() {
   if (usageState === 'loading' || usageState === null) body = '<p class="sync-line">확인하는 중이에요…</p>';
   else if (usageState === 'error') body = '<p class="sync-line">사용량을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>';
   else {
-    const { used, remaining, limit } = usageState;
-    body = `<p class="sync-line">오늘 <b>${used}장</b> 썼어요 · <b>${remaining}장</b> 남았어요</p>
-      <div class="usage-meter" role="img" aria-label="${limit}장 중 ${used}장 사용"><i style="width:${Math.min(100, (used / limit) * 100)}%"></i></div>
-      <p class="sync-line">하루 ${limit}장까지 쓸 수 있고, 매일 자정(한국 시간)에 다시 채워져요.</p>`;
+    const meter = (title, u, unit) => `<div class="field"><h3>${title}</h3>
+      <p class="sync-line">오늘 <b>${u.used}${unit}</b> 썼어요 · <b>${u.remaining}${unit}</b> 남았어요</p>
+      <div class="usage-meter" role="img" aria-label="${u.limit}${unit} 중 ${u.used}${unit} 사용"><i style="width:${Math.min(100, (u.used / u.limit) * 100)}%"></i></div>
+      <p class="sync-line">하루 ${u.limit}${unit}까지</p></div>`;
+    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '')
+      + '<p class="sync-line center-note">매일 자정(한국 시간)에 다시 채워져요.</p>';
+    box.innerHTML = body;
+    return;
   }
-  box.innerHTML = `<div class="field"><h3>사진으로 자동 입력</h3>${body}</div>`;
+  box.innerHTML = `<div class="field">${body}</div>`;
 }
 
 function agoText(ts) {
@@ -2516,6 +2714,9 @@ document.addEventListener('click', (ev) => {
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
     case 'scan': $('#scan-input').click(); break;
+    case 'voice-start': startVoice(); break;
+    case 'voice-stop': stopVoice(); break;
+    case 'voice-cancel': stopVoice(true); break;
     case 'speak': speak(el.dataset.text, el.dataset.lang); break;
     case 'mode-sheet': renderModeSheet(); break;
     case 'mode-close': $('#mode-sheet').hidden = true; break;
@@ -2525,8 +2726,13 @@ document.addEventListener('click', (ev) => {
       if (ui.tab === 'settings') renderSettings();
       break;
     case 'settings-open': openSettingsPage(el.dataset.page); break;
+    case 'fb-kind':
+      ui.feedback.text = $('#fb-text').value; ui.feedback.email = $('#fb-email').value;
+      ui.feedback.kind = el.dataset.kind;
+      renderSettings();
+      break;
+    case 'fb-send': sendFeedback(); break;
     case 'settings-back': ui.settingsPage = null; renderSettings(); $('#settings-main').scrollTop = 0; break;
-    case 'new-mode-lang': ui.newMode[el.dataset.field] = el.dataset.code; renderSettings(); break;
     case 'mode-create': {
       const mode = `${ui.newMode.target}>${ui.newMode.native}`;
       if (!modeList().some((m) => m.mode === mode)) setPref('modes', [...prefs.modes, mode]);
@@ -2613,6 +2819,13 @@ document.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     saveRename();
   }
+});
+
+// 새 언어 모드 드롭다운
+document.addEventListener('change', (ev) => {
+  if (!ev.target.matches('#new-target, #new-native')) return;
+  ui.newMode[ev.target.dataset.field] = ev.target.value;
+  renderSettings();
 });
 
 $('#scan-input').addEventListener('change', (ev) => {

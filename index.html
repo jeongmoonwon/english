@@ -15,7 +15,7 @@
 <title>mooni의 단어장</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
 <style>
 :root {
   --bg: #EEF1F4;
@@ -239,6 +239,14 @@ textarea.eng { font-family: var(--serif); }
 .entry h3 { display: flex; align-items: center; }
 .entry h3 .x-mini { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 14px; padding: 2px 4px; }
 .entry label { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: -6px; }
+.entry .entry-cats label { margin-bottom: -2px; }
+.entry-cats { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--line); }
+.entry-cats label { margin: 6px 0 -2px; }
+.new-cat { display: flex; gap: 8px; align-items: center; }
+.new-cat input { flex: 1; min-width: 0; }
+.new-cat .btn { flex: none; }
+.cat.pop { animation: pop .45s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes pop { 0% { transform: scale(.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
 .entry-note { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 14px; line-height: 1.5; }
 .btn.add-entry { background: none; border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); margin-bottom: 18px; }
 .btn.small { padding: 10px 14px; font-size: 15px; }
@@ -354,7 +362,12 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   :root[data-skin="peach"]:not([data-theme="light"]) { --bg: #221A17; --surface: #2E2420; --ink: #F8EAE4; --muted: #BFA59C; --line: #47372F; --accent: #FF9A7E; --accent-ink: #2A1510; --soft: #4A2E25; }
 }
 /* 동글동글, 부드러운 그림자, 둥근 글꼴(주아체), 눌리면 통통 */
-:root[data-skin] { --round: "Jua", var(--sans); }
+:root[data-skin] {
+  --round: "Jua", var(--sans);
+  /* 본문은 둥글둥글한 고운돋움. 영어 표현은 명조(세리프)로 두되, 한글이 섞이면 고운돋움으로 */
+  --sans: "Gowun Dodum", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --serif: "New York", "Iowan Old Style", Georgia, "Gowun Dodum", "Apple SD Gothic Neo", serif;
+}
 :root[data-skin] body {
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
@@ -501,7 +514,7 @@ const DIRECTIONS = {
 };
 const STUDY_KEY = 'freedom-study';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -657,7 +670,7 @@ async function recordActivity(list) {
 }
 const ui = { tab: 'review', calMonth: null, calDay: null, reviewStarted: false, reviewShow: false, reviewCardId: null, reviewSig: '', cardsCat: null, renaming: null };
 const practice = { currentId: null, recent: [], show: false, solved: 0, open: false, started: false };
-let editor = null;        // { cardId, korText, engText, korImages, engImages, category, catNew, newCatText, loading, found }
+let editor = null;        // { cardId, entries: [{ korText, engText, note, category }], korImages, engImages, newCats, catInput, loading, found, checked }
 let scanRemaining = null; // 오늘 남은 자동 입력 횟수 (마지막으로 받은 값)
 // 복습·자유 연습 설정 (이 기기에만 저장). cats: null이면 전체 카테고리
 const study = loadStudy();
@@ -1088,13 +1101,13 @@ function openEditor(cardId = null) {
   editor = {
     cardId: card?.id ?? null,
     // 입력 묶음 (새 표현은 여러 개를 한 번에, 수정은 하나). note: 사진에서 받은 설명 (저장하지 않음)
-    entries: [{ korText: card?.korText ?? '', engText: card?.engText ?? '', note: '' }],
+    // 새 카드는 카드 탭에서 보고 있던 카테고리로 시작
+    entries: [{ korText: card?.korText ?? '', engText: card?.engText ?? '', note: '', category: card ? catOf(card) : (ui.cardsCat ?? DEFAULT_CATEGORY) }],
     korImages: [...(card?.korImages ?? [])],
     engImages: [...(card?.engImages ?? [])],
-    // 새 카드는 카드 탭에서 보고 있던 카테고리에 넣음
-    category: card ? catOf(card) : (ui.cardsCat ?? DEFAULT_CATEGORY),
-    catNew: false,
-    newCatText: '',
+    newCats: [],      // 이 화면에서 새로 만든 카테고리 이름 (카드를 저장하면 생김)
+    catInput: null,   // 새 카테고리 이름을 쓰고 있는 카드 번호
+    popCat: null,     // 방금 만든 카테고리 (칩이 톡 나타나게)
     loading: 0,
     found: null,     // 사진에서 찾은 표현 [{ expression, meaning, note }]
     checked: null,   // 그중 고른 것의 번호 Set
@@ -1129,6 +1142,7 @@ function entryHTML(e, en, i) {
     <textarea class="eng" id="eng-${i}" data-side="eng" data-index="${i}" rows="2" placeholder="외울 표현 (ENG 등)">${esc(en.engText)}</textarea>
     ${e.cardId ? thumbsHTML('eng', e.engImages) : ''}
     ${en.note ? `<p class="entry-note">💡 ${esc(en.note)}</p>` : ''}
+    ${entryCatsHTML(e, en, i)}
   </div>`;
 }
 
@@ -1167,21 +1181,26 @@ function scanEditorHTML(e) {
   </div>`;
 }
 
-function categoryEditorHTML(e) {
-  const names = categoryList().map((c) => c.name);
-  if (!names.includes(e.category)) names.unshift(e.category);
-  return `<div class="field">
-    <h3>카테고리<span>${e.cardId ? '주제나 언어별로 나눠요' : '아래 카드 모두 여기에 들어가요'}</span></h3>
+/** 카드 하나의 카테고리 고르기 */
+function entryCatsHTML(e, en, i) {
+  const names = [...new Set([DEFAULT_CATEGORY, ...categoryList().map((c) => c.name), ...e.newCats, ...e.entries.map((x) => x.category)])];
+  return `<div class="entry-cats">
+    <label>카테고리</label>
     <div class="chips">
-      ${names.map((n) => `<button class="cat" data-act="pick-cat" data-cat="${esc(n)}" aria-pressed="${!e.catNew && e.category === n}">${esc(n)}</button>`).join('')}
-      <button class="cat ghost" data-act="new-cat" aria-pressed="${e.catNew}">+ 새 카테고리</button>
+      ${names.map((n) => `<button class="cat${e.popCat === n ? ' pop' : ''}" data-act="pick-cat" data-index="${i}" data-cat="${esc(n)}" aria-pressed="${en.category === n}">${esc(n)}</button>`).join('')}
+      ${e.catInput === i ? '' : `<button class="cat ghost" data-act="new-cat" data-index="${i}">+ 새 카테고리</button>`}
     </div>
-    ${e.catNew ? `<input class="text" id="cat-input" data-field="category" maxlength="30" placeholder="예: 여행, 일본어" value="${esc(e.newCatText)}">` : ''}
+    ${e.catInput === i ? `<div class="new-cat">
+      <input class="text" id="cat-input" data-index="${i}" maxlength="30" placeholder="예: 여행, 일본어" enterkeyhint="done">
+      <button class="btn small primary" data-act="add-cat" data-index="${i}">추가</button>
+      <button class="btn small" data-act="cancel-cat">취소</button>
+    </div>` : ''}
   </div>`;
 }
 
 function renderEditor() {
   const e = editor;
+  const top = $('#editor .sheet-body')?.scrollTop ?? 0;   // 다시 그려도 보던 위치 그대로
   $('#editor').innerHTML = `
     <header class="sheet-head">
       <button class="link start" data-act="editor-cancel">취소</button>
@@ -1190,11 +1209,11 @@ function renderEditor() {
     </header>
     <div class="sheet-body">
       ${scanEditorHTML(e)}
-      ${categoryEditorHTML(e)}
       ${e.entries.map((en, i) => entryHTML(e, en, i)).join('')}
       ${e.cardId ? '' : '<button class="btn wide add-entry" data-act="add-entry">+ 카드 하나 더</button>'}
       ${e.cardId ? '<button class="btn danger wide" data-act="editor-delete">이 표현 삭제</button>' : ''}
     </div>`;
+  $('#editor .sheet-body').scrollTop = top;
   updateSaveState();
 }
 
@@ -1208,8 +1227,7 @@ function entryState(e, en) {
 const fullEntries = (e) => e.entries.filter((en) => entryState(e, en) === 'full');
 function editorValid() {
   const e = editor;
-  return e && !e.loading && fullEntries(e).length > 0 && !e.entries.some((en) => entryState(e, en) === 'half')
-    && (!e.catNew || e.newCatText.trim().length > 0);
+  return e && !e.loading && fullEntries(e).length > 0 && !e.entries.some((en) => entryState(e, en) === 'half');
 }
 function updateSaveState() {
   const btn = $('#editor-save');
@@ -1315,15 +1333,31 @@ function useFound(e) {
   const picked = e.found.filter((_, i) => e.checked.has(i)).map((it) => ({ korText: it.meaning, engText: it.expression, note: it.note || '' }));
   if (!picked.length) return;
   if (e.cardId) {
-    e.entries[0] = picked[0];
+    e.entries[0] = { ...picked[0], category: e.entries[0].category };
   } else {
     for (const en of picked) {
       const slot = e.entries.findIndex((x) => entryState(e, x) === 'empty');
-      if (slot >= 0) e.entries[slot] = en; else e.entries.push(en);
+      if (slot >= 0) e.entries[slot] = { ...en, category: e.entries[slot].category };
+      else e.entries.push({ ...en, category: e.entries[e.entries.length - 1].category });
     }
   }
   e.found = null;
   e.checked = null;
+}
+/** 새 카테고리 칸의 이름을 목록에 칩으로 넣고 그 카드에 고름 (카드를 저장할 때 실제로 생김) */
+function addCategory() {
+  const e = editor;
+  const input = $('#cat-input');
+  if (!e || e.catInput === null || !input) return;
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const exists = categoryList().some((c) => c.name === name) || e.newCats.includes(name);
+  if (!exists) e.newCats.push(name);
+  e.entries[e.catInput].category = name;
+  e.popCat = exists ? null : name;
+  e.catInput = null;
+  renderEditor();
+  if (exists) toast(`'${name}' 카테고리를 골랐어요.`);
 }
 function newCard(fields) {
   const now = new Date();
@@ -1336,20 +1370,19 @@ function newCard(fields) {
 async function saveEditor() {
   if (!editorValid()) return;
   const e = editor;
-  const category = await keyForName(e.catNew ? e.newCatText.trim() : e.category);
   const list = fullEntries(e);
   if (e.cardId) {
     const card = cards.find((c) => c.id === e.cardId);
     const t = Date.now();
     Object.assign(card, {
       korText: list[0].korText.trim(), engText: list[0].engText.trim(),
-      korImages: e.korImages, engImages: e.engImages, category, contentAt: t, updatedAt: t,
+      korImages: e.korImages, engImages: e.engImages, category: await keyForName(list[0].category), contentAt: t, updatedAt: t,
     });
     await putCard(card);
   } else {
     const added = [];
     for (const en of list) {
-      const card = newCard({ korText: en.korText.trim(), engText: en.engText.trim(), korImages: [], engImages: [], category });
+      const card = newCard({ korText: en.korText.trim(), engText: en.engText.trim(), korImages: [], engImages: [], category: await keyForName(en.category) });
       await putCard(card);
       added.push(card);
     }
@@ -1995,8 +2028,10 @@ document.addEventListener('click', (ev) => {
     }
     case 'rename-cancel': ui.renaming = null; renderCards(); break;
     case 'rename-save': saveRename(); break;
-    case 'pick-cat': editor.category = el.dataset.cat; editor.catNew = false; renderEditor(); break;
-    case 'new-cat': editor.catNew = true; renderEditor(); $('#cat-input')?.focus(); break;
+    case 'pick-cat': editor.entries[Number(el.dataset.index)].category = el.dataset.cat; editor.popCat = null; renderEditor(); break;
+    case 'new-cat': editor.catInput = Number(el.dataset.index); editor.popCat = null; renderEditor(); $('#cat-input')?.focus(); break;
+    case 'add-cat': addCategory(); break;
+    case 'cancel-cat': editor.catInput = null; renderEditor(); break;
     case 'practice-reveal': practice.show = true; renderPractice(); break;
     case 'practice-answer': answerPractice(el.dataset.correct === '1').catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'add': openEditor(); break;
@@ -2023,7 +2058,7 @@ document.addEventListener('click', (ev) => {
       break;
     }
     case 'add-entry':
-      editor.entries.push({ korText: '', engText: '', note: '' });
+      editor.entries.push({ korText: '', engText: '', note: '', category: editor.entries[editor.entries.length - 1].category });
       renderEditor();
       $(`#kor-${editor.entries.length - 1}`)?.focus();
       break;
@@ -2050,11 +2085,6 @@ document.addEventListener('click', (ev) => {
 
 document.addEventListener('input', (ev) => {
   if (!editor) return;
-  if (ev.target.dataset.field === 'category') {
-    editor.newCatText = ev.target.value;
-    updateSaveState();
-    return;
-  }
   if (ev.target.tagName !== 'TEXTAREA') return;
   const en = editor.entries[Number(ev.target.dataset.index)];
   if (!en) return;
@@ -2064,6 +2094,11 @@ document.addEventListener('input', (ev) => {
 });
 
 document.addEventListener('keydown', (ev) => {
+  if (ev.target.id === 'cat-input' && ev.key === 'Enter' && !ev.isComposing) {
+    ev.preventDefault();
+    addCategory();
+    return;
+  }
   if (ev.target.id === 'rename-input' && ev.key === 'Enter' && !ev.isComposing) {
     ev.preventDefault();
     saveRename();

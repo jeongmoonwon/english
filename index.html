@@ -162,6 +162,9 @@ img { max-width: 100%; }
 .tab-dot.static { position: static; flex: none; }
 .back-btn { border: 0; background: var(--soft); color: var(--accent); width: 38px; height: 38px; border-radius: 50%; font-size: 26px; line-height: 34px; padding: 0; flex: none; }
 .mode-line { display: flex; align-items: center; gap: 6px; }
+.mode-remove { margin: -2px 0 6px; padding: 14px; border-radius: 16px; border: 1.5px solid var(--again); background: color-mix(in srgb, var(--again) 8%, var(--surface)); display: flex; flex-direction: column; gap: 8px; }
+.mode-remove p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink); }
+.btn.danger-fill { background: var(--again); color: #fff; }
 .mode-line .x-mini { border: 0; background: none; color: var(--muted); font-size: 16px; padding: 8px; }
 [data-act="mode-create"] small { display: block; font-size: 13px; font-weight: 500; opacity: .85; margin-top: 2px; }
 .mode-pill { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
@@ -639,7 +642,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -912,7 +915,8 @@ const modeLabel = (m = prefs.mode) => `${studyLabel(m)} · ${meaningLabel(m)}`;
 function modeList() {
   const counts = new Map();
   for (const c of cards) counts.set(modeOf(c), (counts.get(modeOf(c)) || 0) + 1);
-  const all = new Set([DEFAULT_MODE, ...counts.keys(), ...prefs.modes, prefs.mode]);
+  const all = new Set([...counts.keys(), ...prefs.modes, prefs.mode]);
+  if (!all.size) all.add(DEFAULT_MODE);   // 모두 지웠으면 영어 공부로 시작
   return [...all].map((m) => ({ mode: m, count: counts.get(m) || 0 }));
 }
 /** 지금 언어 모드의 카드 */
@@ -2261,7 +2265,7 @@ async function saveFeedbackToStore(data) {
 }
 function openSettingsPage(page, focusNew) {
   ui.settingsPage = page;
-  if (page === 'lang') ui.newMode = { target: null, native: 'ko' };
+  if (page === 'lang') { ui.newMode = { target: null, native: 'ko' }; ui.removingMode = null; }
   if (page === 'feedback' && !ui.feedback) ui.feedback = { kind: 'idea', text: '', email: '', sending: false };
   renderSettings();
   $('#settings-main').scrollTop = 0;
@@ -2339,8 +2343,9 @@ function renderSettingsPage(page) {
           <span class="txt"><b>${targetLang(mode).name}</b><small>${meaningLabel(mode)}</small></span>
           <span class="n">${count}장</span>
         </button>
-        ${count === 0 && mode !== DEFAULT_MODE ? `<button class="x-mini" data-act="mode-remove" data-mode="${mode}" aria-label="이 모드 지우기">✕</button>` : ''}
-      </div>`).join('')}
+        <button class="x-mini" data-act="mode-remove-ask" data-mode="${mode}" aria-label="이 모드 지우기">✕</button>
+      </div>
+      ${ui.removingMode === mode ? modeRemoveHTML(mode, count) : ''}`).join('')}
     </div>
     <div class="field" id="new-mode">
       <h3>새 언어 모드</h3>
@@ -2353,6 +2358,42 @@ function renderSettingsPage(page) {
     updateCreateMode();
   }
 }
+/** 언어 모드 지우기 확인: 카드가 있으면 함께 지워진다는 것과 백업 안내 */
+function modeRemoveHTML(mode, count) {
+  return `<div class="mode-remove" role="alert">
+    <b>${studyLabel(mode)} · ${meaningLabel(mode)}를 지울까요?</b>
+    ${count ? `<p>이 모드의 <b>카드 ${count}장</b>과 복습 기록도 함께 지워지고, 되돌릴 수 없어요. 로그인한 다른 기기에서도 지워져요.</p>
+      <p>필요하면 먼저 <b>설정 → 백업</b>에서 백업 파일을 만들어 두세요.</p>
+      <button class="btn small wide" data-act="settings-open" data-page="backup">💾 백업하러 가기</button>` : '<p>이 모드에는 카드가 없어요.</p>'}
+    <div class="grades two">
+      <button class="btn small" data-act="mode-remove-cancel">취소</button>
+      <button class="btn small danger-fill" data-act="mode-remove" data-mode="${mode}">${count ? `카드 ${count}장과 함께 삭제` : '삭제'}</button>
+    </div>
+  </div>`;
+}
+/** 언어 모드와 그 모드의 카드(복습 기록 포함)를 지움 */
+async function removeMode(mode) {
+  const targets = cards.filter((c) => modeOf(c) === mode);
+  const t = Date.now();
+  for (const c of targets) {
+    await removeCard(c.id);
+    syncMeta.deleted[c.id] = t;
+  }
+  const gone = new Set(targets.map((c) => c.id));
+  cards = cards.filter((c) => !gone.has(c.id));
+  ui.removingMode = null;
+  setPref('modes', prefs.modes.filter((m) => m !== mode));
+  if (prefs.mode === mode) {
+    const next = modeList().find((m) => m.mode !== mode)?.mode || DEFAULT_MODE;
+    setPref('mode', next);
+    ui.cardsCat = null; ui.reviewStarted = false; ui.reviewShow = false; ui.reviewCardId = null;
+  }
+  if (targets.length) markChanged();
+  renderAll();
+  renderSettings();
+  toast(`${studyLabel(mode)}를 지웠어요.${targets.length ? ` (카드 ${targets.length}장)` : ''}`);
+}
+
 /** 새 모드 고르기에서 지금 고른 언어 코드 (직접 입력이면 custom:이름, 아직이면 null) */
 function newModeCode(field) {
   const nm = ui.newMode;
@@ -2815,14 +2856,9 @@ document.addEventListener('click', (ev) => {
       renderSettings();
       break;
     }
-    case 'mode-remove': {
-      const mode = el.dataset.mode;
-      setPref('modes', prefs.modes.filter((m) => m !== mode));
-      if (prefs.mode === mode) switchMode(DEFAULT_MODE);
-      renderSettings();
-      toast(`${studyLabel(mode)}(${meaningLabel(mode)})를 지웠어요.`);
-      break;
-    }
+    case 'mode-remove-ask': ui.removingMode = el.dataset.mode; renderSettings(); break;
+    case 'mode-remove-cancel': ui.removingMode = null; renderSettings(); break;
+    case 'mode-remove': removeMode(el.dataset.mode).catch((err) => toast(`삭제하지 못했어요. (${errText(err)})`)); break;
     case 'mode-new': $('#mode-sheet').hidden = true; setTab('settings'); openSettingsPage('lang', true); break;
     case 'pref': {
       const raw = el.dataset.value;

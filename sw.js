@@ -1,6 +1,6 @@
 // 앱 파일을 기기에 저장해 오프라인에서도 열리게 합니다.
 // index.html 등을 수정해 다시 올릴 때는 아래 버전 숫자와 index.html의 APP_VERSION을 같이 올려 주세요.
-const CACHE = 'freedom-v34';
+const CACHE = 'freedom-v35';
 const ASSETS = [
   './',
   './index.html',

@@ -413,6 +413,10 @@ textarea.eng { font-family: var(--serif); }
 .seg-btn[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); color: var(--accent); }
 .seg-btn[aria-pressed="true"] small { color: var(--accent); }
 .setup-title { margin: 8px 0 14px; font-size: 20px; font-weight: 750; }
+/* 복습할 카드가 있을 때 위쪽의 복숭아 */
+.review-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 2px; }
+.review-hero .mascot { width: 104px; margin-bottom: 4px; animation: bob 2.4s ease-in-out infinite; }
+.review-hero .setup-title { margin: 6px 0 16px; }
 .setup-note { margin: -8px 0 16px; color: var(--muted); }
 .summary { flex: 1; min-width: 0; align-self: center; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* ---------- 기록(캘린더) ---------- */
@@ -529,7 +533,7 @@ textarea::placeholder { font-family: var(--sans); }
 
 @media (prefers-reduced-motion: reduce) {
   .reveal, .sheet { animation: none; }
-  :root[data-skin] .empty .mascot { animation: none; }
+  :root[data-skin] .empty .mascot, .review-hero .mascot { animation: none; }
   .spinner::before { animation-duration: 2.4s; }
   .spinner .mascot, .dots i, .rec-btn, .rec-dot { animation: none; }
 }
@@ -642,7 +646,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1199,7 +1203,7 @@ function renderReview() {
         <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p>`;
     }
     // 복습할 카드가 없으면 방향·카테고리는 자유 연습 화면에서 고르므로 여기서는 숨김
-    main.innerHTML = due.length ? head + setupHTML() : `<div class="empty">${MASCOT}${head}</div>`;
+    main.innerHTML = due.length ? `<div class="review-hero">${MASCOT}${head}</div>${setupHTML()}` : `<div class="empty">${MASCOT}${head}</div>`;
     bar.hidden = false;
     bar.innerHTML = due.length
       ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`

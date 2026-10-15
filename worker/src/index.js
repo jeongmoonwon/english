@@ -201,12 +201,16 @@ async function handleVoice(request, env, reply, key) {
   if (used >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
   await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
   try {
+    // 임시: 단계별 걸린 시간(ms)을 앱에 같이 보낸다
+    const t0 = Date.now();
     const heard = await env.AI.run(WHISPER, { audio, vad_filter: true });
     const transcript = (heard?.text || '').trim();
     if (!transcript) throw new NoSpeech();
     const language = heard?.transcription_info?.language || '';
+    const t1 = Date.now();
     const result = await askClaudeVoice(env, transcript, language, target, native);
-    return reply(200, { ...result, transcript, language, remaining: VOICE_LIMIT - used - 1, limit: VOICE_LIMIT });
+    const timing = { whisper: t1 - t0, claude: Date.now() - t1 };
+    return reply(200, { ...result, transcript, language, timing, remaining: VOICE_LIMIT - used - 1, limit: VOICE_LIMIT });
   } catch (err) {
     await env.USAGE.put(key, String(used), { expirationTtl: 2 * 86400 });
     if (err instanceof NoSpeech) return reply(422, { error: 'no_speech' });

@@ -300,13 +300,12 @@ async function handleTalkToken(request, env, reply, key, user) {
         instructions: talkInstructions(target, native, practice),
         audio: {
           input: {
-            // 휴대폰 스피커로 듣고 말하는 경우: 멀리서 들어오는 소리(스피커 소리·주변 소음) 줄이기
-            noise_reduction: { type: 'far_field' },
+            // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
+            noise_reduction: { type: 'near_field' },
             // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 어떤 말을 하는지 알려 줌
             transcription: { model: 'gpt-4o-mini-transcribe', prompt: `A ${native}-speaking learner talking with a tutor in ${target}. They mostly speak ${target}, sometimes ${native}.` },
-            // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음.
-            // 스피커 소리가 마이크로 다시 들어와 복숭아 말이 끊기지 않게 끼어들기는 끔 (앱도 말하는 동안 마이크를 끔)
-            turn_detection: { type: 'semantic_vad', eagerness: 'low', interrupt_response: false },
+            // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음
+            turn_detection: { type: 'semantic_vad', eagerness: 'low' },
           },
           output: { voice: REALTIME_VOICE },
         },

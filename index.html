@@ -403,6 +403,7 @@ textarea.eng { font-family: var(--serif); }
 }
 .cat small { margin-left: 5px; opacity: 0.7; }
 .cat[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.cat.dim:not([aria-pressed="true"]) { opacity: .45; }
 .cat.ghost { background: none; border-style: dashed; color: var(--muted); }
 .cat.ghost.danger { color: var(--again); }
 .cat-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
@@ -651,7 +652,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -995,7 +996,8 @@ function studyChanged() {
 }
 
 /** 복습·연습 시작 전 설정: 방향과 카테고리 */
-function setupHTML() {
+/** 방향·카테고리 고르기. dueByCat이 있으면(복습) 카테고리 옆에 지금 복습할 장수, 없으면(자유 연습) 전체 장수 */
+function setupHTML(dueByCat) {
   const cats = categoryList();
   const sel = new Set(selectedCats());
   const dirBtn = (key, hint) => `<button class="seg-btn" data-act="set-dir" data-dir="${key}" aria-pressed="${study.dir === key}">${DIRECTIONS[key].label}<small>${hint}</small></button>`;
@@ -1007,10 +1009,13 @@ function setupHTML() {
       </div>
     </div>
     ${cats.length > 1 ? `<div class="field">
-      <h3>카테고리<span>여러 개 고를 수 있어요</span></h3>
+      <h3>카테고리<span>${dueByCat ? '숫자는 지금 복습할 장수예요' : '여러 개 고를 수 있어요'}</span></h3>
       <div class="chips">
-        <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체</button>
-        ${cats.map((c) => `<button class="cat" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${c.count}</small></button>`).join('')}
+        <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체${dueByCat ? `<small>${[...dueByCat.values()].reduce((a, b) => a + b, 0)}</small>` : ''}</button>
+        ${cats.map((c) => {
+          const n = dueByCat ? dueByCat.get(c.name) || 0 : c.count;
+          return `<button class="cat${dueByCat && !n ? ' dim' : ''}" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${n}</small></button>`;
+        }).join('')}
       </div>
     </div>` : ''}`;
 }
@@ -1201,18 +1206,29 @@ function renderReview() {
   if (!ui.reviewStarted) {
     ui.reviewShow = false; ui.reviewCardId = null;
     filters.hidden = true;
-    let head = `<h2 class="setup-title">지금 복습할 카드 ${due.length}장</h2>`;
-    if (!due.length) {
-      const next = studyCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
-      head = `<h2 class="setup-title">지금 복습할 카드가 없어요</h2>
-        <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p>`;
+    // 카테고리와 상관없이 지금 복습할 카드 (카테고리별 장수)
+    const allDue = modeCards().filter((c) => toDate(c.srs.due) <= now);
+    if (!allDue.length) {
+      // 복습할 카드가 아예 없으면 방향·카테고리는 자유 연습 화면에서 고르므로 여기서는 숨김
+      const next = modeCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
+      main.innerHTML = `<div class="empty">${MASCOT}<h2 class="setup-title">지금 복습할 카드가 없어요</h2>
+        <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p></div>`;
+      bar.hidden = false;
+      bar.innerHTML = '<button class="btn wide" data-act="practice">자유 연습하기</button>';
+      return;
     }
-    // 복습할 카드가 없으면 방향·카테고리는 자유 연습 화면에서 고르므로 여기서는 숨김
-    main.innerHTML = due.length ? `<div class="review-hero">${MASCOT}${head}</div>${setupHTML()}` : `<div class="empty">${MASCOT}${head}</div>`;
+    const dueByCat = new Map();
+    for (const c of allDue) dueByCat.set(catOf(c), (dueByCat.get(catOf(c)) || 0) + 1);
+    // 고른 카테고리에만 없으면 화면은 그대로 두고 다른 카테고리를 고르게 함
+    const head = due.length
+      ? `<h2 class="setup-title">지금 복습할 카드 ${due.length}장</h2>`
+      : `<h2 class="setup-title">고른 카테고리에는 지금 복습할 카드가 없어요</h2>
+        <p class="setup-note">전체에는 ${allDue.length}장 있어요. 아래에서 다른 카테고리를 골라 보세요.</p>`;
+    main.innerHTML = `<div class="review-hero">${MASCOT}${head}</div>${setupHTML(dueByCat)}`;
     bar.hidden = false;
     bar.innerHTML = due.length
       ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`
-      : '<button class="btn wide" data-act="practice">자유 연습하기</button>';
+      : '<button class="btn primary wide" disabled>복습할 카드가 있는 카테고리를 골라 주세요</button>';
     return;
   }
 

@@ -350,6 +350,7 @@ textarea.eng { font-family: var(--serif); }
 .rec-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 6px; }
 .center-note { text-align: center; }
 /* 복숭아와 대화하기 */
+#talk-actions { display: flex; flex-direction: column; gap: 8px; }
 .talk-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 12px 0 4px; }
 .talk-hero .mascot { width: 120px; height: 116px; }
 .talk-hero.live .mascot { animation: talk-bob 1.1s ease-in-out infinite; }
@@ -575,13 +576,22 @@ textarea::placeholder { font-family: var(--sans); }
       <h1>복습</h1>
       <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
       <span class="count" id="due-count"></span>
-      <button class="pill" data-act="talk-open" id="talk-open">🍑 대화</button>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
       <button class="pill" data-act="review-quit" id="review-quit" hidden>그만하기</button>
     </header>
     <div class="filters" id="review-filters" hidden></div>
     <main class="scroll" id="review-main"></main>
     <div class="actions" id="review-actions" hidden></div>
+  </section>
+
+  <!-- 복숭아와 대화 -->
+  <section class="view" id="view-talk" hidden>
+    <header class="topbar">
+      <h1>대화</h1>
+      <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
+    </header>
+    <main class="scroll" id="talk-main"></main>
+    <div class="actions" id="talk-actions" hidden></div>
   </section>
 
   <!-- 카드 목록 -->
@@ -617,6 +627,10 @@ textarea::placeholder { font-family: var(--sans); }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="11" rx="2.5"/><path d="M7 18h10M9 21h6"/></svg>
       복습
     </button>
+    <button class="tab" role="tab" data-tab="talk" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a7.5 7.5 0 0 1-11 6.6L4 20l1.4-4.6A7.5 7.5 0 1 1 20 12z"/><path d="M9 11h.01M12 11h.01M15 11h.01"/></svg>
+      대화
+    </button>
     <button class="tab" role="tab" data-tab="cards" aria-selected="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
       카드
@@ -636,7 +650,6 @@ textarea::placeholder { font-family: var(--sans); }
 <div class="pop" id="mode-sheet" hidden></div>
 <div class="sheet" id="editor" hidden></div>
 <div class="sheet" id="practice" hidden></div>
-<div class="sheet" id="talk" hidden></div>
 <input type="file" id="scan-input" accept="image/*" multiple hidden>
 <input type="file" id="backup-input" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -673,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1212,7 +1225,6 @@ function renderReview() {
   if (!due.length) ui.reviewStarted = false;
   // 복습 중에는 '자유 연습' 대신 '그만하기'
   $('#practice-open').hidden = ui.reviewStarted;
-  $('#talk-open').hidden = ui.reviewStarted || !SCAN_URL;
   $('#review-quit').hidden = !ui.reviewStarted;
 
   if (!modeCards().length) {
@@ -1836,26 +1848,21 @@ const TALK_ERRORS = {
   503: '대화 기능을 아직 쓸 수 없어요. 잠시 뒤 다시 시도해 주세요.',
 };
 // status: idle | connecting | live | reviewing | result
-let talk = { status: 'idle' };
+let talk = { status: 'idle', turns: [] };
 const talkURL = (path) => `${SCAN_URL.replace(/\/$/, '')}${path}`;
 
-function openTalk() {
-  talk = { status: 'idle', turns: [], mode: prefs.mode };
-  $('#talk').hidden = false;
-  renderTalk();
-}
-function closeTalk() {
+/** 처음 화면으로 (대화 중이면 정리 없이 끊음) */
+function resetTalk() {
   if (talk.status === 'live' || talk.status === 'connecting') { if (!confirm('대화를 그만할까요? 정리 없이 끝나요.')) return; hangUp(); }
-  talk = { status: 'idle' };
-  $('#talk').hidden = true;
-  $('#talk').innerHTML = '';
+  talk = { status: 'idle', turns: [] };
+  renderTalk();
 }
 
 function renderTalk() {
-  const el = $('#talk');
-  if (el.hidden) return;
+  if (ui.tab !== 'talk') return;
   const t = talk;
-  const learn = targetLang(t.mode).name;
+  const mode = t.mode ?? prefs.mode;   // 대화 중에는 시작할 때의 언어 모드
+  const learn = targetLang(mode).name;
   const left = t.status === 'live' ? Math.max(0, TALK_MAX_SEC - Math.floor((Date.now() - t.start) / 1000)) : 0;
   // 내 말은 받아쓰기가 끝나서 글자가 있을 때만 보여 줌 (소음으로 잡힌 빈 차례는 안 보임)
   const shown = t.turns.filter((x) => x.role !== 'user' || x.text);
@@ -1878,7 +1885,7 @@ function renderTalk() {
     body = `<div class="scan-wait" role="status"><div class="spinner">${MASCOT}</div><b>대화를 정리하고 있어요<span class="dots"><i>.</i><i>.</i><i>.</i></span></b></div>${log}`;
   } else if (t.status === 'result') {
     const n = t.checked.size;
-    const learnName = targetLang(t.mode).name;
+    const learnName = learn;
     const group = (kind, title) => {
       const rows = t.items.map((it, i) => [it, i]).filter(([it]) => it.kind === kind);
       if (!rows.length) return '';
@@ -1896,15 +1903,15 @@ function renderTalk() {
       : `<div class="talk-hero">${MASCOT}<b>고칠 데가 없었어요! 👏</b><p>다음엔 조금 더 길게 이야기해 봐요.</p></div>${log}`;
     actions = t.items.length
       ? `<button class="btn primary wide" data-act="talk-cards" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 카드로 만들기` : '만들 표현을 골라 주세요'}</button>`
-      : '<button class="btn wide" data-act="talk-close">닫기</button>';
+      : '<button class="btn primary wide" data-act="talk-reset">새 대화</button>';
+    if (t.items.length) actions += '<button class="btn wide" data-act="talk-reset">카드 안 만들고 새 대화</button>';
   }
-  el.innerHTML = `<header class="sheet-head">
-      <button class="link start" data-act="talk-close">${t.status === 'live' ? '그만하기' : '닫기'}</button>
-      <h2>복숭아와 대화</h2><span class="head-note"></span>
-    </header>
-    <div class="sheet-body" id="talk-body">${body}</div>
-    ${actions ? `<div class="actions">${actions}</div>` : ''}`;
-  const b = $('#talk-body');
+  if (t.status === 'live') actions += '<button class="btn wide" data-act="talk-reset">그만하기 (정리 안 함)</button>';
+  $('#talk-main').innerHTML = body;
+  const bar = $('#talk-actions');
+  bar.hidden = !actions;
+  bar.innerHTML = actions;
+  const b = $('#talk-main');
   if (t.status === 'live' || t.status === 'reviewing') b.scrollTop = b.scrollHeight;
 }
 
@@ -1934,6 +1941,8 @@ function onTalkEvent(ev) {
 async function startTalk() {
   if (!user || talk.status !== 'idle') return;
   const t = talk;
+  t.mode = prefs.mode;
+  t.turns = [];
   // 아이폰: 소리 재생과 마이크는 버튼을 누른 그 순간에 준비해야 함
   t.audio = new Audio();
   t.audio.autoplay = true;
@@ -2034,9 +2043,8 @@ function talkToCards() {
   const t = talk;
   const items = t.items.filter((_, i) => t.checked.has(i)).map((it) => ({ expression: it.expression, meaning: it.meaning, note: it.note }));
   if (!items.length) return;
-  talk = { status: 'idle' };
-  $('#talk').hidden = true;
-  $('#talk').innerHTML = '';
+  talk = { status: 'idle', turns: [] };
+  renderTalk();
   openEditor();
   editor.source = 'talk';   // 저장하면 카드에 '대화에서' 표시
   editor.found = items;
@@ -3051,6 +3059,7 @@ function renderStats() {
 function setTab(tab) {
   ui.tab = tab;
   $('#view-review').hidden = tab !== 'review';
+  $('#view-talk').hidden = tab !== 'talk';
   $('#view-cards').hidden = tab !== 'cards';
   $('#view-stats').hidden = tab !== 'stats';
   $('#view-settings').hidden = tab !== 'settings';
@@ -3090,6 +3099,7 @@ function renderAll() {
   renderModePills();
   renderStats();
   renderReview();
+  renderTalk();
   renderCards();
 }
 
@@ -3109,8 +3119,7 @@ document.addEventListener('click', (ev) => {
     case 'grade': gradeCard(Number(el.dataset.r)).catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
-    case 'talk-open': openTalk(); break;
-    case 'talk-close': closeTalk(); break;
+    case 'talk-reset': resetTalk(); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
     case 'talk-cards': talkToCards(); break;

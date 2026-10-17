@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1921,8 +1921,25 @@ function talkTurn(id, role) {
   if (!x) { x = { id, role, text: '' }; talk.turns.push(x); }
   return x;
 }
+/** 복숭아가 말하는 동안은 마이크를 꺼서, 스피커 소리가 다시 들어가 혼자 대답하거나 말이 끊기지 않게 함 */
+function setSpeaking(on) {
+  const t = talk;
+  clearTimeout(t.micTimer);
+  if (on) {
+    t.speaking = true;
+    t.stream?.getAudioTracks().forEach((x) => { x.enabled = false; });
+  } else {
+    // 스피커에 남은 소리가 사라질 때까지 잠깐 기다렸다가 다시 켬
+    t.micTimer = setTimeout(() => {
+      t.speaking = false;
+      t.stream?.getAudioTracks().forEach((x) => { x.enabled = true; });
+      renderTalk();
+    }, 400);
+  }
+}
 function onTalkEvent(ev) {
   const t = talk;
+  if (ev.type?.startsWith('output_audio_buffer.')) t.audioEvents = true;   // 소리 재생 시작·끝 신호가 오면 그걸로 판단
   if (ev.type === 'input_audio_buffer.committed') talkTurn(ev.item_id, 'user');   // 순서만 잡아 둠 (글자가 오기 전엔 안 보임)
   else if (ev.type === 'conversation.item.input_audio_transcription.completed') {
     const text = (ev.transcript || '').trim();
@@ -1930,9 +1947,11 @@ function onTalkEvent(ev) {
     else t.turns = t.turns.filter((v) => v.id !== ev.item_id);   // 소음이었으면 지움
   }
   else if (ev.type === 'conversation.item.input_audio_transcription.failed') t.turns = t.turns.filter((v) => v.id !== ev.item_id);
-  else if (ev.type === 'response.output_audio_transcript.delta') { talkTurn(ev.item_id, 'assistant').text += ev.delta || ''; t.speaking = true; }
+  else if (ev.type === 'response.output_audio_transcript.delta') { talkTurn(ev.item_id, 'assistant').text += ev.delta || ''; setSpeaking(true); }
+  else if (ev.type === 'output_audio_buffer.started') setSpeaking(true);
+  else if (ev.type === 'output_audio_buffer.stopped' || ev.type === 'output_audio_buffer.cleared') setSpeaking(false);
   else if (ev.type === 'response.output_audio_transcript.done') talkTurn(ev.item_id, 'assistant').text = ev.transcript || '';
-  else if (ev.type === 'response.done') t.speaking = false;
+  else if (ev.type === 'response.done') { if (!t.audioEvents) setSpeaking(false); }
   else if (ev.type === 'error') { console.warn('talk error', ev.error); return; }
   else return;
   renderTalk();
@@ -2001,6 +2020,7 @@ async function startTalk() {
 }
 function hangUp(t = talk) {
   clearInterval(t.timer);
+  clearTimeout(t.micTimer);
   try { t.dc?.close(); } catch {}
   try { t.pc?.close(); } catch {}
   t.stream?.getTracks().forEach((x) => x.stop());

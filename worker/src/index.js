@@ -299,7 +299,14 @@ async function handleTalkToken(request, env, reply, key, user) {
         model: REALTIME_MODEL,
         instructions: talkInstructions(target, native, practice),
         audio: {
-          input: { transcription: { model: 'gpt-4o-mini-transcribe' }, turn_detection: { type: 'semantic_vad' } },
+          input: {
+            // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
+            noise_reduction: { type: 'near_field' },
+            // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 어떤 말을 하는지 알려 줌
+            transcription: { model: 'gpt-4o-mini-transcribe', prompt: `A Korean learner talking with a tutor in ${target}. They mostly speak ${target}, sometimes ${native}.` },
+            // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음
+            turn_detection: { type: 'semantic_vad', eagerness: 'low' },
+          },
           output: { voice: REALTIME_VOICE },
         },
       },
@@ -351,7 +358,7 @@ async function handleTalkReview(request, env, reply) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 8000,
-      system: `You review a short spoken conversation between a Korean learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain small recognition errors.
+      system: `You review a short spoken conversation between a Korean learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
 - For learner lines that were unnatural or wrong (or said in ${know}), make an item: "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
 - You may also add useful expressions Mooni used that the learner would benefit from; for those, "said" is an empty string.
 - "meaning": a natural ${know} translation of "expression". "note": 1-2 short Korean sentences in friendly 해요체 about what to fix or when to use it. Don't repeat the meaning.

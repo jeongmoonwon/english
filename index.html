@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1845,25 +1845,34 @@ async function sendAsk() {
 const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
 const TALK_MAX_SEC = 180;
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말, 이 기기에서도 한 번 받은 건 다시 안 받음)
-const voiceSamples = new Map();
-let samplePlayer = null;
+// 아이폰은 누른 순간에 시작한 소리만 허락하므로, 누르자마자 소리 장치(AudioContext)를 깨워 두고 파일이 오면 그걸로 틂
+const voiceSamples = new Map();   // 목소리 → 받아 둔 mp3 (ArrayBuffer)
+let sampleCtx = null, sampleNode = null, sampleSeq = 0;
 async function playVoiceSample(voice) {
   if (!user || !SCAN_URL) { toast('로그인하면 미리 들을 수 있어요.'); return; }
-  samplePlayer?.pause();
-  const player = samplePlayer = new Audio();   // 아이폰: 누른 순간에 만들어 둬야 소리가 남
+  const seq = ++sampleSeq;
+  try { sampleNode?.stop(); } catch {}
   try {
-    let url = voiceSamples.get(voice);
-    if (!url) {
+    sampleCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    const resumed = sampleCtx.resume();   // 누른 순간에 깨움 (기다리지 않고 바로 다음으로)
+    let data = voiceSamples.get(voice);
+    if (!data) {
       const res = await fetch(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}`), { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
-      if (!res.ok) throw new Error(res.status);
-      url = URL.createObjectURL(await res.blob());
-      voiceSamples.set(voice, url);
+      if (!res.ok) throw new Error(`서버 ${res.status}`);
+      data = await res.arrayBuffer();
+      voiceSamples.set(voice, data);
     }
-    if (samplePlayer !== player) return;   // 그 사이 다른 목소리를 누름
-    player.src = url;
-    await player.play();
+    await resumed;
+    // decodeAudioData는 받은 버퍼를 비워 버려서 복사본을 넘김
+    const buffer = await new Promise((ok, fail) => sampleCtx.decodeAudioData(data.slice(0), ok, fail));
+    if (seq !== sampleSeq) return;   // 그 사이 다른 목소리를 누름
+    const node = sampleCtx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(sampleCtx.destination);
+    node.start();
+    sampleNode = node;
   } catch (err) {
-    if (samplePlayer === player) toast(`목소리를 불러오지 못했어요. (${errText(err)})`);
+    if (seq === sampleSeq) toast(`목소리를 들려주지 못했어요. (${errText(err)})`);
   }
 }    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 const TALK_ERRORS = {
@@ -2688,7 +2697,7 @@ function renderSettingsPage(page) {
     </div>
     <div class="field">
       <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>
-      <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" placeholder="예: 문원, Moon" value="${esc(prefs.talkName)}">
+      <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" value="${esc(prefs.talkName)}">
       <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
     </div>`;
   } else if (page === 'backup') {

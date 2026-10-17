@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1842,25 +1842,17 @@ async function sendAsk() {
 }
 
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
-const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
+const TALK_VOICES = [['marin', 'Marin'], ['cedar', 'Cedar'], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
 const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
 // 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
 let samplePlayer = null;
 // r=2: 예전에 조각(Range) 응답 없이 받아 둔 파일이 브라우저에 남아 있어서 주소를 바꿔 새로 받게 함
-// 임시: 어디서 멈추는지 보려고 미리 듣기 버튼 아래에 진행 상황을 글자로 보여 줌
-function sampleStatus(text) { const el = $('#sample-status'); if (el) el.textContent = text; }
 function playVoiceSample(voice) {
-  sampleStatus(`① 눌림 (${voice})`);
-  if (!SCAN_URL) { sampleStatus('주소 없음'); return; }
+  if (!SCAN_URL) return;
   samplePlayer?.pause();
   const player = samplePlayer = new Audio(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}&r=2`));
-  sampleStatus('② 파일 요청');
-  player.onloadedmetadata = () => sampleStatus(`③ 파일 받음 (${player.duration.toFixed(1)}초)`);
-  player.onplaying = () => sampleStatus('④ 재생 중 — 소리가 안 들리면 볼륨을 확인해 주세요');
-  player.onended = () => sampleStatus('⑤ 재생 끝');
-  player.onstalled = () => sampleStatus('파일 받는 중 멈춤');
-  const fail = (why) => { sampleStatus(`실패: ${why}`); if (samplePlayer === player) toast(`목소리를 들려주지 못했어요. (${why})`); };
+  const fail = (why) => { if (samplePlayer === player) toast(`목소리를 들려주지 못했어요. (${why})`); };
   // 파일을 못 열면 play()가 끝나지 않고 멈춰 있을 수 있어서 오류와 시간 초과도 따로 봄
   player.onerror = () => fail(`파일 오류 ${player.error?.code ?? ''}`.trim());
   const late = setTimeout(() => { if (player.paused && player.currentTime === 0) fail('응답 없음'); }, 8000);
@@ -2684,10 +2676,8 @@ function renderSettingsPage(page) {
   } else if (page === 'talk') {
     box.innerHTML = `<div class="field">
       <label class="sub">복숭아 목소리</label>
-      <div class="chips">${TALK_VOICES.map(([v, label, rec]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}${rec ? '<small>추천</small>' : ''}</button>`).join('')}</div>
-      <button class="btn wide" data-act="talk-sample">🔊 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} 미리 듣기</button>
-      <p class="sync-line" id="sample-status" aria-live="polite"></p>
-      <p class="sync-line">목소리를 누르면 바로 들려줘요. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
+      <div class="chips">${TALK_VOICES.map(([v, label]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}</button>`).join('')}</div>
+      <p class="sync-line">목소리를 누르면 바로 들려줘요. 다음 대화부터 바뀌어요.</p>
     </div>
     <div class="field">
       <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>
@@ -3160,7 +3150,6 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
-    case 'talk-sample': playVoiceSample(prefs.talkVoice); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
     case 'talk-cards': talkToCards(); break;

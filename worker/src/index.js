@@ -270,7 +270,7 @@ function talkInstructions(learn, know, practice) {
   const list = practice.length
     ? `\nThey are currently reviewing these expressions. When it fits naturally, steer the conversation so they get a chance to use one (never list them, quiz them, or say you are doing this):\n${practice.map((p) => `- ${p}`).join('\n')}`
     : '';
-  return `You are Mooni, a cheerful little peach character and the learner's conversation buddy. The learner is a Korean speaker practicing ${learn}.
+  return `You are Mooni, a cheerful little peach character and the learner's conversation buddy. The learner is a ${know} speaker practicing ${learn}.
 - Speak only ${learn}, a little slower than normal, with simple everyday words. Keep every turn short: one or two sentences, usually ending with one easy question.
 - Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
 - Keep it flowing with follow-up questions about what they said. Be curious, warm, and a bit playful.
@@ -303,7 +303,7 @@ async function handleTalkToken(request, env, reply, key, user) {
             // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
             noise_reduction: { type: 'near_field' },
             // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 어떤 말을 하는지 알려 줌
-            transcription: { model: 'gpt-4o-mini-transcribe', prompt: `A Korean learner talking with a tutor in ${target}. They mostly speak ${target}, sometimes ${native}.` },
+            transcription: { model: 'gpt-4o-mini-transcribe', prompt: `A ${native}-speaking learner talking with a tutor in ${target}. They mostly speak ${target}, sometimes ${native}.` },
             // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음
             turn_detection: { type: 'semantic_vad', eagerness: 'low' },
           },
@@ -358,7 +358,7 @@ async function handleTalkReview(request, env, reply) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 8000,
-      system: `You review a short spoken conversation between a Korean learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
+      system: `You review a short spoken conversation between a ${know}-speaking learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
 - For learner lines that were unnatural or wrong (or said in ${know}), make an item: "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
 - You may also add useful expressions Mooni used that the learner would benefit from; for those, "said" is an empty string.
 - "meaning": a natural ${know} translation of "expression". "note": 1-2 short Korean sentences in friendly 해요체 about what to fix or when to use it. Don't repeat the meaning.

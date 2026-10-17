@@ -10,6 +10,8 @@ const MAX_IMAGES = 5;
 const VOICE_LIMIT = 10;                      // 1인당 하루 말해서 넣기 횟수
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;     // 녹음 한 번 (앱은 30초에서 멈춤)
 const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
+const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
+const MAX_ASK_CHARS = 300;
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 // 앱의 언어 모드에 쓰는 언어 (코드 → 영어 이름)
@@ -73,8 +75,9 @@ export async function handle(request, env, deps = {}) {
   const path = new URL(request.url).pathname;
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
+  const isAsk = request.method === 'POST' && path === '/ask';
   const isFeedback = request.method === 'POST' && path === '/feedback';
-  if (!isUsage && !isVoice && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  if (!isUsage && !isVoice && !isAsk && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
   if (isFeedback) return handleFeedback(request, env, reply, deps);
 
@@ -89,17 +92,21 @@ export async function handle(request, env, deps = {}) {
   const day = koreaDay(deps.now?.() ?? Date.now());
   const key = `use:${user.sub}:${day}`;
   const voiceKey = `voice:${user.sub}:${day}`;
+  const askKey = `ask:${user.sub}:${day}`;
 
   // 오늘 사용량만 알려 주기 (설정 화면). 사진은 예전 앱을 위해 맨 위에 그대로
   if (isUsage) {
     const used = Number(await env.USAGE.get(key)) || 0;
     const vUsed = Number(await env.USAGE.get(voiceKey)) || 0;
+    const aUsed = Number(await env.USAGE.get(askKey)) || 0;
     return reply(200, {
       used, remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT,
       voice: { used: vUsed, remaining: Math.max(0, VOICE_LIMIT - vUsed), limit: VOICE_LIMIT },
+      ask: { used: aUsed, remaining: Math.max(0, ASK_LIMIT - aUsed), limit: ASK_LIMIT },
     });
   }
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
+  if (isAsk) return handleAsk(request, env, reply, askKey);
 
   // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
   let body;
@@ -208,7 +215,7 @@ async function handleVoice(request, env, reply, key) {
     if (!transcript) throw new NoSpeech();
     const language = heard?.transcription_info?.language || '';
     const t1 = Date.now();
-    const result = await askClaudeVoice(env, transcript, language, target, native);
+    const result = await askClaudeExpression(env, { transcript, language }, target, native);
     const timing = { whisper: t1 - t0, claude: Date.now() - t1 };
     return reply(200, { ...result, transcript, language, timing, remaining: VOICE_LIMIT - used - 1, limit: VOICE_LIMIT });
   } catch (err) {
@@ -217,6 +224,31 @@ async function handleVoice(request, env, reply, key) {
     if (err instanceof Refusal) return reply(422, { error: 'refused' });
     if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) return reply(503, { error: 'busy' });
     console.error('voice failed', err);
+    return reply(502, { error: 'upstream' });
+  }
+}
+
+// ----- 글로 물어보기: 궁금한 표현(배울 언어) 또는 하고 싶은 말(편한 언어) → Claude(표현·뜻·설명) -----
+async function handleAsk(request, env, reply, key) {
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  if (!text) return reply(400, { error: 'text' });
+  if (text.length > MAX_ASK_CHARS) return reply(413, { error: 'too_long' });
+  const target = langName(body.target) || 'English';
+  const native = langName(body.native) || 'Korean';
+
+  const used = Number(await env.USAGE.get(key)) || 0;
+  if (used >= ASK_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: ASK_LIMIT });
+  await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+  try {
+    const result = await askClaudeExpression(env, { typed: text }, target, native);
+    return reply(200, { ...result, remaining: ASK_LIMIT - used - 1, limit: ASK_LIMIT });
+  } catch (err) {
+    await env.USAGE.put(key, String(used), { expirationTtl: 2 * 86400 });
+    if (err instanceof Refusal) return reply(422, { error: 'refused' });
+    if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) return reply(503, { error: 'busy' });
+    console.error('ask failed', err);
     return reply(502, { error: 'upstream' });
   }
 }
@@ -243,20 +275,27 @@ const VOICE_SCHEMA = {
   additionalProperties: false,
 };
 
-async function askClaudeVoice(env, transcript, language, target, native) {
+/** 말하기(transcript, language) 또는 글로 물어보기(typed) → 카드 표현·뜻·설명 */
+async function askClaudeExpression(env, { transcript, language, typed }, target, native) {
   const learn = target, know = native;   // 언어 이름
+  const intro = typed
+    ? `You help a Korean learner make flashcards from something they typed. They are studying ${learn}, and card meanings are written in ${know}.
+They typed either a ${learn} expression whose meaning they want to know, or something in ${know} (or another language) that they want to be able to say in ${learn}. It may also be phrased as a question about it (for example "how do I say ... casually?"); then make the card for the expression they are asking about.
+- If they typed ${learn}: "expression" is what they typed, cleaned up (fix typos and punctuation, keep their wording), "meaning" is a natural ${know} translation that a native ${know} speaker would actually say, and "spoken" is "expression".
+- If they typed ${know} (or any other language): "meaning" is what they typed, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation; follow any tone they asked for), and "spoken" is "meaning".`
+    : `You help a Korean learner make flashcards from something they said out loud. They are studying ${learn}, and card meanings are written in ${know}.
+You get a speech-recognition transcript (it may contain small recognition errors) and the language the recognizer detected.
+- If they spoke ${learn}: "expression" is what they said, cleaned up (fix obvious recognition errors and punctuation, keep their wording), "meaning" is a natural ${know} translation that a native ${know} speaker would actually say, and "spoken" is "expression".
+- If they spoke ${know} (or any other language): "meaning" is what they said, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation), and "spoken" is "meaning".`;
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 8000,
-    system: `You help a Korean learner make flashcards from something they said out loud. They are studying ${learn}, and card meanings are written in ${know}.
-You get a speech-recognition transcript (it may contain small recognition errors) and the language the recognizer detected.
-- If they spoke ${learn}: "expression" is what they said, cleaned up (fix obvious recognition errors and punctuation, keep their wording), "meaning" is a natural ${know} translation that a native ${know} speaker would actually say, and "spoken" is "expression".
-- If they spoke ${know} (or any other language): "meaning" is what they said, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation), and "spoken" is "meaning".
+    system: `${intro}
 - "note": 1-2 short Korean sentences in friendly 해요체 that help them remember the expression: nuance, when people use it, or a tricky word. Don't repeat the meaning.
-- Usually return one item. Only if they clearly said several separate sentences or phrases, return one item for each (at most 3).`,
+- Usually return one item. Only if they clearly gave several separate sentences or phrases, return one item for each (at most 3).`,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: VOICE_SCHEMA } },
-    messages: [{ role: 'user', content: `Detected language: ${language || 'unknown'}\nTranscript: ${transcript}` }],
+    messages: [{ role: 'user', content: typed ? `Typed: ${typed}` : `Detected language: ${language || 'unknown'}\nTranscript: ${transcript}` }],
   });
   if (response.stop_reason === 'refusal') throw new Refusal();
   if (response.stop_reason === 'max_tokens') throw new Error('max_tokens');

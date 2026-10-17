@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1847,11 +1847,17 @@ const TALK_MAX_SEC = 180;
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
 // 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
 let samplePlayer = null;
+// r=2: 예전에 조각(Range) 응답 없이 받아 둔 파일이 브라우저에 남아 있어서 주소를 바꿔 새로 받게 함
 function playVoiceSample(voice) {
   if (!SCAN_URL) return;
   samplePlayer?.pause();
-  const player = samplePlayer = new Audio(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}`));
-  player.play().catch((err) => { if (samplePlayer === player) toast(`목소리를 들려주지 못했어요. (${errText(err)})`); });
+  const player = samplePlayer = new Audio(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}&r=2`));
+  const fail = (why) => { if (samplePlayer === player) toast(`목소리를 들려주지 못했어요. (${why})`); };
+  // 파일을 못 열면 play()가 끝나지 않고 멈춰 있을 수 있어서 오류와 시간 초과도 따로 봄
+  player.onerror = () => fail(`파일 오류 ${player.error?.code ?? ''}`.trim());
+  const late = setTimeout(() => { if (player.paused && player.currentTime === 0) fail('응답 없음'); }, 8000);
+  player.onplaying = () => clearTimeout(late);
+  player.play().catch((err) => { clearTimeout(late); fail(errText(err)); });
 }
 
 function renderTalk() {

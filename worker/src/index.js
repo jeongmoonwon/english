@@ -9,7 +9,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;     // Claude 이미지 한 장 한도
 const MAX_IMAGES = 5;
 const VOICE_LIMIT = 10;                      // 1인당 하루 말해서 넣기 횟수
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;     // 녹음 한 번 (앱은 30초에서 멈춤)
-const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
+const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // OpenAI 키가 없을 때만 씀 (느림)
+const TRANSCRIBE = 'gpt-4o-mini-transcribe';            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
 const MAX_ASK_CHARS = 300;
 const TALK_LIMIT = 10;                       // 1인당 하루 복숭아와 대화하기 횟수 (한 번에 3분, 앱에서 멈춤)
@@ -222,10 +223,10 @@ async function handleVoice(request, env, reply, key) {
   try {
     // 임시: 단계별 걸린 시간(ms)을 앱에 같이 보낸다
     const t0 = Date.now();
-    const heard = await env.AI.run(WHISPER, { audio, vad_filter: true });
-    const transcript = (heard?.text || '').trim();
+    const { transcript, language } = env.OPENAI_API_KEY
+      ? await transcribeOpenAI(env, audio, body.mediaType, target, native)
+      : await transcribeWhisper(env, audio);
     if (!transcript) throw new NoSpeech();
-    const language = heard?.transcription_info?.language || '';
     const t1 = Date.now();
     const result = await askClaudeExpression(env, { transcript, language }, target, native);
     const timing = { whisper: t1 - t0, claude: Date.now() - t1 };
@@ -422,6 +423,32 @@ async function handleTalkReview(request, env, reply) {
     console.error('talk review failed', err);
     return reply(502, { error: 'upstream' });
   }
+}
+
+/** OpenAI 받아쓰기: 녹음(base64) → 글자. 언어는 알려 주지 않으므로 Claude가 글자를 보고 판단 */
+async function transcribeOpenAI(env, audio, mediaType, target, native) {
+  const type = typeof mediaType === 'string' ? mediaType.split(';')[0] : '';
+  const ext = type === 'audio/webm' ? 'webm' : type === 'audio/ogg' ? 'ogg' : type === 'audio/wav' ? 'wav' : type === 'audio/mpeg' ? 'mp3' : 'mp4';
+  const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: type || 'audio/mp4' }), `voice.${ext}`);
+  form.append('model', TRANSCRIBE);
+  form.append('prompt', `A ${native}-speaking learner of ${target} saying a word, phrase or sentence in ${target} or ${native}.`);
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+    body: form,
+  });
+  if (!res.ok) {
+    console.error('transcribe failed', res.status, (await res.text().catch(() => '')).slice(0, 300));
+    throw new Error(`transcribe ${res.status}`);
+  }
+  const data = await res.json();
+  return { transcript: (data?.text || '').trim(), language: '' };
+}
+async function transcribeWhisper(env, audio) {
+  const heard = await env.AI.run(WHISPER, { audio, vad_filter: true });
+  return { transcript: (heard?.text || '').trim(), language: heard?.transcription_info?.language || '' };
 }
 
 const VOICE_SCHEMA = {

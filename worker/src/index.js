@@ -33,7 +33,7 @@ function langName(code) {
 /** 지시문. target: 배울 언어 이름(없으면 한국어가 아닌 모든 외국어), meaningLang: 뜻을 쓸 언어 이름 */
 function systemPrompt(target, meaningLang) {
   const learn = target ? `${target}` : 'foreign-language (any language that is not Korean)';
-  return `You help a Korean learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with text.
+  return `You help a language learner turn screenshots into flashcards. The screenshots are usually videos with subtitles, but can be any image with text.
 The learner is studying ${target || 'foreign languages'}${meaningLang !== 'Korean' ? ` and wants the meanings in ${meaningLang}` : ''}.
 
 There may be one or several screenshots. Go through each one and list ${learn} expressions for flashcards, in the order of the screenshots:
@@ -221,16 +221,12 @@ async function handleVoice(request, env, reply, key) {
   if (used >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
   await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
   try {
-    // 임시: 단계별 걸린 시간(ms)을 앱에 같이 보낸다
-    const t0 = Date.now();
     const { transcript, language } = env.OPENAI_API_KEY
       ? await transcribeOpenAI(env, audio, body.mediaType, target, native)
       : await transcribeWhisper(env, audio);
     if (!transcript) throw new NoSpeech();
-    const t1 = Date.now();
     const result = await askClaudeExpression(env, { transcript, language }, target, native);
-    const timing = { whisper: t1 - t0, claude: Date.now() - t1 };
-    return reply(200, { ...result, transcript, language, timing, remaining: VOICE_LIMIT - used - 1, limit: VOICE_LIMIT });
+    return reply(200, { ...result, transcript, language, remaining: VOICE_LIMIT - used - 1, limit: VOICE_LIMIT });
   } catch (err) {
     await env.USAGE.put(key, String(used), { expirationTtl: 2 * 86400 });
     if (err instanceof NoSpeech) return reply(422, { error: 'no_speech' });
@@ -477,11 +473,11 @@ const VOICE_SCHEMA = {
 async function askClaudeExpression(env, { transcript, language, typed }, target, native) {
   const learn = target, know = native;   // 언어 이름
   const intro = typed
-    ? `You help a Korean learner make flashcards from something they typed. They are studying ${learn}, and card meanings are written in ${know}.
+    ? `You help a language learner make flashcards from something they typed. They are studying ${learn}, and card meanings are written in ${know}.
 They typed either a ${learn} expression whose meaning they want to know, or something in ${know} (or another language) that they want to be able to say in ${learn}. It may also be phrased as a question about it (for example "how do I say ... casually?"); then make the card for the expression they are asking about.
 - If they typed ${learn}: "expression" is what they typed, cleaned up (fix typos and punctuation, keep their wording), "meaning" is a natural ${know} translation that a native ${know} speaker would actually say, and "spoken" is "expression".
 - If they typed ${know} (or any other language): "meaning" is what they typed, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation; follow any tone they asked for), and "spoken" is "meaning".`
-    : `You help a Korean learner make flashcards from something they said out loud. They are studying ${learn}, and card meanings are written in ${know}.
+    : `You help a language learner make flashcards from something they said out loud. They are studying ${learn}, and card meanings are written in ${know}.
 You get a speech-recognition transcript (it may contain small recognition errors) and the language the recognizer detected.
 - If they spoke ${learn}: "expression" is what they said, cleaned up (fix obvious recognition errors and punctuation, keep their wording), "meaning" is a natural ${know} translation that a native ${know} speaker would actually say, and "spoken" is "expression".
 - If they spoke ${know} (or any other language): "meaning" is what they said, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation), and "spoken" is "meaning".`;

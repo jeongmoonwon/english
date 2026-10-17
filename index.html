@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1733,7 +1733,7 @@ async function sendVoice(e, blob) {
     if (el) el.textContent = Math.floor((Date.now() - e.scanStart) / 1000);
   }, 1000);
   setScanStage(e, 1);
-  let message = null, took = '';
+  let message = null;
   try {
     const { target, native } = modeParts(e.mode);
     const body = JSON.stringify({ audio: await blobBase64(blob), mediaType: blob.type, target, native });
@@ -1749,9 +1749,6 @@ async function sendVoice(e, blob) {
       clearTimeout(reading);
     }
     const data = await res.json().catch(() => ({}));
-    // 임시: 어디서 오래 걸리는지 알림에 같이 보여준다 (전체 / 음성인식 / 뜻 찾기, 나머지는 업로드 등)
-    const sec = (ms) => (ms / 1000).toFixed(1);
-    if (data.timing) took = ` (전체 ${sec(Date.now() - e.scanStart)}초 · 음성인식 ${sec(data.timing.whisper)}초 · 뜻 찾기 ${sec(data.timing.claude)}초)`;
     if (typeof data.remaining === 'number') voiceRemaining = data.remaining;
     if (!res.ok) throw new ScanError(VOICE_ERRORS[res.status] || '말한 내용을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
     if (editor !== e) return;
@@ -1771,7 +1768,7 @@ async function sendVoice(e, blob) {
     e.busy = null;
     if (editor === e) renderEditor();
   }
-  if (message || took) toast((message || '표현을 찾았어요.') + took);
+  if (message) toast(message);
 }
 
 // ---------- 글로 물어보기: 궁금한 표현이나 하고 싶은 말을 적으면 Worker(Claude)가 나머지 칸을 채움 ----------

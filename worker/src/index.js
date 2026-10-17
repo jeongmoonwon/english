@@ -12,6 +12,9 @@ const MAX_AUDIO_BYTES = 4 * 1024 * 1024;     // 녹음 한 번 (앱은 30초에�
 const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
 const MAX_ASK_CHARS = 300;
+const TALK_LIMIT = 5;                        // 1인당 하루 복숭아와 대화하기 횟수 (한 번에 3분, 앱에서 멈춤)
+const REALTIME_MODEL = 'gpt-realtime-2.1';   // OpenAI 실시간 음성 대화
+const REALTIME_VOICE = 'marin';
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 // 앱의 언어 모드에 쓰는 언어 (코드 → 영어 이름)
@@ -76,8 +79,9 @@ export async function handle(request, env, deps = {}) {
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
   const isAsk = request.method === 'POST' && path === '/ask';
+  const isTalk = request.method === 'POST' && (path === '/talk/token' || path === '/talk/review');
   const isFeedback = request.method === 'POST' && path === '/feedback';
-  if (!isUsage && !isVoice && !isAsk && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  if (!isUsage && !isVoice && !isAsk && !isTalk && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
   if (isFeedback) return handleFeedback(request, env, reply, deps);
 
@@ -93,20 +97,25 @@ export async function handle(request, env, deps = {}) {
   const key = `use:${user.sub}:${day}`;
   const voiceKey = `voice:${user.sub}:${day}`;
   const askKey = `ask:${user.sub}:${day}`;
+  const talkKey = `talk:${user.sub}:${day}`;
 
   // 오늘 사용량만 알려 주기 (설정 화면). 사진은 예전 앱을 위해 맨 위에 그대로
   if (isUsage) {
     const used = Number(await env.USAGE.get(key)) || 0;
     const vUsed = Number(await env.USAGE.get(voiceKey)) || 0;
     const aUsed = Number(await env.USAGE.get(askKey)) || 0;
+    const tUsed = Number(await env.USAGE.get(talkKey)) || 0;
     return reply(200, {
       used, remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT,
       voice: { used: vUsed, remaining: Math.max(0, VOICE_LIMIT - vUsed), limit: VOICE_LIMIT },
       ask: { used: aUsed, remaining: Math.max(0, ASK_LIMIT - aUsed), limit: ASK_LIMIT },
+      talk: { used: tUsed, remaining: Math.max(0, TALK_LIMIT - tUsed), limit: TALK_LIMIT },
     });
   }
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
   if (isAsk) return handleAsk(request, env, reply, askKey);
+  if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
+  if (path === '/talk/review') return handleTalkReview(request, env, reply);
 
   // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
   let body;
@@ -249,6 +258,119 @@ async function handleAsk(request, env, reply, key) {
     if (err instanceof Refusal) return reply(422, { error: 'refused' });
     if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) return reply(503, { error: 'busy' });
     console.error('ask failed', err);
+    return reply(502, { error: 'upstream' });
+  }
+}
+
+// ----- 복숭아와 대화하기: OpenAI 실시간 음성(브라우저가 직접 연결)용 임시 키 발급 → 끝나면 Claude가 정리 -----
+// OpenAI 키(OPENAI_API_KEY)는 여기에만 있고, 앱은 몇 분짜리 임시 키만 받음
+const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+function talkInstructions(learn, know, practice) {
+  const list = practice.length
+    ? `\nThey are currently reviewing these expressions. When it fits naturally, steer the conversation so they get a chance to use one (never list them, quiz them, or say you are doing this):\n${practice.map((p) => `- ${p}`).join('\n')}`
+    : '';
+  return `You are Mooni, a cheerful little peach character and the learner's conversation buddy. The learner is a Korean speaker practicing ${learn}.
+- Speak only ${learn}, a little slower than normal, with simple everyday words. Keep every turn short: one or two sentences, usually ending with one easy question.
+- Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
+- Keep it flowing with follow-up questions about what they said. Be curious, warm, and a bit playful.
+- Do not correct their mistakes during the conversation; a summary with corrections comes afterwards. Just respond to what they meant.
+- If they get stuck or speak ${know}, say the ${learn} phrase for what they wanted to say, and encourage them to try it.${list}`;
+}
+
+async function handleTalkToken(request, env, reply, key, user) {
+  if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const target = langName(body?.target) || 'English';
+  const native = langName(body?.native) || 'Korean';
+  const practice = (Array.isArray(body?.practice) ? body.practice : []).map((p) => clean(p, 80)).filter(Boolean).slice(0, 5);
+
+  const used = Number(await env.USAGE.get(key)) || 0;
+  if (used >= TALK_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: TALK_LIMIT });
+  // OpenAI에 남길 사용자 구분값 (Firebase 아이디를 그대로 보내지 않고 해시)
+  const hashed = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`mooni:${user.sub}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json', 'OpenAI-Safety-Identifier': hashed },
+    body: JSON.stringify({
+      session: {
+        type: 'realtime',
+        model: REALTIME_MODEL,
+        instructions: talkInstructions(target, native, practice),
+        audio: {
+          input: { transcription: { model: 'gpt-4o-mini-transcribe' }, turn_detection: { type: 'semantic_vad' } },
+          output: { voice: REALTIME_VOICE },
+        },
+      },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.value) {
+    console.error('talk token failed', res.status, JSON.stringify(data).slice(0, 500));
+    return reply(res.status === 429 ? 503 : 502, { error: 'upstream' });
+  }
+  await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+  return reply(200, { value: data.value, remaining: TALK_LIMIT - used - 1, limit: TALK_LIMIT });
+}
+
+const TALK_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          said: { type: 'string' },
+          expression: { type: 'string' },
+          meaning: { type: 'string' },
+          note: { type: 'string' },
+        },
+        required: ['said', 'expression', 'meaning', 'note'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['items'],
+  additionalProperties: false,
+};
+
+async function handleTalkReview(request, env, reply) {
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const turns = (Array.isArray(body?.turns) ? body.turns : [])
+    .map((t) => ({ role: t?.role === 'user' ? 'Learner' : 'Mooni', text: clean(t?.text, 600) }))
+    .filter((t) => t.text)
+    .slice(-40);
+  if (!turns.some((t) => t.role === 'Learner')) return reply(400, { error: 'turns' });
+  const learn = langName(body.target) || 'English';
+  const know = langName(body.native) || 'Korean';
+  try {
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}) });
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 8000,
+      system: `You review a short spoken conversation between a Korean learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain small recognition errors.
+- For learner lines that were unnatural or wrong (or said in ${know}), make an item: "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
+- You may also add useful expressions Mooni used that the learner would benefit from; for those, "said" is an empty string.
+- "meaning": a natural ${know} translation of "expression". "note": 1-2 short Korean sentences in friendly 해요체 about what to fix or when to use it. Don't repeat the meaning.
+- Prefer phrases they can reuse over single easy words. Skip lines that were already natural. At most 6 items, most useful first.`,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: TALK_SCHEMA } },
+      messages: [{ role: 'user', content: turns.map((t) => `${t.role}: ${t.text}`).join('\n') }],
+    });
+    if (response.stop_reason === 'refusal') throw new Refusal();
+    if (response.stop_reason === 'max_tokens') throw new Error('max_tokens');
+    const out = JSON.parse(response.content.find((b) => b.type === 'text')?.text);
+    const items = out.items
+      .map((it) => ({ said: it.said.trim(), expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim() }))
+      .filter((it) => it.expression && it.meaning)
+      .slice(0, 6);
+    return reply(200, { items });
+  } catch (err) {
+    if (err instanceof Refusal) return reply(422, { error: 'refused' });
+    if (err instanceof Anthropic.RateLimitError || err instanceof Anthropic.InternalServerError) return reply(503, { error: 'busy' });
+    console.error('talk review failed', err);
     return reply(502, { error: 'upstream' });
   }
 }

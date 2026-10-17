@@ -329,12 +329,13 @@ const TALK_SCHEMA = {
       items: {
         type: 'object',
         properties: {
+          kind: { type: 'string', enum: ['fix', 'translate', 'mooni'] },
           said: { type: 'string' },
           expression: { type: 'string' },
           meaning: { type: 'string' },
           note: { type: 'string' },
         },
-        required: ['said', 'expression', 'meaning', 'note'],
+        required: ['kind', 'said', 'expression', 'meaning', 'note'],
         additionalProperties: false,
       },
     },
@@ -359,8 +360,9 @@ async function handleTalkReview(request, env, reply) {
       model: MODEL,
       max_tokens: 8000,
       system: `You review a short spoken conversation between a ${know}-speaking learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
-- For learner lines that were unnatural or wrong (or said in ${know}), make an item: "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
-- You may also add useful expressions Mooni used that the learner would benefit from; for those, "said" is an empty string.
+- Learner lines in ${learn} that were unnatural or wrong: "kind" is "fix", "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
+- Learner lines said in ${know} (or another language) instead of ${learn}: "kind" is "translate", "said" is what they said, "expression" is how a native ${learn} speaker would say it.
+- Useful expressions Mooni used that the learner would benefit from: "kind" is "mooni", "said" is an empty string. At most 2 of these.
 - "meaning": a natural ${know} translation of "expression". "note": 1-2 short Korean sentences in friendly 해요체 about what to fix or when to use it. Don't repeat the meaning.
 - Prefer phrases they can reuse over single easy words. Skip lines that were already natural. At most 6 items, most useful first.`,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: TALK_SCHEMA } },
@@ -370,7 +372,7 @@ async function handleTalkReview(request, env, reply) {
     if (response.stop_reason === 'max_tokens') throw new Error('max_tokens');
     const out = JSON.parse(response.content.find((b) => b.type === 'text')?.text);
     const items = out.items
-      .map((it) => ({ said: it.said.trim(), expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim() }))
+      .map((it) => ({ kind: ['fix', 'translate', 'mooni'].includes(it.kind) ? it.kind : 'fix', said: it.kind === 'mooni' ? '' : it.said.trim(), expression: it.expression.trim(), meaning: it.meaning.trim(), note: (it.note || '').trim() }))
       .filter((it) => it.expression && it.meaning)
       .slice(0, 6);
     return reply(200, { items });

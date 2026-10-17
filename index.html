@@ -363,6 +363,10 @@ textarea.eng { font-family: var(--serif); }
 .bubble.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 6px; }
 .bubble.wait { opacity: .6; }
 .talk-said { display: block; color: var(--muted); font-size: 14px; text-decoration: line-through; }
+.talk-said.plain { text-decoration: none; }
+.talk-group { margin: 14px 0 8px; font-size: 15px; font-weight: 700; }
+.row-meta .from-talk { color: var(--accent); }
+.day .talk-mark { position: absolute; top: 1px; right: 2px; font-size: 9px; line-height: 1; }
 .missing { color: var(--muted); font-size: 15px; }
 .found-item { flex-direction: row; align-items: flex-start; gap: 10px; }
 .found-item .check {
@@ -669,7 +673,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -813,7 +817,7 @@ function requestPersist() {
 let cards = [];
 let catNames = new Map();   // 카테고리 키 → 보이는 이름 (이름을 바꾼 것만)
 let catStamps = new Map();  // 카테고리 키 → 이름을 바꾼 시각 (동기화 병합용)
-// 공부 기록: { id, at(ms) }. id 첫 글자로 종류 구분 r=복습, p=자유 연습, a=표현 추가.
+// 공부 기록: { id, at(ms) }. id 첫 글자로 종류 구분 r=복습, p=자유 연습, a=표현 추가, t=복숭아와 대화.
 // 카드를 지워도 남겨서 지난 기록(캘린더)이 줄어들지 않게 함
 let activity = [];
 const reviewActivity = (cardId, at) => ({ id: `r|${cardId}|${toDate(at).getTime()}`, at: toDate(at).getTime() });
@@ -1386,7 +1390,7 @@ function rowHTML(c, now, showCat) {
     <span class="row-text">
       <span class="row-kor">${sideLabel(c.korText, c.korImages)}</span>
       <span class="row-eng">${sideLabel(c.engText, c.engImages)}</span>
-      <span class="row-meta">${showCat ? `<span>${esc(catOf(c))}</span>` : ''}${status}<span>연습 ${c.practiceScore}점</span></span>
+      <span class="row-meta">${c.source === 'talk' ? '<span class="from-talk">🍑 대화에서</span>' : ''}${showCat ? `<span>${esc(catOf(c))}</span>` : ''}${status}<span>연습 ${c.practiceScore}점</span></span>
     </span>
   </button></li>`;
 }
@@ -1874,12 +1878,21 @@ function renderTalk() {
     body = `<div class="scan-wait" role="status"><div class="spinner">${MASCOT}</div><b>대화를 정리하고 있어요<span class="dots"><i>.</i><i>.</i><i>.</i></span></b></div>${log}`;
   } else if (t.status === 'result') {
     const n = t.checked.size;
+    const learnName = targetLang(t.mode).name;
+    const group = (kind, title) => {
+      const rows = t.items.map((it, i) => [it, i]).filter(([it]) => it.kind === kind);
+      if (!rows.length) return '';
+      return `<h3 class="talk-group">${title}</h3>
+        <div class="found">${rows.map(([it, i]) => `<button class="found-item" data-act="talk-toggle" data-index="${i}" aria-pressed="${t.checked.has(i)}">
+          <span class="check">${t.checked.has(i) ? '✓' : ''}</span>
+          <span class="txt">${it.said ? `<span class="${kind === 'fix' ? 'talk-said' : 'talk-said plain'}">${kind === 'translate' ? '내가 한 말: ' : ''}${esc(it.said)}</span>` : ''}<b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</span>
+        </button>`).join('')}</div>`;
+    };
     body = t.items.length
       ? `<p class="sync-line">카드로 만들 표현을 고르세요.</p>
-        <div class="found">${t.items.map((it, i) => `<button class="found-item" data-act="talk-toggle" data-index="${i}" aria-pressed="${t.checked.has(i)}">
-          <span class="check">${t.checked.has(i) ? '✓' : ''}</span>
-          <span class="txt">${it.said ? `<span class="talk-said">${esc(it.said)}</span>` : ''}<b>${esc(it.expression)}</b><span>${esc(it.meaning)}</span>${it.note ? `<small>💡 ${esc(it.note)}</small>` : ''}</span>
-        </button>`).join('')}</div>${log}`
+        ${group('fix', '✏️ 내가 한 말, 이렇게 고쳐요')}
+        ${group('translate', `🌏 이건 ${learnName}로 이렇게 말해요`)}
+        ${group('mooni', '🍑 복숭아가 쓴 좋은 표현')}${log}`
       : `<div class="talk-hero">${MASCOT}<b>고칠 데가 없었어요! 👏</b><p>다음엔 조금 더 길게 이야기해 봐요.</p></div>${log}`;
     actions = t.items.length
       ? `<button class="btn primary wide" data-act="talk-cards" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 카드로 만들기` : '만들 표현을 골라 주세요'}</button>`
@@ -1991,6 +2004,9 @@ async function endTalk() {
   hangUp(t);
   const turns = t.turns.filter((x) => x.text).map((x) => ({ role: x.role, text: x.text }));
   if (!turns.some((x) => x.role === 'user')) { t.status = 'idle'; t.turns = []; renderTalk(); toast('말한 내용이 없어서 정리할 게 없어요.'); return; }
+  // 기록 탭 캘린더에 대화한 날로 남김 (t=대화)
+  await recordActivity([{ id: `t|${t.start}`, at: t.start }]);
+  markChanged();
   t.status = 'reviewing';
   renderTalk();
   try {
@@ -2022,6 +2038,7 @@ function talkToCards() {
   $('#talk').hidden = true;
   $('#talk').innerHTML = '';
   openEditor();
+  editor.source = 'talk';   // 저장하면 카드에 '대화에서' 표시
   editor.found = items;
   editor.checked = new Set(items.map((_, i) => i));
   useFound(editor);
@@ -2163,7 +2180,7 @@ async function saveEditor() {
   } else {
     const added = [];
     for (const en of list) {
-      const card = newCard({ korText: en.korText.trim(), engText: en.engText.trim(), korImages: [], engImages: [], category: await keyForName(en.category) });
+      const card = newCard({ korText: en.korText.trim(), engText: en.engText.trim(), korImages: [], engImages: [], category: await keyForName(en.category), ...(e.source ? { source: e.source } : {}) });
       await putCard(card);
       added.push(card);
     }
@@ -2439,7 +2456,7 @@ async function runSync() {
     }
     const data = plain({
       id: c.id, createdAt: c.createdAt, updatedAt: touchedAt(c), contentAt: contentAt(c), studyAt: studyAt(c),
-      korText: c.korText, engText: c.engText, category: c.category, lang: c.lang,
+      korText: c.korText, engText: c.engText, category: c.category, lang: c.lang, source: c.source,
       srs: c.srs, practiceScore: c.practiceScore, practiceCount: c.practiceCount,
     });
     writes.push((b) => b.set(ref, { ...data, syncAt: fb.serverTimestamp() }));
@@ -2915,28 +2932,30 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const levelOf = (n) => LEVELS.filter((t) => n >= t).length;
 
-/** 날짜(기기 현지 시간) → { review, practice, add } */
+/** 날짜(기기 현지 시간) → { review, practice, add, talk } */
 function dailyActivity() {
   const days = new Map();
   for (const a of activity) {
     const k = dayKey(new Date(a.at));
-    const d = days.get(k) || { review: 0, practice: 0, add: 0 };
+    const d = days.get(k) || { review: 0, practice: 0, add: 0, talk: 0 };
     if (a.id[0] === 'r') d.review += 1;
     else if (a.id[0] === 'p') d.practice += 1;
     else if (a.id[0] === 'a') d.add += 1;
+    else if (a.id[0] === 't') d.talk += 1;
     days.set(k, d);
   }
   return days;
 }
 const solvedOf = (d) => (d ? d.review + d.practice : 0);
 
-/** 연속 공부일: 오늘(아직 안 했으면 어제)부터 거꾸로 1장이라도 한 날이 이어진 수 */
+/** 연속 공부일: 오늘(아직 안 했으면 어제)부터 거꾸로 1장이라도 풀었거나 복숭아와 대화한 날이 이어진 수 */
+const studiedOn = (d) => solvedOf(d) > 0 || (d?.talk ?? 0) > 0;
 function streakInfo(days) {
   const d = new Date();
-  const doneToday = solvedOf(days.get(dayKey(d))) > 0;
+  const doneToday = studiedOn(days.get(dayKey(d)));
   if (!doneToday) d.setDate(d.getDate() - 1);
   let n = 0;
-  while (solvedOf(days.get(dayKey(d))) > 0) { n += 1; d.setDate(d.getDate() - 1); }
+  while (studiedOn(days.get(dayKey(d)))) { n += 1; d.setDate(d.getDate() - 1); }
   return { n, doneToday };
 }
 
@@ -2952,7 +2971,7 @@ function renderStats() {
   // 연속 기록
   const { n, doneToday } = streakInfo(days);
   let streakSub;
-  if (n === 0) streakSub = '오늘 1장이라도 풀면 연속 기록이 시작돼요.';
+  if (n === 0) streakSub = '오늘 1장이라도 풀거나 복숭아와 대화하면 연속 기록이 시작돼요.';
   else if (doneToday) streakSub = '연속 공부 중 · 오늘도 했어요';
   else streakSub = `오늘 공부하면 ${n + 1}일째가 돼요.`;
 
@@ -2978,10 +2997,10 @@ function renderStats() {
     const info = days.get(k);
     const solved = solvedOf(info);
     const future = k > todayKey;
-    const label = `${m + 1}월 ${d}일, ${solved ? `${solved}장 풀었어요` : '공부 기록 없음'}${info?.add ? `, 새 표현 ${info.add}개` : ''}`;
+    const label = `${m + 1}월 ${d}일, ${solved ? `${solved}장 풀었어요` : '공부 기록 없음'}${info?.add ? `, 새 표현 ${info.add}개` : ''}${info?.talk ? `, 대화 ${info.talk}번` : ''}`;
     cells += `<button class="day${solved ? ` l${levelOf(solved)}` : ''}${k === todayKey ? ' today' : ''}${future ? ' future' : ''}"
       data-act="cal-day" data-day="${k}" aria-pressed="${k === selected}" aria-label="${label}" ${future ? 'disabled' : ''}>
-      ${d}${!solved && info?.add ? '<span class="add-dot"></span>' : ''}
+      ${d}${!solved && info?.add ? '<span class="add-dot"></span>' : ''}${info?.talk ? '<span class="talk-mark" aria-hidden="true">🍑</span>' : ''}
     </button>`;
   }
 
@@ -2993,11 +3012,12 @@ function renderStats() {
     const title = date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
     detail = `<section class="field">
       <h3>${title}${selected === todayKey ? '<span>오늘</span>' : ''}</h3>
-      ${info && (solvedOf(info) || info.add)
+      ${info && (solvedOf(info) || info.add || info.talk)
         ? `<ul class="day-rows">
             <li><span>복습</span><b>${info.review}장</b></li>
             <li><span>자유 연습</span><b>${info.practice}장</b></li>
             <li><span>새 표현</span><b>${info.add}개</b></li>
+            <li><span>🍑 복숭아와 대화</span><b>${info.talk}번</b></li>
           </ul>`
         : '<p class="sync-line">공부 기록이 없어요.</p>'}
     </section>`;
@@ -3021,7 +3041,7 @@ function renderStats() {
       <div class="cal-grid">${cells}</div>
       <div class="legend" aria-hidden="true">
         적음 <i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> 많음
-        <span class="gap"></span><i class="dot"></i> 표현만 추가
+        <span class="gap"></span><i class="dot"></i> 표현만 추가 <span class="gap"></span>🍑 대화
       </div>
     </section>
     ${detail}`;

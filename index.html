@@ -336,6 +336,7 @@ textarea.eng { font-family: var(--serif); }
 .fill-btns .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .ask-row { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
 .ask-row textarea { flex: 1; min-width: 0; }
+.ask-row textarea::placeholder { font-size: 14px; }
 .ask-row .btn { flex: none; }
 .heard { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--bg); color: var(--muted); font-size: 14px; }
 .rec { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 6px 0; }
@@ -650,7 +651,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

@@ -255,7 +255,7 @@ You get a speech-recognition transcript (it may contain small recognition errors
 - If they spoke ${know} (or any other language): "meaning" is what they said, cleaned up, "expression" is the most natural way a native ${learn} speaker would say it in everyday conversation (not a stiff literal translation), and "spoken" is "meaning".
 - "note": 1-2 short Korean sentences in friendly 해요체 that help them remember the expression: nuance, when people use it, or a tricky word. Don't repeat the meaning.
 - Usually return one item. Only if they clearly said several separate sentences or phrases, return one item for each (at most 3).`,
-    output_config: { effort: 'medium', format: { type: 'json_schema', schema: VOICE_SCHEMA } },
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: VOICE_SCHEMA } },
     messages: [{ role: 'user', content: `Detected language: ${language || 'unknown'}\nTranscript: ${transcript}` }],
   });
   if (response.stop_reason === 'refusal') throw new Refusal();

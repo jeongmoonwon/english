@@ -330,9 +330,10 @@ textarea.eng { font-family: var(--serif); }
 }
 .found-item b { font-family: var(--serif); font-size: 17px; font-weight: 600; }
 .found-item span { color: var(--muted); font-size: 15px; }
-.fill-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fill-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .fill-btns .btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px; font-size: 17px; }
 .fill-btns .btn small { font-size: 12px; font-weight: 500; opacity: .75; }
+.fill-btns .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .ask-row { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
 .ask-row textarea { flex: 1; min-width: 0; }
 .ask-row .btn { flex: none; }
@@ -649,7 +650,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1505,13 +1506,14 @@ function scanEditorHTML(e) {
     }
     body = `${result}
       <div class="fill-btns">
-        <button class="btn" data-act="scan">📷 사진<small>한 번에 ${SCAN_MAX}장까지</small></button>
-        <button class="btn" data-act="voice-start" ${canRecord ? '' : 'disabled'}>🎙 말하기<small>누르고 말한 뒤 끝내기</small></button>
+        <button class="btn" data-act="scan">📷 사진<small>${SCAN_MAX}장까지</small></button>
+        <button class="btn" data-act="voice-start" ${canRecord ? '' : 'disabled'}>🎙 말하기<small>말하고 끝내기</small></button>
+        <button class="btn" data-act="ask-toggle" aria-pressed="${!!e.typing}">✏️ 텍스트<small>적어서 물어보기</small></button>
       </div>
-      <div class="ask-row">
+      ${e.typing ? `<div class="ask-row">
         <textarea id="ask-input" rows="2" maxlength="${ASK_MAX_CHARS}" enterkeyhint="send" aria-label="궁금한 표현 적기" placeholder="✏️ 궁금한 ${targetLang(e.mode).name} 표현이나, ${targetLang(e.mode).name}로 하고 싶은 ${nativeLang(e.mode).name} 말을 적어 보세요">${esc(e.askText || '')}</textarea>
         <button class="btn primary" data-act="ask">채우기</button>
-      </div>
+      </div>` : ''}
       ${e.found ? '' : `<p class="sync-line">사진은 밑줄 친 표현만 골라 오고, 말하기와 글은 ${targetLang(e.mode).name}나 ${nativeLang(e.mode).name} 어느 쪽으로 해도 나머지를 채워 줘요. 사진과 녹음은 저장하지 않아요.</p>`}`;
   }
   return `<div class="field">
@@ -1766,6 +1768,7 @@ async function sendAsk() {
     else {
       e.askText = '';
       e.asked = text;
+      e.typing = false;
       e.found = items;
       if (items.length === 1) { e.checked = new Set([0]); useFound(e); message = '입력칸에 채웠어요.'; }
       else e.checked = new Set(e.cardId ? [] : items.map((_, i) => i));
@@ -2911,6 +2914,7 @@ document.addEventListener('click', (ev) => {
     case 'scan': $('#scan-input').click(); break;
     case 'voice-start': startVoice(); break;
     case 'ask': sendAsk(); break;
+    case 'ask-toggle': editor.typing = !editor.typing; renderEditor(); if (editor.typing) $('#ask-input')?.focus(); break;
     case 'voice-stop': stopVoice(); break;
     case 'voice-cancel': stopVoice(true); break;
     case 'speak': speak(el.dataset.text, el.dataset.lang); break;

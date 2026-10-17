@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1843,7 +1843,29 @@ async function sendAsk() {
 
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
 const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
-const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
+const TALK_MAX_SEC = 180;
+// 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말, 이 기기에서도 한 번 받은 건 다시 안 받음)
+const voiceSamples = new Map();
+let samplePlayer = null;
+async function playVoiceSample(voice) {
+  if (!user || !SCAN_URL) { toast('로그인하면 미리 들을 수 있어요.'); return; }
+  samplePlayer?.pause();
+  const player = samplePlayer = new Audio();   // 아이폰: 누른 순간에 만들어 둬야 소리가 남
+  try {
+    let url = voiceSamples.get(voice);
+    if (!url) {
+      const res = await fetch(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}`), { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+      if (!res.ok) throw new Error(res.status);
+      url = URL.createObjectURL(await res.blob());
+      voiceSamples.set(voice, url);
+    }
+    if (samplePlayer !== player) return;   // 그 사이 다른 목소리를 누름
+    player.src = url;
+    await player.play();
+  } catch (err) {
+    if (samplePlayer === player) toast(`목소리를 불러오지 못했어요. (${errText(err)})`);
+  }
+}    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 const TALK_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
   429: '오늘 대화할 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
@@ -2661,7 +2683,8 @@ function renderSettingsPage(page) {
     box.innerHTML = `<div class="field">
       <label class="sub">복숭아 목소리</label>
       <div class="chips">${TALK_VOICES.map(([v, label, rec]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}${rec ? '<small>추천</small>' : ''}</button>`).join('')}</div>
-      <p class="sync-line">OpenAI 목소리예요. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
+      <button class="btn wide" data-act="talk-sample" ${user ? '' : 'disabled'}>🔊 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} 미리 듣기</button>
+      <p class="sync-line">목소리를 누르면 바로 들려줘요${user ? '' : ' (로그인하면 들을 수 있어요)'}. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
     </div>
     <div class="field">
       <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>
@@ -3134,6 +3157,7 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
+    case 'talk-sample': playVoiceSample(prefs.talkVoice); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
     case 'talk-cards': talkToCards(); break;
@@ -3243,6 +3267,7 @@ document.addEventListener('click', (ev) => {
       setPref(el.dataset.key, value);
       renderSettingsPage(ui.settingsPage);
       if (el.dataset.key === 'speak' && value) speak(sampleOf(), targetLang().speech);
+      if (el.dataset.key === 'talkVoice') playVoiceSample(value);
       break;
     }
     case 'toggle-found': {

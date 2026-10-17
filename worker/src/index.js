@@ -80,7 +80,7 @@ export async function handle(request, env, deps = {}) {
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
   const isAsk = request.method === 'POST' && path === '/ask';
-  const isTalk = request.method === 'POST' && (path === '/talk/token' || path === '/talk/review');
+  const isTalk = (request.method === 'POST' && (path === '/talk/token' || path === '/talk/review')) || (request.method === 'GET' && path === '/talk/sample');
   const isFeedback = request.method === 'POST' && path === '/feedback';
   if (!isUsage && !isVoice && !isAsk && !isTalk && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
@@ -116,6 +116,7 @@ export async function handle(request, env, deps = {}) {
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
   if (isAsk) return handleAsk(request, env, reply, askKey);
   if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
+  if (path === '/talk/sample') return handleTalkSample(request, env, reply, cors);
   if (path === '/talk/review') return handleTalkReview(request, env, reply);
 
   // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
@@ -323,6 +324,30 @@ async function handleTalkToken(request, env, reply, key, user) {
   }
   await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
   return reply(200, { value: data.value, remaining: TALK_LIMIT - used - 1, limit: TALK_LIMIT });
+}
+
+// 목소리 미리 듣기: 목소리마다 한 번만 만들어 KV에 저장해 두고 계속 같은 파일을 돌려줌 (처음 한 번만 비용)
+const SAMPLE_TEXT = "Hi! I'm Mooni, your little peach friend. How was your day today?";
+async function handleTalkSample(request, env, reply, cors) {
+  const voice = new URL(request.url).searchParams.get('voice');
+  if (!REALTIME_VOICES.includes(voice)) return reply(400, { error: 'voice' });
+  const key = `sample:v1:${voice}`;
+  let audio = await env.USAGE.get(key, 'arrayBuffer');
+  if (!audio) {
+    if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
+    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: SAMPLE_TEXT, instructions: 'Cheerful, warm and friendly, a little slower than normal.', response_format: 'mp3' }),
+    });
+    if (!res.ok) {
+      console.error('talk sample failed', res.status, (await res.text().catch(() => '')).slice(0, 300));
+      return reply(502, { error: 'upstream' });
+    }
+    audio = await res.arrayBuffer();
+    await env.USAGE.put(key, audio);
+  }
+  return new Response(audio, { headers: { ...cors, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=86400' } });
 }
 
 const TALK_SCHEMA = {

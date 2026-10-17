@@ -404,6 +404,7 @@ textarea.eng { font-family: var(--serif); }
 .cat small { margin-left: 5px; opacity: 0.7; }
 .cat[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .cat.dim:not([aria-pressed="true"]) { opacity: .45; }
+.cat:disabled { cursor: default; }
 .cat.ghost { background: none; border-style: dashed; color: var(--muted); }
 .cat.ghost.danger { color: var(--again); }
 .cat-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
@@ -652,7 +653,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1014,7 +1015,9 @@ function setupHTML(dueByCat) {
         <button class="cat" data-act="study-cat" aria-pressed="${sel.size === 0}">전체${dueByCat ? `<small>${[...dueByCat.values()].reduce((a, b) => a + b, 0)}</small>` : ''}</button>
         ${cats.map((c) => {
           const n = dueByCat ? dueByCat.get(c.name) || 0 : c.count;
-          return `<button class="cat${dueByCat && !n ? ' dim' : ''}" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}">${esc(c.name)}<small>${n}</small></button>`;
+          // 복습: 지금 복습할 카드가 없는 카테고리는 못 고름 (이미 골라 둔 것은 뺄 수 있게 둠)
+          const off = dueByCat && !n && !sel.has(c.name);
+          return `<button class="cat${dueByCat && !n ? ' dim' : ''}" data-act="study-cat" data-cat="${esc(c.name)}" aria-pressed="${sel.has(c.name)}"${off ? ' disabled' : ''}>${esc(c.name)}<small>${n}</small></button>`;
         }).join('')}
       </div>
     </div>` : ''}`;
@@ -1223,7 +1226,7 @@ function renderReview() {
     const head = due.length
       ? `<h2 class="setup-title">지금 복습할 카드 ${due.length}장</h2>`
       : `<h2 class="setup-title">고른 카테고리에는 지금 복습할 카드가 없어요</h2>
-        <p class="setup-note">전체에는 ${allDue.length}장 있어요. 아래에서 다른 카테고리를 골라 보세요.</p>`;
+        <p class="setup-note">전체에는 ${allDue.length}장 있어요. 아래에서 고른 카테고리를 빼고 다른 카테고리를 골라 보세요.</p>`;
     main.innerHTML = `<div class="review-hero">${MASCOT}${head}</div>${setupHTML(dueByCat)}`;
     bar.hidden = false;
     bar.innerHTML = due.length

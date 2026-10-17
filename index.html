@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1113,7 +1113,8 @@ async function deleteCategory(name, mode, to) {
 // ================= 설정값 · 소리 =================
 const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [] };
+  // talkVoice: 대화 목소리, talkName: 복숭아가 나를 부를 이름
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '' };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; } catch { return base; }
 })();
 function setPref(key, value) {
@@ -1841,6 +1842,7 @@ async function sendAsk() {
 }
 
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
+const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
 const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 const TALK_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
@@ -1959,7 +1961,7 @@ async function startTalk() {
     const res = await fetch(talkURL('/talk/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, practice: practiceList }),
+      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || '복숭아를 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.');
@@ -2544,6 +2546,7 @@ const SETTINGS = [
   ['theme', '🌗', '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', '🔤', '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
   ['sound', '🔊', '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
+  ['talk', '🍑', '대화', () => `목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '이름 없이'}`],
   ['backup', '💾', '백업', () => '파일로 저장 · 복원'],
   ['feedback', '💌', '의견 보내기', () => '버그 · 제안 · 문의'],
 ];
@@ -2653,6 +2656,17 @@ function renderSettingsPage(page) {
       <button class="btn wide" data-act="speak" data-text="${esc(sampleOf())}" data-lang="${targetLang().speech}">🔊 미리 듣기 (${targetLang().name})</button>
       <p class="sync-line">끄더라도 카드의 🔊 버튼을 누르면 언제든 들을 수 있어요. 지금 언어 모드의 언어로, 기기에 있는 음성으로 읽어서 비용이 들지 않아요.</p>`
       : '<p class="sync-line">이 기기에서는 소리로 읽기를 쓸 수 없어요.</p>'}
+    </div>`;
+  } else if (page === 'talk') {
+    box.innerHTML = `<div class="field">
+      <label class="sub">복숭아 목소리</label>
+      <div class="chips">${TALK_VOICES.map(([v, label, rec]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}${rec ? '<small>추천</small>' : ''}</button>`).join('')}</div>
+      <p class="sync-line">OpenAI 목소리예요. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
+    </div>
+    <div class="field">
+      <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>
+      <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" placeholder="예: 문원, Moon" value="${esc(prefs.talkName)}">
+      <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
     </div>`;
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
@@ -3278,6 +3292,7 @@ document.addEventListener('input', (ev) => {
     updateCreateMode();
     return;
   }
+  if (ev.target.id === 'talk-name') { setPref('talkName', ev.target.value.trim().slice(0, 20)); return; }
   if (ev.target.matches?.('#new-target-flag, #new-native-flag')) {
     // 국기 칸에는 이모지 하나만 남김
     const emoji = firstEmoji(ev.target.value);

@@ -14,7 +14,8 @@ const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보�
 const MAX_ASK_CHARS = 300;
 const TALK_LIMIT = 10;                       // 1인당 하루 복숭아와 대화하기 횟수 (한 번에 3분, 앱에서 멈춤)
 const REALTIME_MODEL = 'gpt-realtime-2.1';   // OpenAI 실시간 음성 대화
-const REALTIME_VOICE = 'marin';
+const REALTIME_VOICE = 'marin';   // 기본 목소리 (앱 설정에서 바꿀 수 있음)
+const REALTIME_VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'];
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 // 앱의 언어 모드에 쓰는 언어 (코드 → 영어 이름)
@@ -266,13 +267,14 @@ async function handleAsk(request, env, reply, key) {
 // OpenAI 키(OPENAI_API_KEY)는 여기에만 있고, 앱은 몇 분짜리 임시 키만 받음
 const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
-function talkInstructions(learn, know, practice) {
+function talkInstructions(learn, know, practice, name) {
   const list = practice.length
     ? `\nThey are currently reviewing these expressions. When it fits naturally, steer the conversation so they get a chance to use one (never list them, quiz them, or say you are doing this):\n${practice.map((p) => `- ${p}`).join('\n')}`
     : '';
   return `You are Mooni, a cheerful little peach character and the learner's conversation buddy. The learner is a ${know} speaker practicing ${learn}.
 - Speak only ${learn}, a little slower than normal, with simple everyday words. Keep every turn short: one or two sentences, usually ending with one easy question.
-- Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
+${name ? `- Call the learner "${name}" (that is how they want to be called; use it naturally, not in every turn).
+` : ''}- Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
 - Keep it flowing with follow-up questions about what they said. Be curious, warm, and a bit playful.
 - Do not correct their mistakes during the conversation; a summary with corrections comes afterwards. Just respond to what they meant.
 - If they get stuck or speak ${know}, say the ${learn} phrase for what they wanted to say, and encourage them to try it.${list}`;
@@ -285,6 +287,8 @@ async function handleTalkToken(request, env, reply, key, user) {
   const target = langName(body?.target) || 'English';
   const native = langName(body?.native) || 'Korean';
   const practice = (Array.isArray(body?.practice) ? body.practice : []).map((p) => clean(p, 80)).filter(Boolean).slice(0, 5);
+  const voice = REALTIME_VOICES.includes(body?.voice) ? body.voice : REALTIME_VOICE;
+  const name = clean(body?.name, 20).replace(/["\\]/g, '');
 
   const used = Number(await env.USAGE.get(key)) || 0;
   if (used >= TALK_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: TALK_LIMIT });
@@ -297,7 +301,7 @@ async function handleTalkToken(request, env, reply, key, user) {
       session: {
         type: 'realtime',
         model: REALTIME_MODEL,
-        instructions: talkInstructions(target, native, practice),
+        instructions: talkInstructions(target, native, practice, name),
         audio: {
           input: {
             // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
@@ -307,7 +311,7 @@ async function handleTalkToken(request, env, reply, key, user) {
             // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음
             turn_detection: { type: 'semantic_vad', eagerness: 'low' },
           },
-          output: { voice: REALTIME_VOICE },
+          output: { voice },
         },
       },
     }),

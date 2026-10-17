@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1844,51 +1844,14 @@ async function sendAsk() {
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
 const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
 const TALK_MAX_SEC = 180;
-// 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말, 이 기기에서도 한 번 받은 건 다시 안 받음)
-// 아이폰은 누른 순간에 시작한 소리만 허락하므로, 누르자마자 소리 장치(AudioContext)를 깨워 두고 파일이 오면 그걸로 틂
-const voiceSamples = new Map();   // 목소리 → 받아 둔 mp3 (ArrayBuffer)
-let sampleCtx = null, sampleNode = null, sampleSeq = 0;
-async function playVoiceSample(voice) {
-  if (!user || !SCAN_URL) { toast('로그인하면 미리 들을 수 있어요.'); return; }
-  const seq = ++sampleSeq;
-  try { sampleNode?.stop(); } catch {}
-  try {
-    sampleCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    const resumed = sampleCtx.resume();   // 누른 순간에 깨움 (기다리지 않고 바로 다음으로)
-    let data = voiceSamples.get(voice);
-    if (!data) {
-      const res = await fetch(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}`), { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
-      if (!res.ok) throw new Error(`서버 ${res.status}`);
-      data = await res.arrayBuffer();
-      voiceSamples.set(voice, data);
-    }
-    await resumed;
-    // decodeAudioData는 받은 버퍼를 비워 버려서 복사본을 넘김
-    const buffer = await new Promise((ok, fail) => sampleCtx.decodeAudioData(data.slice(0), ok, fail));
-    if (seq !== sampleSeq) return;   // 그 사이 다른 목소리를 누름
-    const node = sampleCtx.createBufferSource();
-    node.buffer = buffer;
-    node.connect(sampleCtx.destination);
-    node.start();
-    sampleNode = node;
-  } catch (err) {
-    if (seq === sampleSeq) toast(`목소리를 들려주지 못했어요. (${errText(err)})`);
-  }
-}    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
-const TALK_ERRORS = {
-  401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
-  429: '오늘 대화할 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
-  503: '대화 기능을 아직 쓸 수 없어요. 잠시 뒤 다시 시도해 주세요.',
-};
-// status: idle | connecting | live | reviewing | result
-let talk = { status: 'idle', turns: [] };
-const talkURL = (path) => `${SCAN_URL.replace(/\/$/, '')}${path}`;
-
-/** 처음 화면으로 (대화 중이면 정리 없이 끊음) */
-function resetTalk() {
-  if (talk.status === 'live' || talk.status === 'connecting') { if (!confirm('대화를 그만할까요? 정리 없이 끝나요.')) return; hangUp(); }
-  talk = { status: 'idle', turns: [] };
-  renderTalk();
+// 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
+// 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
+let samplePlayer = null;
+function playVoiceSample(voice) {
+  if (!SCAN_URL) return;
+  samplePlayer?.pause();
+  const player = samplePlayer = new Audio(talkURL(`/talk/sample?voice=${encodeURIComponent(voice)}`));
+  player.play().catch((err) => { if (samplePlayer === player) toast(`목소리를 들려주지 못했어요. (${errText(err)})`); });
 }
 
 function renderTalk() {
@@ -2692,8 +2655,8 @@ function renderSettingsPage(page) {
     box.innerHTML = `<div class="field">
       <label class="sub">복숭아 목소리</label>
       <div class="chips">${TALK_VOICES.map(([v, label, rec]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}${rec ? '<small>추천</small>' : ''}</button>`).join('')}</div>
-      <button class="btn wide" data-act="talk-sample" ${user ? '' : 'disabled'}>🔊 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} 미리 듣기</button>
-      <p class="sync-line">목소리를 누르면 바로 들려줘요${user ? '' : ' (로그인하면 들을 수 있어요)'}. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
+      <button class="btn wide" data-act="talk-sample">🔊 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} 미리 듣기</button>
+      <p class="sync-line">목소리를 누르면 바로 들려줘요. 다음 대화부터 바뀌어요. 추천은 가장 새롭고 자연스러운 목소리예요.</p>
     </div>
     <div class="field">
       <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>

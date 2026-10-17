@@ -77,10 +77,12 @@ export async function handle(request, env, deps = {}) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   const reply = (status, body) => Response.json(body, { status, headers: cors });
   const path = new URL(request.url).pathname;
+  // 목소리 미리 듣기: 앱의 <audio>가 바로 여는 고정 파일(목소리 10개)이라 로그인 없이 줌
+  if (request.method === 'GET' && path === '/talk/sample') return handleTalkSample(request, env, reply, cors);
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
   const isAsk = request.method === 'POST' && path === '/ask';
-  const isTalk = (request.method === 'POST' && (path === '/talk/token' || path === '/talk/review')) || (request.method === 'GET' && path === '/talk/sample');
+  const isTalk = request.method === 'POST' && (path === '/talk/token' || path === '/talk/review');
   const isFeedback = request.method === 'POST' && path === '/feedback';
   if (!isUsage && !isVoice && !isAsk && !isTalk && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
@@ -116,7 +118,6 @@ export async function handle(request, env, deps = {}) {
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
   if (isAsk) return handleAsk(request, env, reply, askKey);
   if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
-  if (path === '/talk/sample') return handleTalkSample(request, env, reply, cors);
   if (path === '/talk/review') return handleTalkReview(request, env, reply);
 
   // 2. 사진 확인: { images: [{ data, mediaType }] } (예전 앱은 { image, mediaType } 한 장)
@@ -347,7 +348,17 @@ async function handleTalkSample(request, env, reply, cors) {
     audio = await res.arrayBuffer();
     await env.USAGE.put(key, audio);
   }
-  return new Response(audio, { headers: { ...cors, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=86400' } });
+  const headers = { ...cors, 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' };
+  // 아이폰 사파리는 소리 파일을 조각(Range)으로 먼저 요청하고, 조각으로 답하지 않으면 틀지 않음
+  const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range') || '');
+  const size = audio.byteLength;
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    let end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
+    return new Response(audio.slice(start, end + 1), { status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) } });
+  }
+  return new Response(audio, { headers: { ...headers, 'Content-Length': String(size) } });
 }
 
 const TALK_SCHEMA = {

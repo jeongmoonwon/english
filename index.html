@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1843,7 +1843,7 @@ async function sendAsk() {
 
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
 const TALK_VOICES = [['marin', 'Marin', true], ['cedar', 'Cedar', true], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
-const TALK_MAX_SEC = 180;
+const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
 // 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
 let samplePlayer = null;
@@ -1866,6 +1866,22 @@ function playVoiceSample(voice) {
   const late = setTimeout(() => { if (player.paused && player.currentTime === 0) fail('응답 없음'); }, 8000);
   player.addEventListener('playing', () => clearTimeout(late));
   player.play().catch((err) => { clearTimeout(late); fail(errText(err)); });
+}
+
+const TALK_ERRORS = {
+  401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
+  429: '오늘 대화할 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
+  503: '대화 기능을 아직 쓸 수 없어요. 잠시 뒤 다시 시도해 주세요.',
+};
+// status: idle | connecting | live | reviewing | result
+let talk = { status: 'idle', turns: [] };
+const talkURL = (path) => `${SCAN_URL.replace(/\/$/, '')}${path}`;
+
+/** 처음 화면으로 (대화 중이면 정리 없이 끊음) */
+function resetTalk() {
+  if (talk.status === 'live' || talk.status === 'connecting') { if (!confirm('대화를 그만할까요? 정리 없이 끝나요.')) return; hangUp(); }
+  talk = { status: 'idle', turns: [] };
+  renderTalk();
 }
 
 function renderTalk() {

@@ -109,6 +109,29 @@ img { max-width: 100%; }
 .tab { position: relative; }
 .tab-dot { position: absolute; top: 6px; left: calc(50% + 10px); width: 8px; height: 8px; border-radius: 50%; background: var(--hard); }
 #settings-main .field + .field { margin-top: 0; }
+/* 설정 화면: 글씨와 간격을 한 단계 촘촘하게 */
+#settings-main { font-size: 15px; }
+#settings-main .set-row { padding: 10px 14px; gap: 11px; }
+#settings-main .set-txt b { font-size: 15px; }
+#settings-main .set-txt small { font-size: 12px; }
+#settings-main .set-go { font-size: 18px; }
+#settings-main .set-icon { width: 30px; height: 30px; border-radius: 9px; }
+#settings-main .set-icon svg { width: 17px; height: 17px; }
+#settings-main .field { padding: 14px; gap: 9px; margin-bottom: 12px; border-radius: 20px; }
+#settings-main .field h3 { font-size: 14px; }
+#settings-main .field label.sub { font-size: 12px; margin-bottom: -3px; }
+#settings-main .sync-line { font-size: 13px; line-height: 1.45; }
+#settings-main .seg { gap: 6px; }
+#settings-main .seg-btn, #settings-main .seg-btn.small { font-size: 14px; padding: 8px 4px; border-radius: 12px; }
+#settings-main .btn { padding: 11px 14px; font-size: 15px; border-radius: 12px; }
+#settings-main .cat { font-size: 13px; padding: 6px 12px; }
+#settings-main .chips { gap: 6px; }
+#settings-main .font-list { gap: 6px; }
+#settings-main .font-opt { font-size: 15px; padding: 8px 10px; border-radius: 12px; }
+#settings-main .font-opt small { font-size: 12px; }
+#settings-main :is(input.text, textarea, select) { font-size: 16px; padding: 9px 12px; }
+#settings-main .usage-meter { height: 8px; }
+#settings-main .version { margin-top: 18px; font-size: 12px; }
 .version a { color: inherit; }
 /* 복습 글자 크기 (설정) */
 :root[data-size="small"] .face-text { font-size: 21px; }
@@ -831,7 +854,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

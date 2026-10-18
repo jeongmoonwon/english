@@ -532,6 +532,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* 설정에서 '영어 표현도 같은 글씨체'를 고른 경우 */
 :root[data-skin][data-eng="same"] { --serif: var(--sans); }
 textarea::placeholder { font-family: var(--sans); }
+textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
 :root[data-skin="peach"] body {
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
@@ -641,6 +642,13 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] .seg-btn[aria-pressed="true"] small { color: var(--on-g); opacity: .75; }
 :root[data-skin="pastel"] :is(textarea, input.text) { border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
 /* 평가 버튼: 흰 바탕 + 색 글자, '알맞음'만 그라데이션 */
+:root[data-skin="pastel"] .fill-btns .btn {
+  background: var(--sheen), var(--g2); background-origin: border-box; color: #4A3D9E; border: 0; border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(195, 170, 255, .32);
+}
+:root[data-skin="pastel"] .fill-btns .btn small { color: #6A5FB8; opacity: 1; }
+:root[data-skin="pastel"] .fill-btns .btn[aria-pressed="true"] { color: #4A3D9E; outline: 2px solid #A888F5; outline-offset: 2px; }
+:root[data-skin="pastel"] .fill-note { text-align: center; font-size: 13px; }
 :root[data-skin="pastel"] .grade { background: var(--glass); border-radius: 14px; padding: 10px 4px; box-shadow: 0 2px 10px rgba(30, 20, 60, .05); }
 :root[data-skin="pastel"] .grade span { font-size: 15px; line-height: 1.3; }
 :root[data-skin="pastel"] .grade.good { background: var(--sheen), var(--g2); color: var(--on-g); box-shadow: var(--sheen-edge), 0 6px 16px rgba(195, 170, 255, .35); }
@@ -804,7 +812,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1645,7 +1653,6 @@ function entryHTML(e, en, i) {
 /** 사진으로 자동 입력: 사진 속 외국어 표현과 한국어 뜻을 Claude가 찾아 채워 줌 (사진은 저장하지 않음) */
 function scanEditorHTML(e) {
   if (!SCAN_URL) return '';
-  const left = [scanRemaining === null ? '사진 하루 10장' : `사진 ${scanRemaining}장`, voiceRemaining === null ? '말하기 하루 10번' : `말하기 ${voiceRemaining}번`, askRemaining === null ? `글 하루 ${ASK_LIMIT}번` : `글 ${askRemaining}번 남음`].join(' · ');
   let body;
   if (!fbReady || !user) {
     body = `<p class="sync-line">로그인하면 쓸 수 있어요.</p>
@@ -1690,10 +1697,10 @@ function scanEditorHTML(e) {
         <textarea id="ask-input" rows="2" maxlength="${ASK_MAX_CHARS}" enterkeyhint="send" aria-label="궁금한 표현 적기" placeholder="✏️ 궁금한 ${targetLang(e.mode).name} 표현이나, ${targetLang(e.mode).name}로 하고 싶은 ${nativeLang(e.mode).name} 말을 적어 보세요">${esc(e.askText || '')}</textarea>
         <button class="btn primary" data-act="ask">채우기</button>
       </div>` : ''}
-      ${e.found ? '' : `<p class="sync-line">사진은 밑줄 친 표현만 골라 오고, 말하기와 글은 ${targetLang(e.mode).name}나 ${nativeLang(e.mode).name} 어느 쪽으로 해도 나머지를 채워 줘요. 사진과 녹음은 저장하지 않아요.</p>`}`;
+      ${e.found ? '' : `<p class="sync-line fill-note">${targetLang(e.mode).name}나 ${nativeLang(e.mode).name} 어느 쪽이든 넣으면 나머지 칸을 채워 줘요.</p>`}`;
   }
   return `<div class="field">
-    <h3>자동으로 채우기<span>${left}</span></h3>
+    <h3>자동으로 채우기</h3>
     ${body}
   </div>`;
 }

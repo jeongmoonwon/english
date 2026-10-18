@@ -412,6 +412,28 @@ textarea.eng { font-family: var(--serif); }
 .day.ring-day.today .dnum { color: var(--ink); font-weight: 800; }
 .day.ring-day.today { box-shadow: none; background: color-mix(in srgb, var(--soft) 70%, transparent); }
 .day.ring-day .rings-blank { width: 34px; height: 34px; }
+/* 구슬 키우기 */
+.orb-card { display: flex; align-items: center; gap: 14px; padding: 14px 18px; margin: 4px 0 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
+.orb-card .orb-svg { width: 104px; height: 104px; flex: none; overflow: visible; animation: bob 3s ease-in-out infinite; }
+.orb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.orb-text small { font-size: 12px; font-weight: 800; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
+.orb-text > b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.orb-text span { font-size: 12px; color: var(--muted); }
+.orb-text span b { color: var(--ink); }
+.orb-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 15%, transparent); overflow: hidden; }
+.orb-bar i { display: block; height: 100%; border-radius: 4px; background: var(--g2, var(--accent)); }
+.orb-party { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(20, 16, 40, .45); animation: fade .25s ease-out; }
+.orb-party-card { width: min(340px, 100%); padding: 26px 22px 20px; border-radius: 30px; background: var(--surface); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 0 20px 60px rgba(30, 20, 60, .3); animation: party-pop .5s cubic-bezier(.3, 1.6, .5, 1); }
+.orb-party-art { width: 170px; height: 170px; display: grid; place-items: center; animation: party-glow 1.6s ease-in-out infinite; }
+.orb-party-art .orb-svg { width: 170px; height: 170px; overflow: visible; animation: party-spin .9s cubic-bezier(.3, 1.6, .5, 1); }
+.orb-party-card small { font-weight: 800; color: var(--accent); }
+.orb-party-card h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.orb-party-card p { margin: 0 0 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes party-pop { from { transform: scale(.7); opacity: 0; } }
+@keyframes party-spin { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
+@keyframes party-glow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(197, 174, 250, 0)); } 50% { filter: drop-shadow(0 0 18px rgba(197, 174, 250, .9)); } }
+@media (prefers-reduced-motion: reduce) { .orb-card .orb-svg, .orb-party-art, .orb-party-art .orb-svg, .orb-party-card { animation: none; } }
 /* 오늘의 대화 카드 (홈·대화 탭) */
 .talk-card { padding: 18px; margin-bottom: 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); display: flex; flex-direction: column; gap: 8px; text-align: left; }
 .talk-card h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
@@ -909,7 +931,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v79';
+const APP_VERSION = 'v80';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1505,6 +1527,7 @@ function renderReview() {
     const { n } = streakInfo(days);
     loadCalendar();   // 캘린더를 연결했으면 오늘·내일 일정 (10분마다 새로)
     main.innerHTML = `
+      ${orbCardHTML(days, today)}
       <section class="today-hero">
         ${ringsSVG(today, 96, '오늘 목표 링')}
         <div class="today-text">
@@ -1520,6 +1543,7 @@ function renderReview() {
         <button class="btn" data-act="practice">${icon('type')} 자유 연습</button>
       </div>`;
     bar.hidden = false;
+    checkOrbLevelUp(days);
     bar.innerHTML = allDue.length
       ? `<button class="btn primary wide" data-act="review-setup">복습 시작 · ${due.length || allDue.length}장</button>`
       : `<button class="btn primary wide" data-act="talk-go">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
@@ -3427,6 +3451,126 @@ function dailyActivity() {
 }
 const solvedOf = (d) => (d ? d.review + d.practice : 0);
 
+// ---------- 구슬 키우기: 쌓인 공부 점수로 구슬이 10단계까지 자라요 (단계는 내려가지 않음) ----------
+// 점수: 복습·자유 연습 1장 1점, 표현 추가 3점, 대화 1분 5점, 그날 링 3개를 모두 채우면 +20점
+const ORB_LEVELS = [
+  [0, '물방울'], [200, '말랑 구슬'], [600, '반짝 구슬'], [1200, '오로라 구슬'], [2000, '진주 구슬'],
+  [2800, '은하수 구슬'], [3600, '달빛 구슬'], [5500, '오로라 구슬 II'], [8000, '별자리 구슬'], [12000, '무지개 은하 구슬'],
+];
+function orbPoints(days = dailyActivity()) {
+  let pts = 0;
+  for (const d of days.values()) pts += solvedOf(d) + d.add * 3 + Math.floor((d.talkSec || 0) / 60) * 5 + (ringsDone(d) === 3 ? 20 : 0);
+  return pts;
+}
+function orbLevel(pts) {
+  let lv = 1;
+  ORB_LEVELS.forEach(([min], i) => { if (pts >= min) lv = i + 1; });
+  return lv;
+}
+let orbSeq = 0;
+const ORB_BODY = 'M60 14C88 14 108 34 108 62S88 106 60 106 12 90 12 62 32 14 60 14Z';
+const orbStar = (x, y, r, fill = '#fff', stroke = '#CDBDF7') => `<path d="M${x} ${y - r}l${r * .28} ${r * .72} ${r * .72} ${r * .28}-${r * .72} ${r * .28}-${r * .28} ${r * .72}-${r * .28}-${r * .72}-${r * .72}-${r * .28} ${r * .72}-${r * .28}z" fill="${fill}" stroke="${stroke}" stroke-width=".8" stroke-linejoin="round"/>`;
+const orbLin = (id, stops, x2 = 1, y2 = 1) => `<linearGradient id="${id}" x1="0" y1="0" x2="${x2}" y2="${y2}">${stops.map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient>`;
+const orbRad = (id, stops, cx = .5, cy = .5, r = .5) => `<radialGradient id="${id}" cx="${cx}" cy="${cy}" r="${r}">${stops.map(([o, c, a]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${a}"/>`).join('')}</radialGradient>`;
+function orbFace(sleepy, y = 64, ink = '#2B2A4C') {
+  const eyes = sleepy
+    ? `<path d="M40 ${y}q5 4 10 0M70 ${y}q5 4 10 0" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>`
+    : `<ellipse cx="45" cy="${y}" rx="5" ry="6.3" fill="${ink}"/><ellipse cx="75" cy="${y}" rx="5" ry="6.3" fill="${ink}"/><circle cx="46.8" cy="${y - 2.6}" r="1.8" fill="#fff"/><circle cx="76.8" cy="${y - 2.6}" r="1.8" fill="#fff"/>`;
+  return `${eyes}<ellipse cx="34" cy="${y + 11}" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/><ellipse cx="86" cy="${y + 11}" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/><path d="M55 ${y + 10}q5 6 10 0" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>`;
+}
+/** 단계별 구슬 그림. 앞 단계의 꾸밈을 그대로 두고 하나씩 더함. sleepy: 오늘 아직 공부 안 함 */
+function orbSVG(level, sleepy = false, cls = 'orb-svg') {
+  const p = `ob${++orbSeq}`;
+  const zz = sleepy ? '<text x="94" y="30" font-size="15" font-weight="800" fill="#A888F5" font-family="sans-serif">z</text><text x="104" y="18" font-size="10" font-weight="800" fill="#A888F5" font-family="sans-serif">z</text>' : '';
+  const hi = orbRad(`${p}h`, [[0, '#fff', .8], [1, '#fff', 0]], .32, .28);
+  if (level <= 1) {
+    const drop = 'M60 30C72 46 86 58 86 76a26 26 0 0 1-52 0c0-18 14-30 26-46Z';
+    return `<svg class="${cls}" viewBox="0 0 120 120" aria-hidden="true"><defs>${orbLin(`${p}b`, [[0, '#DDE6FF'], [1, '#E9DFFF']])}${hi}</defs>
+      <ellipse cx="60" cy="108" rx="22" ry="4" fill="#2B2A4C" opacity=".06"/><path d="${drop}" fill="url(#${p}b)"/><path d="${drop}" fill="url(#${p}h)"/>
+      <g transform="translate(60 80) scale(.55) translate(-60 -64)">${orbFace(sleepy)}</g>${zz}</svg>`;
+  }
+  const PASTEL = [[0, '#A7BEFF'], [.45, '#C5AEFA'], [.8, '#FAB9DB'], [1, '#FFD0BD']];
+  const BRIGHT = [[0, '#9DB8FF'], [.4, '#C3AAFF'], [.75, '#FFB0D2'], [1, '#FFCDB0']];
+  const RAINBOW = [[0, '#9FE3E8'], [.35, '#A7BEFF'], [.65, '#E6A8F5'], [1, '#FFC9A8']];
+  const d = [orbLin(`${p}b`, level === 2 ? PASTEL : BRIGHT), hi];
+  const back = [], body = [`<path d="${ORB_BODY}" fill="url(#${p}b)"/>`], front = [];
+  if (level >= 3) { d.push(orbRad(`${p}g`, [[0, '#C5AEFA', level < 6 ? .5 : .7], [1, '#C5AEFA', 0]])); back.push(`<circle cx="60" cy="60" r="58" fill="url(#${p}g)"/>`); }
+  if (level >= 4) { d.push(orbLin(`${p}r`, RAINBOW, 1, 0)); back.push(`<path d="M8 74a52 15 -14 0 1 104 -26" fill="none" stroke="url(#${p}r)" stroke-width="3.5" opacity=".6"/>`); }
+  if (level >= 5) {
+    d.push(orbRad(`${p}ring`, [[.72, '#fff', 0], [.82, '#E9DCFF', .95], [.9, '#FFE3F1', .65], [1, '#fff', 0]]));
+    d.push(`<linearGradient id="${p}s" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#9FE3E8" stop-opacity="0"/><stop offset=".45" stop-color="#C9F0F2" stop-opacity=".55"/><stop offset=".55" stop-color="#FFE3F4" stop-opacity=".55"/><stop offset="1" stop-color="#FFE3F4" stop-opacity="0"/></linearGradient>`);
+    back.unshift(`<circle cx="60" cy="60" r="60" fill="url(#${p}ring)"/>`);
+    body.push(`<path d="${ORB_BODY}" fill="url(#${p}s)"/>`);
+  }
+  if (level >= 6) {
+    d.push(orbRad(`${p}au`, [[0, '#FFF4FB', 0], [.55, '#E9DCFF', .55], [.75, '#D6F1F3', .35], [.9, '#FFE6D6', .25], [1, '#fff', 0]]));
+    back.unshift(`<circle cx="60" cy="60" r="60" fill="url(#${p}au)"/>`);
+    body.push([[30, 46, 1.6, .95], [86, 38, 1.3, .9], [94, 82, 1.8, .95], [38, 92, 1.2, .85], [74, 98, 1.4, .9], [24, 72, 1.1, .8], [100, 60, 1.1, .8], [58, 30, 1.2, .85]]
+      .map(([x, y, r, o]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${o}"/>`).join(''));
+  }
+  body.push(`<path d="${ORB_BODY}" fill="url(#${p}h)"/>`);
+  if (level >= 3) body.push('<ellipse cx="38" cy="35" rx="9" ry="5" fill="#fff" opacity=".6" transform="rotate(-30 38 35)"/>');
+  if (level >= 4) front.push(`<path d="M112 48a52 15 -14 0 1 -104 26" fill="none" stroke="url(#${p}r)" stroke-width="3.5" opacity=".95"/>`);
+  if (level === 6) front.push('<circle cx="108" cy="42" r="6.5" fill="#FFF3D6" stroke="#fff" stroke-width="1.5"/>');
+  if (level >= 7) { d.push(orbLin(`${p}moon`, [[0, '#FFF6DA'], [1, '#FFE0B8']])); front.push(`<path d="M104 18a12 12 0 1 0 10 18 9 9 0 1 1 -10 -18Z" fill="url(#${p}moon)" stroke="#fff" stroke-width="1.5"/>`); }
+  if (level >= 8) {
+    d.push(orbLin(`${p}cur`, [[0, '#9FE3E8'], [.4, '#B9C8FF'], [.75, '#F2B8E6'], [1, '#FFD3B8']], 1, 0));
+    back.splice(1, 0, `<path d="M4 30C18 8 30 26 44 12S70 0 82 12s20 8 34-6" fill="none" stroke="url(#${p}cur)" stroke-width="10" stroke-linecap="round" opacity=".6"/><path d="M2 44C18 26 30 40 44 28s26-10 38 0 22 4 36-8" fill="none" stroke="url(#${p}cur)" stroke-width="6" stroke-linecap="round" opacity=".4"/>`);
+  }
+  if (level >= 9) for (const ps of [[[14, 22], [28, 12], [44, 8]], [[80, 112], [96, 106], [110, 96]]]) {
+    front.push(`<polyline points="${ps.map((q) => q.join(',')).join(' ')}" fill="none" stroke="#B9A4FA" stroke-width="1.2" stroke-dasharray="2 3"/>`);
+    front.push(ps.map(([x, y]) => orbStar(x, y, 3.6, '#FFF6DA', '#B9A4FA')).join(''));
+  }
+  if (level >= 10) {
+    d.push(orbLin(`${p}r2`, [[0, '#FFD0BD'], [.5, '#FAB9DB'], [1, '#A7BEFF']], 1, 0));
+    back.push(`<path d="M14 40a50 12 18 0 1 96 34" fill="none" stroke="url(#${p}r2)" stroke-width="2.5" opacity=".55"/>`);
+    front.push(`<path d="M106 82a50 12 18 0 1 -96 -34" fill="none" stroke="url(#${p}r2)" stroke-width="2.5" opacity=".9"/>`);
+    front.push('<circle cx="12" cy="44" r="4.5" fill="#E9F7FF" stroke="#fff" stroke-width="1.2"/>');
+    for (const [x, y, c] of [[38, 12, '#A7E3EA'], [48, 6, '#B9C8FF'], [60, 3, '#FFF1B8'], [72, 6, '#F2B8E6'], [82, 12, '#FFC9A8']]) front.push(orbStar(x, y, 4.2, c, '#fff'));
+  }
+  const sparks = { 2: [[91, 27, 7]], 3: [[92, 26, 8], [104, 46, 4.5], [18, 44, 5], [24, 92, 3.5]], 4: [[94, 22, 7], [18, 38, 4.5], [104, 90, 3.5], [22, 96, 3]],
+    5: [[96, 20, 7.5], [108, 58, 4], [14, 40, 5], [20, 96, 3.5], [100, 98, 3]], 6: [[16, 28, 5.5], [98, 102, 4], [8, 56, 3.5], [112, 74, 3], [30, 108, 3], [84, 10, 4]] }[level]
+    || [[16, 30, 5.5], [98, 102, 4], [8, 58, 3.5], [112, 70, 3.5], [30, 110, 3], [80, 8, 4.5], [4, 84, 3], [114, 54, 2.6]];
+  front.push(sparks.map(([x, y, r]) => orbStar(x, y, r)).join(''));
+  return `<svg class="${cls}" viewBox="0 0 120 120" aria-hidden="true"><defs>${d.join('')}</defs>${back.join('')}<ellipse cx="60" cy="110" rx="32" ry="5" fill="#2B2A4C" opacity=".07"/>${body.join('')}${front.join('')}${orbFace(sleepy)}${zz}</svg>`;
+}
+/** 홈의 구슬 카드 */
+function orbCardHTML(days, today) {
+  const pts = orbPoints(days);
+  const lv = orbLevel(pts);
+  const [min, name] = ORB_LEVELS[lv - 1];
+  const next = ORB_LEVELS[lv];
+  const pct = next ? Math.round(((pts - min) / (next[0] - min)) * 100) : 100;
+  const sleepy = !studiedOn(today);
+  return `<section class="orb-card">
+    ${orbSVG(lv, sleepy)}
+    <div class="orb-text">
+      <small>Lv.${lv}${sleepy ? ' · 쿨쿨 자는 중' : ''}</small>
+      <b>${name}</b>
+      <div class="orb-bar"><i style="width:${pct}%"></i></div>
+      <span>${next ? `다음 단계 <b>${next[1]}</b>까지 ${(next[0] - pts).toLocaleString()}점` : '가장 높은 단계예요! ✨'}</span>
+    </div>
+  </section>`;
+}
+/** 단계가 오르면 축하 화면 (한 번만). 처음 켤 때는 지금 단계를 조용히 기억만 함 */
+function checkOrbLevelUp(days) {
+  const lv = orbLevel(orbPoints(days));
+  if (prefs.orbLevel == null) { setPref('orbLevel', lv); return; }
+  if (lv <= prefs.orbLevel) return;
+  setPref('orbLevel', lv);
+  const el = document.createElement('div');
+  el.className = 'orb-party';
+  el.setAttribute('role', 'dialog');
+  el.innerHTML = `<div class="orb-party-card">
+    <div class="orb-party-art">${orbSVG(lv, false)}</div>
+    <small>Lv.${lv}</small>
+    <h2>${josa(ORB_LEVELS[lv - 1][1], '이', '가')} 됐어요! ✨</h2>
+    <p>${ORB_LEVELS[lv] ? `다음은 <b>${ORB_LEVELS[lv][1]}</b>${josa(ORB_LEVELS[lv][1], '이에요', '예요').slice(ORB_LEVELS[lv][1].length)}. 꾸준히 쌓으면 더 예뻐져요.` : '가장 높은 단계에 올랐어요. 정말 대단해요!'}</p>
+    <button class="btn primary wide" data-act="orb-party-close">좋아요</button>
+  </div>`;
+  document.body.append(el);
+}
+
 // ---------- 하루 목표 링: 복습(푼 카드), 추가(새 표현), 대화(분) ----------
 const RINGS = [
   { key: 'review', name: '복습', unit: '장', c1: '#7E9DFF', c2: '#A888F5', value: (d) => solvedOf(d), goal: () => prefs.goalReview },
@@ -3624,6 +3768,7 @@ document.addEventListener('click', (ev) => {
     case 'talk-cards': talkToCards(); break;
     case 'talk-toggle': { const i = Number(el.dataset.index); talk.checked.has(i) ? talk.checked.delete(i) : talk.checked.add(i); renderTalk(); break; }
     case 'set-dir': setDirection(el.dataset.dir); break;
+    case 'orb-party-close': document.querySelector('.orb-party')?.remove(); break;
     case 'review-setup': ui.reviewSetup = true; renderReview(); $('#review-main').scrollTop = 0; break;
     case 'review-setup-cancel': ui.reviewSetup = false; renderReview(); break;
     case 'review-start': ui.reviewSetup = false; ui.reviewStarted = true; ui.sessionDone = 0; renderReview(); $('#review-main').scrollTop = 0; break;

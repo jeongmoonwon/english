@@ -412,6 +412,32 @@ textarea.eng { font-family: var(--serif); }
 .day.ring-day.today .dnum { color: var(--ink); font-weight: 800; }
 .day.ring-day.today { box-shadow: none; background: color-mix(in srgb, var(--soft) 70%, transparent); }
 .day.ring-day .rings-blank { width: 34px; height: 34px; }
+/* 오늘 홈 */
+.today-hero { display: flex; align-items: center; gap: 16px; padding: 18px; margin: 4px 0 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
+.today-hero .rings { flex: none; }
+.today-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.today-text > b { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.today-text > span { color: var(--muted); font-size: 13px; }
+.today-rings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.today-rings li { display: flex; align-items: center; gap: 6px; }
+.today-rings i { width: 7px; height: 7px; border-radius: 50%; }
+.today-rings b { color: var(--ink); font-weight: 700; }
+.today-links { margin-bottom: 12px; }
+.today-links .set-row { padding: 11px 14px; gap: 11px; }
+.today-links .set-txt b { font-size: 15px; }
+.today-links .set-txt small { font-size: 12px; }
+.today-streak { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; margin-bottom: 12px; border-radius: 20px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); font-weight: 800; }
+.today-streak .week { display: flex; gap: 5px; }
+.today-streak .week i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 10px; font-weight: 700; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.today-streak .week i.on { color: var(--on-g, #fff); background: var(--g2, var(--accent)); }
+.today-streak .week i.now { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+.setup-fold { padding: 0; gap: 0; }
+.setup-fold > summary { list-style: none; cursor: pointer; padding: 14px 16px; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.setup-fold > summary::-webkit-details-marker { display: none; }
+.setup-fold > summary span { flex: 1; min-width: 0; color: var(--muted); font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.setup-fold > summary::after { content: '›'; color: var(--muted); font-size: 18px; transition: transform .2s; }
+.setup-fold[open] > summary::after { transform: rotate(90deg); }
+.setup-fold > .field { box-shadow: none; background: transparent; margin: 0; padding-top: 4px; }
 .ring-detail { display: flex; align-items: center; gap: 18px; }
 .ring-detail .rings { flex: none; }
 .ring-rows { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
@@ -753,7 +779,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
   <!-- 복습 -->
   <section class="view" id="view-review">
     <header class="topbar">
-      <h1>복습</h1>
+      <h1 id="review-title">오늘</h1>
       <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
       <span class="count" id="due-count"></span>
       <button class="pill" data-act="practice" id="practice-open">자유 연습</button>
@@ -805,7 +831,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
   <nav class="tabbar" role="tablist">
     <button class="tab" role="tab" data-tab="review" aria-selected="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="11" rx="2.5"/><path d="M7 18h10M9 21h6"/></svg>
-      복습
+      오늘
     </button>
     <button class="tab" role="tab" data-tab="talk" aria-selected="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a7.5 7.5 0 0 1-11 6.6L4 20l1.4-4.6A7.5 7.5 0 1 1 20 12z"/><path d="M9 11h.01M12 11h.01M15 11h.01"/></svg>
@@ -866,7 +892,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v77';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1404,12 +1430,12 @@ function renderReview() {
   const now = new Date();
   const due = dueCards(now);
   ui.reviewSig = due.map((c) => c.id).join(',');
-  $('#due-count').textContent = due.length ? `${due.length}장 남음` : '';
+  $('#due-count').textContent = ui.reviewStarted && due.length ? `${due.length}장 남음` : '';
   $('#practice-open').disabled = modeCards().length === 0;
   const main = $('#review-main'), bar = $('#review-actions'), filters = $('#review-filters');
   if (!due.length) ui.reviewStarted = false;
   // 복습 중에는 '자유 연습' 대신 '그만하기'
-  $('#practice-open').hidden = ui.reviewStarted;
+  $('#practice-open').hidden = true;   // 자유 연습은 오늘 홈의 바로가기로
   $('#review-quit').hidden = !ui.reviewStarted;
 
   if (!modeCards().length) {
@@ -1423,33 +1449,51 @@ function renderReview() {
     return;
   }
 
-  // 시작 전: 방향·카테고리를 고르는 화면 (카드는 아직 안 보여 줌)
+  $('#review-title').textContent = ui.reviewStarted ? '복습' : '오늘';
+  // 시작 전: 오늘 홈 (오늘 링 · 복습 시작 · 바로가기 · 연속 기록, 복습 설정은 접어 둠)
   if (!ui.reviewStarted) {
     ui.reviewShow = false; ui.reviewCardId = null;
     filters.hidden = true;
     // 카테고리와 상관없이 지금 복습할 카드 (카테고리별 장수)
     const allDue = modeCards().filter((c) => toDate(c.srs.due) <= now);
-    if (!allDue.length) {
-      // 복습할 카드가 아예 없으면 방향·카테고리는 자유 연습 화면에서 고르므로 여기서는 숨김
-      const next = modeCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
-      main.innerHTML = `<div class="empty">${MASCOT}<h2 class="setup-title">지금 복습할 카드가 없어요</h2>
-        <p class="setup-note">${next ? `다음 복습은 ${intervalText(next, now)} 뒤예요. ` : ''}그 전에 풀고 싶으면 자유 연습을 해 보세요.</p></div>`;
-      bar.hidden = false;
-      bar.innerHTML = '<button class="btn wide" data-act="practice">자유 연습하기</button>';
-      return;
-    }
     const dueByCat = new Map();
     for (const c of allDue) dueByCat.set(catOf(c), (dueByCat.get(catOf(c)) || 0) + 1);
-    // 고른 카테고리에만 없으면 화면은 그대로 두고 다른 카테고리를 고르게 함
-    const head = due.length
-      ? `<h2 class="setup-title">지금 복습할 카드 ${due.length}장</h2>`
-      : `<h2 class="setup-title">고른 카테고리에는 지금 복습할 카드가 없어요</h2>
-        <p class="setup-note">전체에는 ${allDue.length}장 있어요. 아래에서 고른 카테고리를 빼고 다른 카테고리를 골라 보세요.</p>`;
-    main.innerHTML = `<div class="review-hero">${MASCOT}${head}</div>${setupHTML(dueByCat)}`;
+    const next = modeCards().map((c) => toDate(c.srs.due)).filter((d) => d > now).sort((a, b) => a - b)[0];
+    const days = dailyActivity();
+    const today = days.get(dayKey(now));
+    const name = prefs.talkName ? `${esc(prefs.talkName)}님, ` : '';
+    const left = Math.max(0, prefs.goalReview - solvedOf(today));
+    let line1, line2;
+    if (!allDue.length) { line1 = `${name}오늘 복습 끝! ✨`; line2 = next ? `다음 복습은 ${intervalText(next, now)} 뒤예요.` : '새 표현을 추가해 보세요.'; }
+    else if (!due.length) { line1 = '고른 카테고리에는 복습할 카드가 없어요'; line2 = `전체에는 ${allDue.length}장 있어요. 아래 복습 설정에서 카테고리를 바꿔 보세요.`; }
+    else { line1 = `${name}복습할 카드 ${due.length}장`; line2 = left ? `오늘 목표까지 ${left}장 남았어요.` : '오늘 복습 목표는 채웠어요! 👏'; }
+    // 최근 7일 (오늘이 맨 오른쪽)
+    const week = [...Array(7)].map((_, i) => { const d = new Date(now); d.setDate(d.getDate() - (6 - i)); return d; });
+    const { n } = streakInfo(days);
+    main.innerHTML = `
+      <section class="today-hero">
+        ${ringsSVG(today, 96, '오늘 목표 링')}
+        <div class="today-text">
+          <b>${line1}</b>
+          <span>${line2}</span>
+          <ul class="today-rings">${RINGS.map((r) => `<li><i style="background:linear-gradient(120deg, ${r.c1}, ${r.c2})"></i><span>${r.name} <b>${r.value(today)}</b> / ${r.goal()}${r.unit}</span></li>`).join('')}</ul>
+        </div>
+      </section>
+      <div class="set-list today-links">
+        <button class="set-row" data-act="home-talk"><span class="set-icon">${icon('chat')}</span><span class="set-txt"><b>${josa(botName(), '이랑', '랑')} 대화하기</b><small>말로 수다 떨고 표현 챙기기</small></span><span class="set-go">›</span></button>
+        <button class="set-row" data-act="add"><span class="set-icon">${icon('pen')}</span><span class="set-txt"><b>표현 추가</b><small>사진 · 말하기 · 텍스트로 채우기</small></span><span class="set-go">›</span></button>
+        <button class="set-row" data-act="practice"><span class="set-icon">${icon('type')}</span><span class="set-txt"><b>자유 연습</b><small>복습 일정과 상관없이 풀어 보기</small></span><span class="set-go">›</span></button>
+      </div>
+      <section class="today-streak">
+        <span class="gtext">🔥 ${n}일 연속</span>
+        <span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}">${'일월화수목금토'[d.getDay()]}</i>`).join('')}</span>
+      </section>
+      ${allDue.length ? `<details class="field setup-fold"${ui.setupOpen ? ' open' : ''}><summary>복습 설정 <span>${DIRECTIONS[study.dir].label}${selectedCats().length ? ` · ${selectedCats().map(esc).join(', ')}` : ''}</span></summary>${setupHTML(dueByCat)}</details>` : ''}`;
     bar.hidden = false;
     bar.innerHTML = due.length
       ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`
-      : '<button class="btn primary wide" disabled>복습할 카드가 있는 카테고리를 골라 주세요</button>';
+      : allDue.length ? '<button class="btn primary wide" disabled>복습할 카드가 있는 카테고리를 골라 주세요</button>'
+      : `<button class="btn primary wide" data-act="home-talk">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
     return;
   }
 
@@ -3393,6 +3437,7 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
+    case 'home-talk': setTab('talk'); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
     case 'talk-cards': talkToCards(); break;
@@ -3589,6 +3634,9 @@ document.addEventListener('keydown', (ev) => {
     saveRename();
   }
 });
+
+// 오늘 홈의 '복습 설정' 접기·펴기 상태 기억 (다시 그려도 유지)
+document.addEventListener('toggle', (ev) => { if (ev.target.matches?.('.setup-fold')) ui.setupOpen = ev.target.open; }, true);
 
 // 새 언어 모드 드롭다운
 document.addEventListener('change', (ev) => {

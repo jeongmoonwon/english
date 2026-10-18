@@ -266,11 +266,14 @@ async function handleAsk(request, env, reply, key) {
 // OpenAI 키(OPENAI_API_KEY)는 여기에만 있고, 앱은 몇 분짜리 임시 키만 받음
 const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
-function talkInstructions(learn, know, practice, name) {
+/** 대화 상대 이름 = 고른 목소리 이름 (marin → Marin) */
+const voiceName = (voice) => voice.charAt(0).toUpperCase() + voice.slice(1);
+
+function talkInstructions(learn, know, practice, name, voice) {
   const list = practice.length
     ? `\nThey are currently reviewing these expressions. When it fits naturally, steer the conversation so they get a chance to use one (never list them, quiz them, or say you are doing this):\n${practice.map((p) => `- ${p}`).join('\n')}`
     : '';
-  return `You are Mooni, a cheerful little peach character and the learner's conversation buddy. The learner is a ${know} speaker practicing ${learn}.
+  return `You are ${voiceName(voice)}, the learner's friendly conversation buddy. If you introduce yourself, just say your name (${voiceName(voice)}); don't describe yourself as a character or anything else. The learner is a ${know} speaker practicing ${learn}.
 - Speak only ${learn}, a little slower than normal, with simple everyday words. Keep every turn short: one or two sentences, usually ending with one easy question.
 ${name ? `- Call the learner "${name}" (that is how they want to be called; use it naturally, not in every turn).
 ` : ''}- Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
@@ -300,7 +303,7 @@ async function handleTalkToken(request, env, reply, key, user) {
       session: {
         type: 'realtime',
         model: REALTIME_MODEL,
-        instructions: talkInstructions(target, native, practice, name),
+        instructions: talkInstructions(target, native, practice, name, voice),
         audio: {
           input: {
             // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
@@ -325,18 +328,18 @@ async function handleTalkToken(request, env, reply, key, user) {
 }
 
 // 목소리 미리 듣기: 목소리마다 한 번만 만들어 KV에 저장해 두고 계속 같은 파일을 돌려줌 (처음 한 번만 비용)
-const SAMPLE_TEXT = "Hi! I'm Mooni, your little peach friend. How was your day today?";
+const sampleText = (voice) => `Hi! I'm ${voiceName(voice)}. How was your day today?`;
 async function handleTalkSample(request, env, reply, cors) {
   const voice = new URL(request.url).searchParams.get('voice');
   if (!REALTIME_VOICES.includes(voice)) return reply(400, { error: 'voice' });
-  const key = `sample:v1:${voice}`;
+  const key = `sample:v2:${voice}`;   // v2: 목소리 이름으로 자기소개
   let audio = await env.USAGE.get(key, 'arrayBuffer');
   if (!audio) {
     if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: SAMPLE_TEXT, instructions: 'Cheerful, warm and friendly, a little slower than normal.', response_format: 'mp3' }),
+      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: sampleText(voice), instructions: 'Cheerful, warm and friendly, a little slower than normal.', response_format: 'mp3' }),
     });
     if (!res.ok) {
       console.error('talk sample failed', res.status, (await res.text().catch(() => '')).slice(0, 300));
@@ -385,7 +388,7 @@ async function handleTalkReview(request, env, reply) {
   let body;
   try { body = await request.json(); } catch { body = null; }
   const turns = (Array.isArray(body?.turns) ? body.turns : [])
-    .map((t) => ({ role: t?.role === 'user' ? 'Learner' : 'Mooni', text: clean(t?.text, 600) }))
+    .map((t) => ({ role: t?.role === 'user' ? 'Learner' : 'Partner', text: clean(t?.text, 600) }))
     .filter((t) => t.text)
     .slice(-40);
   if (!turns.some((t) => t.role === 'Learner')) return reply(400, { error: 'turns' });
@@ -396,10 +399,10 @@ async function handleTalkReview(request, env, reply) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 8000,
-      system: `You review a short spoken conversation between a ${know}-speaking learner of ${learn} and Mooni, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
+      system: `You review a short spoken conversation between a ${know}-speaking learner of ${learn} and Partner, their conversation buddy, and pick what is worth turning into flashcards. Card meanings are written in ${know}. The learner's lines come from speech recognition and may contain recognition errors. Ignore learner lines that look like recognition noise rather than something they said (for example text in a language other than ${learn} or ${know}, or words unrelated to the conversation).
 - Learner lines in ${learn} that were unnatural or wrong: "kind" is "fix", "said" is what they said (short, as spoken), "expression" is how a native ${learn} speaker would naturally say it in everyday conversation, keeping their meaning.
 - Learner lines said in ${know} (or another language) instead of ${learn}: "kind" is "translate", "said" is what they said, "expression" is how a native ${learn} speaker would say it.
-- Useful expressions Mooni used that the learner would benefit from: "kind" is "mooni", "said" is an empty string. At most 2 of these.
+- Useful expressions Partner used that the learner would benefit from: "kind" is "mooni", "said" is an empty string. At most 2 of these.
 - "meaning": a natural ${know} translation of "expression". "note": 1-2 short Korean sentences in friendly 해요체 about what to fix or when to use it. Don't repeat the meaning.
 - Prefer phrases they can reuse over single easy words. Skip lines that were already natural. At most 6 items, most useful first.`,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: TALK_SCHEMA } },

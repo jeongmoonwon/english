@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ko" data-skin="peach">
+<html lang="ko" data-skin="pastel">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#FFF6EE" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#221A17" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -19,12 +19,14 @@
     const p = JSON.parse(localStorage.getItem('freedom-prefs')) || {};
     if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
     if (p.size && p.size !== 'normal') document.documentElement.dataset.size = p.size;
-    if (p.font) document.documentElement.style.setProperty('--kfont', `"${p.font}"`);
+    const font = p.design === 2 && p.font ? p.font : 'Pretendard Variable';
+    document.documentElement.style.setProperty('--kfont', `"${font}"`);
     if (p.engFont === 'same') document.documentElement.dataset.eng = 'same';
   } catch {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poor+Story&family=Gowun+Dodum&family=Gaegu&family=Hi+Melody&family=Gamja+Flower&family=Jua&display=swap">
 <style>
 :root {
@@ -520,7 +522,7 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 }
 /* 동글동글, 부드러운 그림자, 둥근 글꼴(주아체), 눌리면 통통 */
 :root[data-skin] {
-  --kfont: "Poor Story";   /* 본문 글씨체 (설정에서 바꿈) */
+  --kfont: "Pretendard Variable";   /* 본문 글씨체 (설정에서 바꿈) */
   --round: "Jua", var(--sans);
   --sans: var(--kfont), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   /* 영어 표현은 명조(세리프)로 두되, 한글이 섞이면 본문 글씨체로 */
@@ -529,35 +531,140 @@ input.text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* 설정에서 '영어 표현도 같은 글씨체'를 고른 경우 */
 :root[data-skin][data-eng="same"] { --serif: var(--sans); }
 textarea::placeholder { font-family: var(--sans); }
-:root[data-skin] body {
+:root[data-skin="peach"] body {
   background-image: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1.2px, transparent 1.3px);
   background-size: 22px 22px;
 }
-:root[data-skin] .field, :root[data-skin] .prompt, :root[data-skin] .card-list, :root[data-skin] .face, :root[data-skin] .set-list,
-:root[data-skin] .streak, :root[data-skin] .tile, :root[data-skin] .cal {
+:root[data-skin="peach"] .field, :root[data-skin="peach"] .prompt, :root[data-skin="peach"] .card-list, :root[data-skin="peach"] .face, :root[data-skin="peach"] .set-list,
+:root[data-skin="peach"] .streak, :root[data-skin="peach"] .tile, :root[data-skin="peach"] .cal {
   border-radius: 26px; border-color: transparent;
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 13%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 6%, transparent);
 }
-:root[data-skin] .btn, :root[data-skin] .grade, :root[data-skin] .seg-btn { border-radius: 18px; }
-:root[data-skin] .btn.primary, :root[data-skin] .pill.solid { box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 60%, #000); }
+:root[data-skin="peach"] .btn, :root[data-skin="peach"] .grade, :root[data-skin="peach"] .seg-btn { border-radius: 18px; }
+:root[data-skin="peach"] .btn.primary, :root[data-skin="peach"] .pill.solid { box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 60%, #000); }
 :root[data-skin] textarea, :root[data-skin] input.text { border-radius: 14px; }
-:root[data-skin] .topbar h1, :root[data-skin] .sheet-head h2, :root[data-skin] .empty h2,
-:root[data-skin] .setup-title, :root[data-skin] .streak b, :root[data-skin] .tile b,
-:root[data-skin] .cal-head h2, :root[data-skin] .grade span, :root[data-skin] .field h3,
-:root[data-skin] .btn, :root[data-skin] .pill, :root[data-skin] .tab, :root[data-skin] .scan-wait b {
+:root[data-skin="peach"] .topbar h1, :root[data-skin="peach"] .sheet-head h2, :root[data-skin="peach"] .empty h2,
+:root[data-skin="peach"] .setup-title, :root[data-skin="peach"] .streak b, :root[data-skin="peach"] .tile b,
+:root[data-skin="peach"] .cal-head h2, :root[data-skin="peach"] .grade span, :root[data-skin="peach"] .field h3,
+:root[data-skin="peach"] .btn, :root[data-skin="peach"] .pill, :root[data-skin="peach"] .tab, :root[data-skin="peach"] .scan-wait b {
   font-family: var(--round); font-weight: 400; letter-spacing: 0;
 }
-:root[data-skin] .tabbar { background: color-mix(in srgb, var(--surface) 92%, transparent); }
-:root[data-skin] .tab[aria-selected="true"] svg { background: var(--soft); border-radius: 12px; padding: 2px 10px; width: 44px; box-sizing: content-box; }
-:root[data-skin] .grade { padding: 10px 4px 12px; gap: 3px; }
-:root[data-skin] .grade::before { font-size: 22px; line-height: 1; }
-:root[data-skin] .grade.again::before { content: '😵'; }
-:root[data-skin] .grade.hard::before { content: '🤔'; }
-:root[data-skin] .grade.good::before { content: '🙂'; }
-:root[data-skin] .grade.easy::before { content: '😆'; }
-:root[data-skin] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item) { transition: transform .12s cubic-bezier(.3, 1.6, .5, 1); }
-:root[data-skin] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item):active { transform: scale(.94); }
-:root[data-skin] .day { border-radius: 12px; }
+:root[data-skin="peach"] .tabbar { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+:root[data-skin="peach"] .tab[aria-selected="true"] svg { background: var(--soft); border-radius: 12px; padding: 2px 10px; width: 44px; box-sizing: content-box; }
+:root[data-skin="peach"] .grade { padding: 10px 4px 12px; gap: 3px; }
+:root[data-skin="peach"] .grade::before { font-size: 22px; line-height: 1; }
+:root[data-skin="peach"] .grade.again::before { content: '😵'; }
+:root[data-skin="peach"] .grade.hard::before { content: '🤔'; }
+:root[data-skin="peach"] .grade.good::before { content: '🙂'; }
+:root[data-skin="peach"] .grade.easy::before { content: '😆'; }
+:root[data-skin="peach"] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item) { transition: transform .12s cubic-bezier(.3, 1.6, .5, 1); }
+:root[data-skin="peach"] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item):active { transform: scale(.94); }
+:root[data-skin="peach"] .day { border-radius: 12px; }
+
+/* ---------- 파스텔 그라데이션 테마 (data-skin="pastel", 기본) ----------
+   파랑 → 보라 → 분홍 → 복숭아 그라데이션은 주 버튼·진행·선택에만, 나머지는 흰 여백·반투명 유리·큰 제목 */
+:root[data-skin="pastel"] {
+  --bg: #F5F5F7; --surface: #FFFFFF; --ink: #1D1D1F; --muted: #6E6E73; --line: #E5E5EA;
+  --accent: #6B5BD6; --accent-ink: #FFFFFF; --soft: #EFEAFE;
+  --again: #E5534B; --hard: #D9822B; --good: #1E9E62; --easy: #3D7BE0;
+  --g: linear-gradient(120deg, #A7BEFF 0%, #C5AEFA 45%, #FAB9DB 80%, #FFD0BD 100%);
+  --g2: linear-gradient(120deg, #A7BEFF, #C5AEFA 55%, #FAB9DB);
+  --gtext: linear-gradient(120deg, #6B8CF5, #9C7AEE 55%, #E886B8);
+  --on-g: #2B2A4C;            /* 그라데이션 위 글자 */
+  --glass: rgba(255, 255, 255, .74);
+  --glow1: rgba(197, 174, 250, .32); --glow2: rgba(167, 190, 255, .26); --glow3: rgba(250, 185, 219, .22);
+}
+:root[data-skin="pastel"][data-theme="dark"] {
+  --bg: #000000; --surface: #1C1C1E; --ink: #F5F5F7; --muted: #A1A1A6; --line: #2C2C2E;
+  --accent: #B9A8FF; --accent-ink: #1D1D1F; --soft: #2A2540;
+  --again: #FF7A72; --hard: #F0A54A; --good: #4CC08A; --easy: #7FA8F5;
+  --gtext: linear-gradient(120deg, #A7BEFF, #C5AEFA 55%, #FAB9DB);
+  --glass: rgba(28, 28, 30, .7);
+  --glow1: rgba(197, 174, 250, .2); --glow2: rgba(167, 190, 255, .14); --glow3: rgba(250, 185, 219, .12);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="pastel"]:not([data-theme="light"]) {
+    --bg: #000000; --surface: #1C1C1E; --ink: #F5F5F7; --muted: #A1A1A6; --line: #2C2C2E;
+    --accent: #B9A8FF; --accent-ink: #1D1D1F; --soft: #2A2540;
+    --again: #FF7A72; --hard: #F0A54A; --good: #4CC08A; --easy: #7FA8F5;
+    --gtext: linear-gradient(120deg, #A7BEFF, #C5AEFA 55%, #FAB9DB);
+    --glass: rgba(28, 28, 30, .7);
+    --glow1: rgba(197, 174, 250, .2); --glow2: rgba(167, 190, 255, .14); --glow3: rgba(250, 185, 219, .12);
+  }
+}
+:root[data-skin="pastel"] body {
+  background:
+    radial-gradient(420px 360px at 105% -6%, var(--glow1), transparent 70%),
+    radial-gradient(380px 340px at -18% 22%, var(--glow2), transparent 70%),
+    radial-gradient(420px 380px at 110% 92%, var(--glow3), transparent 70%),
+    var(--bg);
+  letter-spacing: -0.012em;
+}
+/* 유리 카드 */
+:root[data-skin="pastel"] :is(.field, .prompt, .card-list, .face, .set-list, .streak, .tile, .cal) {
+  background: var(--glass); border-color: transparent; border-radius: 24px;
+  -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 6px 22px rgba(30, 20, 60, .05);
+}
+:root[data-skin="pastel"] .face.back { background: var(--glass); }
+/* 플래시카드: 그라데이션 테두리 */
+:root[data-skin="pastel"] .face { border-radius: 30px; }
+:root[data-skin="pastel"] .face::before {
+  content: ''; position: absolute; inset: 0; padding: 1.5px; border-radius: inherit; background: var(--g); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+:root[data-skin="pastel"] .face-tag { background: none; padding: 0; color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; font-size: 14px; top: 18px; left: 22px; }
+/* 큰 제목 */
+:root[data-skin="pastel"] .topbar h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.035em; }
+:root[data-skin="pastel"] :is(.setup-title, .empty h2) { font-weight: 800; letter-spacing: -0.03em; }
+/* 버튼 */
+:root[data-skin="pastel"] .btn { border-radius: 16px; font-weight: 700; }
+:root[data-skin="pastel"] :is(.btn.primary, .pill.solid) {
+  background: var(--g2); color: var(--on-g); border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(197, 174, 250, .35);
+}
+:root[data-skin="pastel"] .actions .btn.wide { min-height: 54px; border-radius: 999px; }
+:root[data-skin="pastel"] .actions { background: transparent; border-top: 0; }
+:root[data-skin="pastel"] .pill { background: var(--glass); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .mode-pill { background: var(--glass); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
+/* 칩·선택 */
+:root[data-skin="pastel"] .cat { background: var(--glass); border-color: transparent; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .cat[aria-pressed="true"] { background: var(--g2); color: var(--on-g); box-shadow: none; }
+:root[data-skin="pastel"] .seg-btn { background: var(--glass); border-color: transparent; border-radius: 16px; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .seg-btn[aria-pressed="true"] { background: var(--g2); color: var(--on-g); box-shadow: none; }
+:root[data-skin="pastel"] .seg-btn[aria-pressed="true"] small { color: var(--on-g); opacity: .75; }
+:root[data-skin="pastel"] :is(textarea, input.text) { border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
+/* 평가 버튼: 흰 바탕 + 색 글자, '알맞음'만 그라데이션 */
+:root[data-skin="pastel"] .grade { background: var(--glass); border-radius: 20px; box-shadow: 0 2px 10px rgba(30, 20, 60, .05); }
+:root[data-skin="pastel"] .grade.good { background: var(--g2); color: var(--on-g); }
+/* 떠 있는 탭 바 */
+:root[data-skin="pastel"] .tabbar {
+  margin: 0 14px calc(env(safe-area-inset-bottom, 0px) + 8px); padding: 6px 4px; border: 0; border-radius: 999px;
+  background: var(--glass); -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: 0 8px 30px rgba(30, 20, 60, .08), 0 0 0 .5px var(--line);
+}
+:root[data-skin="pastel"] .tab { color: #AEAEB2; font-weight: 600; font-size: 10.5px; }
+:root[data-skin="pastel"] .tab[aria-selected="true"] { color: var(--ink); }
+:root[data-skin="pastel"] .tab[aria-selected="true"] svg { stroke: url(#g-stroke); }
+/* 설정 목록 아이콘: 그라데이션 타일 */
+:root[data-skin="pastel"] .set-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--g2); color: var(--on-g); font-size: 0; flex: none; }
+:root[data-skin="pastel"] .set-icon svg { width: 19px; height: 19px; }
+/* 대화 말풍선 */
+:root[data-skin="pastel"] .bubble { border-radius: 22px; }
+:root[data-skin="pastel"] .bubble.mooni { background: var(--glass); border: 0; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .bubble.me { background: var(--g2); color: var(--on-g); }
+/* 그라데이션 글자 */
+:root[data-skin="pastel"] .gtext { color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; }
+:root[data-skin="pastel"] .streak b { color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; }
+/* 눌렀을 때 살짝 */
+:root[data-skin="pastel"] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item, .set-row) { transition: transform .15s ease; }
+:root[data-skin="pastel"] :is(.btn, .grade, .pill, .cat, .seg-btn, .row, .tab, .day, .found-item, .set-row):active { transform: scale(.97); }
+:root[data-skin="pastel"] .day { border-radius: 12px; }
+/* 선 아이콘 (버튼 안) */
+.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
+.fill-btns .btn .ico { width: 24px; height: 24px; margin-bottom: 2px; }
+
 .empty .mascot { display: none; }
 :root[data-skin] .empty .mascot { display: block; width: 128px; margin: 0 auto 16px; animation: bob 2.4s ease-in-out infinite; }
 
@@ -573,6 +680,7 @@ textarea::placeholder { font-family: var(--sans); }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="g-stroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7E9DFF"/><stop offset=".55" stop-color="#A888F5"/><stop offset="1" stop-color="#F09BC8"/></linearGradient></defs></svg>
 <div class="app">
   <!-- 복습 -->
   <section class="view" id="view-review">
@@ -690,7 +798,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1118,16 +1226,20 @@ async function deleteCategory(name, mode, to) {
 const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '' };
-  try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; } catch { return base; }
+  // design: 2 = 파스텔 디자인으로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값 Pretendard로)
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Pretendard Variable', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 2 };
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
+  if (saved && saved.design !== 2) { saved.font = base.font; saved.design = 2; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
+  return { ...base, ...saved };
 })();
 function setPref(key, value) {
   prefs[key] = value;
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
   applyPrefs();
 }
-const THEME_BG = { light: '#FFF6EE', dark: '#221A17' };
-const FONTS = [['Poor Story', '푸어스토리'], ['Gowun Dodum', '고운돋움'], ['Gaegu', '개구'], ['Hi Melody', '하이멜로디'], ['Gamja Flower', '감자꽃'], ['Jua', '주아']];
+const THEME_BG = { light: '#F5F5F7', dark: '#000000' };
+const FONTS = [['Pretendard Variable', '프리텐다드'], ['Poor Story', '푸어스토리'], ['Gowun Dodum', '고운돋움'], ['Gaegu', '개구'], ['Hi Melody', '하이멜로디'], ['Gamja Flower', '감자꽃'], ['Jua', '주아']];
 function applyPrefs() {
   const root = document.documentElement;
   if (prefs.theme === 'system') delete root.dataset.theme; else root.dataset.theme = prefs.theme;
@@ -1564,9 +1676,9 @@ function scanEditorHTML(e) {
     }
     body = `${result}
       <div class="fill-btns">
-        <button class="btn" data-act="scan">📷 사진<small>${SCAN_MAX}장까지</small></button>
-        <button class="btn" data-act="voice-start" ${canRecord ? '' : 'disabled'}>🎙 말하기<small>말하고 끝내기</small></button>
-        <button class="btn" data-act="ask-toggle" aria-pressed="${!!e.typing}">✏️ 텍스트<small>적어서 물어보기</small></button>
+        <button class="btn" data-act="scan">${icon('camera')}사진<small>${SCAN_MAX}장까지</small></button>
+        <button class="btn" data-act="voice-start" ${canRecord ? '' : 'disabled'}>${icon('mic')}말하기<small>말하고 끝내기</small></button>
+        <button class="btn" data-act="ask-toggle" aria-pressed="${!!e.typing}">${icon('pen')}텍스트<small>적어서 물어보기</small></button>
       </div>
       ${e.typing ? `<div class="ask-row">
         <textarea id="ask-input" rows="2" maxlength="${ASK_MAX_CHARS}" enterkeyhint="send" aria-label="궁금한 표현 적기" placeholder="✏️ 궁금한 ${targetLang(e.mode).name} 표현이나, ${targetLang(e.mode).name}로 하고 싶은 ${nativeLang(e.mode).name} 말을 적어 보세요">${esc(e.askText || '')}</textarea>
@@ -1902,7 +2014,7 @@ function renderTalk() {
   } else if (t.status === 'idle') {
     body = `<div class="talk-hero">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b>
       <p>${josa(botName(), '이', '가')} 먼저 말을 걸어요. 말로 대답하면 돼요.<br>${TALK_MAX_SEC / 60}분 대화가 끝나면 더 자연스러운 표현을 카드로 만들어 줘요.</p></div>`;
-    actions = '<button class="btn primary wide" data-act="talk-start">🎙 대화 시작</button>';
+    actions = `<button class="btn primary wide" data-act="talk-start">${icon('mic')} 대화 시작</button>`;
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
@@ -2565,16 +2677,32 @@ const RATE_NAMES = { 0.7: '느리게', 0.9: '보통', 1.1: '빠르게' };
 const SAMPLE = { en: "Let's call it a day.", ja: '今日はここまでにしよう。', zh: '今天就到这里吧。', es: 'Lo dejamos aquí por hoy.', fr: "On s'arrête là pour aujourd'hui.", de: 'Machen wir für heute Schluss.', it: 'Per oggi basta così.', pt: 'Vamos parar por hoje.', ru: 'На сегодня хватит.', vi: 'Hôm nay đến đây thôi.', th: 'วันนี้พอแค่นี้', ko: '오늘은 여기까지 하자.' };
 const sampleOf = (m = prefs.mode) => SAMPLE[modeParts(m).target] || SAMPLE.en;
 /** 설정 목록: [페이지, 아이콘, 이름, 지금 상태] */
+/** 선 아이콘 (탭 바와 같은 스타일) */
+const ICON_PATHS = {
+  cloud: '<path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.5 1.5A3.8 3.8 0 0 1 17.5 18z"/>',
+  gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="m12 18 4-6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>',
+  contrast: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/>',
+  type: '<path d="M4 7V5h12v2M10 5v14M7 19h6M14 12h6M17 12v7M15.5 19h3"/>',
+  volume: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+  chat: '<path d="M20 12a7.5 7.5 0 0 1-11 6.6L4 20l1.4-4.6A7.5 7.5 0 1 1 20 12z"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>',
+};
+const icon = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 const SETTINGS = [
-  ['sync', '☁️', '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', '📷', '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? 10}번 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 10번`)],
-  ['lang', '🌏', '언어 모드', () => modeLabel()],
-  ['theme', '🌗', '화면 테마', () => THEME_NAMES[prefs.theme]],
-  ['text', '🔤', '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
-  ['sound', '🔊', '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
-  ['talk', '🍑', '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}`],
-  ['backup', '💾', '백업', () => '파일로 저장 · 복원'],
-  ['feedback', '💌', '의견 보내기', () => '버그 · 제안 · 문의'],
+  ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
+  ['usage', icon('gauge'), '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? 10}번 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 10번`)],
+  ['lang', icon('globe'), '언어 모드', () => modeLabel()],
+  ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
+  ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
+  ['sound', icon('volume'), '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
+  ['talk', icon('chat'), '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}`],
+  ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원'],
+  ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의'],
 ];
 const FEEDBACK_KINDS = [['bug', '🐛 버그'], ['idea', '💡 제안'], ['question', '❓ 문의'], ['etc', '💬 기타']];
 function renderSettings() {

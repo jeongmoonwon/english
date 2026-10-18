@@ -451,6 +451,17 @@ textarea.eng { font-family: var(--serif); }
 .talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .talk-card .btn { margin-top: 2px; }
 
+.topic-exprs { display: flex; flex-direction: column; gap: 6px; }
+.topic-expr { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 7px 10px; background: color-mix(in srgb, var(--muted) 9%, transparent); font: inherit; color: var(--ink); }
+.topic-expr b { font-family: var(--serif); font-size: 15px; }
+.topic-expr span { flex: 1; color: var(--muted); font-size: 13px; }
+.topic-expr i { font-style: normal; color: var(--accent); font-weight: 800; }
+.topic-expr.saved i { color: var(--good); }
+.topic-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.topic-src { color: var(--muted); font-size: 12px; text-decoration: none; }
+.topic-votes { display: flex; gap: 4px; }
+.topic-vote { border: 0; background: none; font-size: 15px; padding: 2px 4px; opacity: .45; filter: grayscale(1); }
+.topic-vote.on { opacity: 1; filter: none; }
 .talk-card.tap { cursor: pointer; transition: transform .15s ease; }
 .talk-card.tap:active { transform: scale(.98); }
 .talk-go { align-self: flex-end; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; font-size: 14px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
@@ -969,7 +980,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v98';
+const APP_VERSION = 'v99';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1398,7 +1409,7 @@ const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
   // design: 3 = 기본 글씨체를 나눔스퀘어라운드로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값으로)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false };
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [] };
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
   if (saved && saved.design !== 3) { saved.font = base.font; saved.design = 3; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
@@ -2227,7 +2238,7 @@ function renderTalk() {
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
-    body = `${t.topic ? `<span class="talk-topic-chip">📅 ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
+    body = `${t.topic ? `<span class="talk-topic-chip">${t.topic.kind === 'interest' ? '✨' : '📅'} ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
       <p><span id="talk-left">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span> 남음</p></div>${log}`;
     actions = '<button class="btn primary wide" data-act="talk-end">대화 끝내고 정리하기</button>';
   } else if (t.status === 'reviewing') {
@@ -2248,7 +2259,8 @@ function renderTalk() {
       ? `<p class="sync-line">카드로 만들 표현을 고르세요.</p>
         ${group('fix', '✏️ 내가 한 말, 이렇게 고쳐요')}
         ${group('translate', `🌏 이건 ${learnName}로 이렇게 말해요`)}
-        ${group('mooni', `💬 ${josa(botName(), '이', '가')} 쓴 좋은 표현`)}${log}`
+        ${group('mooni', `💬 ${josa(botName(), '이', '가')} 쓴 좋은 표현`)}
+        ${group('topic', `✨ 오늘 화제에서 나온 표현`)}${log}`
       : `<div class="talk-hero">${MASCOT}<b>고칠 데가 없었어요! 👏</b><p>다음엔 조금 더 길게 이야기해 봐요.</p></div>${log}`;
     actions = t.items.length
       ? `<button class="btn primary wide" data-act="talk-cards" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 카드로 만들기` : '만들 표현을 골라 주세요'}</button>`
@@ -2309,7 +2321,7 @@ async function startTalk(topic = null) {
     const res = await fetch(talkURL('/talk/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic }),
+      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic && { ...t.topic, expressions: (t.topic.expressions || []).map((e) => e.expression ?? e) } }),
     });
     const data = await res.json().catch(() => ({}));
     if (typeof data.remainingSec === 'number') talkLeftSec = data.remainingSec;
@@ -2396,6 +2408,10 @@ async function endTalk() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ScanError(TALK_ERRORS[res.status] || '대화를 정리하지 못했어요.');
     t.items = Array.isArray(data.items) ? data.items : [];
+    // 관심사 화제로 한 대화면 화제 카드의 표현도 함께
+    if (t.topic?.kind === 'interest') for (const e of t.topic.expressions || []) {
+      if (!t.items.some((x) => x.expression.toLowerCase() === e.expression.toLowerCase())) t.items.push({ kind: 'topic', said: '', expression: e.expression, meaning: e.meaning, note: '' });
+    }
     t.checked = new Set(t.items.map((_, i) => i));
   } catch (err) {
     t.items = [];
@@ -2499,6 +2515,19 @@ function calTopics() {
 /** 오늘의 대화 카드 한 장. topic이 없으면 그냥 수다 */
 function talkCardHTML(topic, i, where) {
   const bot = botName();
+  if (topic?.kind === 'interest') {
+    const vote = intVotes()[topic.key];
+    return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go-topic" data-index="${i}">
+      <span class="talk-tag">✨ 관심사 · ${esc(topic.interest)}${topic.fact ? ' · 재미있는 사실' : ''}</span>
+      <h3>${esc(topic.title)}</h3><p>${esc(topic.summary)}</p>
+      ${topic.expressions.length ? `<div class="topic-exprs">${topic.expressions.map((e, k) => `<button class="topic-expr${intSaved.has(e.expression) ? ' saved' : ''}" data-act="int-expr" data-index="${i}" data-k="${k}"><b>${esc(e.expression)}</b><span>${esc(e.meaning)}</span><i>${intSaved.has(e.expression) ? '✓' : '＋'}</i></button>`).join('')}</div>` : ''}
+      <div class="topic-foot">
+        ${topic.url ? `<a class="topic-src" href="${esc(topic.url)}" target="_blank" rel="noopener" data-act="ext-link">${esc(topic.source || '출처')} ↗</a>` : '<span></span>'}
+        <span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" data-index="${i}" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" data-index="${i}" aria-label="이 화제 그만">👎</button></span>
+      </div>
+      <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기 ›</span>
+    </section>`;
+  }
   if (topic) {
     const day = topic.when.split(' ')[0];
     const q = topic.kind === 'plan-after' ? `${day === '오늘' ? '' : `${day} `}${josa(topic.title, '은', '는')} 어땠어?` : `${day} ${josa(topic.title, '이', '가')} 있지?`;
@@ -2518,13 +2547,117 @@ function talkCardHTML(topic, i, where) {
 }
 /** 오늘의 대화 카드들: 일정 후보가 있으면 옆으로 넘겨 보고, 맨 끝은 그냥 수다 */
 function talkCardsHTML(where) {
-  const topics = calTopics();
+  loadInterestTopics();
+  const topics = [...calTopics(), ...interestTopics()];
   ui.talkTopics = topics;
-  if (!topics.length) return talkCardHTML(null, -1, where);
-  const cards = [...topics.map((t, i) => talkCardHTML(t, i, where)), talkCardHTML(null, -1, where)];
+  const waiting = intState.loading && !interestTopics().length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 몇 초 걸려요.</p></section>`] : [];
+  if (!topics.length && !waiting.length) return talkCardHTML(null, -1, where);
+  const cards = [...topics.map((t, i) => talkCardHTML(t, i, where)), ...waiting, talkCardHTML(null, -1, where)];
   return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
     <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
 }
+// ---------- 관심사 화제 (설정에서 관심사를 넣은 사람만) ----------
+// 서버가 새벽에 미리 찾아 둔 오늘 화제를 받아 옴. 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
+const INT_CACHE_KEY = 'freedom-int-topics', INT_VOTE_KEY = 'freedom-int-votes';
+const intState = { data: null, loading: false, failedAt: 0 };
+const intSaved = new Set();   // 이번에 ＋로 카드로 저장한 표현
+function intVotes() { try { return JSON.parse(localStorage.getItem(INT_VOTE_KEY)) || {}; } catch { return {}; } }
+function setIntVote(key, v) {
+  const all = intVotes();
+  if (all[key] === v) delete all[key]; else all[key] = v;
+  const keys = Object.keys(all);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k];   // 오래된 것부터 정리
+  try { localStorage.setItem(INT_VOTE_KEY, JSON.stringify(all)); } catch {}
+}
+async function loadInterestTopics(force = false) {
+  if (!user || !SCAN_URL || !(prefs.interests || []).length || intState.loading) return;
+  const day = dayKey(new Date());
+  if (!force) {
+    if (intState.data?.day === day && intState.data.mode === prefs.mode) return;
+    try {
+      const c = JSON.parse(localStorage.getItem(INT_CACHE_KEY));
+      if (c?.day === day && c.mode === prefs.mode && c.sig === prefs.interests.join('|')) { intState.data = c; return; }
+    } catch {}
+    if (Date.now() - intState.failedAt < 5 * 60000) return;
+  }
+  intState.loading = true;
+  try {
+    const { target, native } = modeParts(prefs.mode);
+    const res = await fetch(talkURL('/interest/topics'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ target, native }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status);
+    intState.data = { day, mode: prefs.mode, sig: prefs.interests.join('|'), topics: Array.isArray(data.topics) ? data.topics : [] };
+    try { localStorage.setItem(INT_CACHE_KEY, JSON.stringify(intState.data)); } catch {}
+  } catch {
+    intState.failedAt = Date.now();
+  } finally {
+    intState.loading = false;
+  }
+  if (!ui.reviewStarted) renderReview();
+  renderTalk();
+}
+/** 오늘 보여 줄 관심사 화제 (관심사마다 하나, 👎했거나 이미 얘기한 건 다음 후보로) */
+function interestTopics() {
+  if (!(prefs.interests || []).length || !intState.data?.topics) return [];
+  const talked = talkedTopics(), votes = intVotes();
+  return intState.data.topics.map((g) => {
+    const it = (g.items || []).find((x) => !talked[`int|${x.title}`] && votes[`int|${x.title}`] !== 'down');
+    return it && { kind: 'interest', interest: g.interest, title: it.title, summary: it.summary, fact: it.kind === 'fact', expressions: it.expressions || [], url: it.url, source: it.source,
+      key: `int|${it.title}`, when: `관심사 · ${g.interest}` };
+  }).filter(Boolean).slice(0, 2);
+}
+async function saveInterests(list) {
+  setPref('interests', list);
+  intState.data = null;
+  try { localStorage.removeItem(INT_CACHE_KEY); } catch {}
+  if (ui.tab === 'settings') renderSettingsPage('talk');
+  if (!user) return;
+  try {
+    const { target, native } = modeParts(prefs.mode);
+    await fetch(talkURL('/interest/save'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ interests: list, target, native }),
+    });
+  } catch { toast('관심사를 저장하지 못했어요. 인터넷 연결을 확인해 주세요.'); }
+}
+/** 로그인하면 서버의 관심사를 가져옴 (다른 기기에서 넣은 것도) */
+async function syncInterests() {
+  if (!user || !SCAN_URL) return;
+  try {
+    const res = await fetch(talkURL('/interest/get'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` }, body: '{}' });
+    const data = await res.json();
+    if (Array.isArray(data.interests) && data.interests.join('|') !== (prefs.interests || []).join('|')) {
+      if (data.interests.length || !(prefs.interests || []).length) { setPref('interests', data.interests); intState.data = null; }
+      else saveInterests(prefs.interests);   // 이 기기에만 있던 관심사는 서버로
+    }
+  } catch {}
+  loadInterestTopics();
+}
+function addInterest(name) {
+  const v = String(name || '').trim().slice(0, 30);
+  const list = prefs.interests || [];
+  if (!v) return;
+  if (list.some((x) => x.toLowerCase() === v.toLowerCase())) { toast('이미 있는 관심사예요.'); return; }
+  if (list.length >= 5) { toast('관심사는 5개까지 넣을 수 있어요.'); return; }
+  saveInterests([...list, v]);
+}
+/** 화제 카드의 표현을 바로 카드로 저장 */
+async function saveTopicExpression(topic, e) {
+  if (intSaved.has(e.expression)) return;
+  const card = newCard({ korText: e.meaning, engText: e.expression, korImages: [], engImages: [], category: await keyForName(DEFAULT_CATEGORY), source: 'talk' });
+  await putCard(card);
+  await recordActivity([addActivity(card)]);
+  intSaved.add(e.expression);
+  markChanged();
+  renderAll();
+  toast(`'${e.expression}' 카드로 저장했어요.`);
+}
+
 async function connectCalendar() {
   if (!user) { toast('먼저 로그인해 주세요.'); return; }
   try {
@@ -3244,6 +3377,14 @@ function renderSettingsPage(page) {
           <button class="btn wide" data-act="cal-disconnect">연결 끊기</button>`
         : `<p class="sync-line">켜면 오늘과 내일 일정의 <b>제목과 시간만</b> 읽어서 일정으로 말을 걸어요. 일정은 저장하지 않고, 대화를 시작할 때 고른 일정 하나의 제목만 대화 AI(OpenAI)에 전해요. 언제든 끌 수 있어요.</p>
           <button class="btn primary wide" data-act="cal-connect">구글 캘린더 연결</button>`}
+    </div>
+    <div class="field">
+      <label class="sub">관심사로 대화 <span class="opt-badge">선택</span></label>
+      ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>' : `
+        ${(prefs.interests || []).length ? `<div class="chips">${prefs.interests.map((x) => `<button class="cat" aria-pressed="true" data-act="int-remove" data-v="${esc(x)}">${esc(x)} ✕</button>`).join('')}</div>` : ''}
+        ${(prefs.interests || []).length < 5 ? `<div class="new-cat"><input class="text" id="int-input" maxlength="30" enterkeyhint="done" placeholder="관심사 적기"><button class="btn small primary" data-act="int-add">추가</button></div>
+        <div class="chips">${['스포츠', '여행', '음악', '영화', '음식', '기술', '동물', '게임'].filter((x) => !(prefs.interests || []).includes(x)).map((x) => `<button class="cat ghost" data-act="int-suggest" data-v="${x}">+ ${x}</button>`).join('')}</div>` : ''}
+        <p class="sync-line">최대 5개. 매일 새벽 관심사 중 2개의 새 소식이나 재미있는 사실을 찾아, 오늘의 대화 카드로 보여 줘요. 관심사는 화제를 찾는 데만 쓰려고 서버에 저장해요.</p>`}
     </div>`;
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
@@ -3895,6 +4036,20 @@ document.addEventListener('click', (ev) => {
       startTalk(ui.talkTopics?.[i] || null);
       break;
     }
+    case 'ext-link': break;   // 출처 링크는 그대로 열림 (카드 누름으로 안 넘어감)
+    case 'int-expr': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; const e = topic?.expressions?.[Number(el.dataset.k)]; if (e) saveTopicExpression(topic, e); break; }
+    case 'int-vote': {
+      const topic = ui.talkTopics?.[Number(el.dataset.index)];
+      if (!topic) break;
+      setIntVote(topic.key, el.dataset.v);
+      if (el.dataset.v === 'down') toast('이 화제는 숨겼어요.');
+      if (!ui.reviewStarted) renderReview();
+      renderTalk();
+      break;
+    }
+    case 'int-add': addInterest($('#int-input')?.value); break;
+    case 'int-suggest': addInterest(el.dataset.v); break;
+    case 'int-remove': saveInterests((prefs.interests || []).filter((x) => x !== el.dataset.v)); break;
     case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
     case 'cal-connect': connectCalendar(); break;
     case 'cal-disconnect': disconnectCalendar(); break;
@@ -4093,6 +4248,11 @@ document.addEventListener('keydown', (ev) => {
     sendAsk();
     return;
   }
+  if (ev.target.id === 'int-input' && ev.key === 'Enter' && !ev.isComposing) {
+    ev.preventDefault();
+    addInterest(ev.target.value);
+    return;
+  }
   if (ev.target.id === 'rename-input' && ev.key === 'Enter' && !ev.isComposing) {
     ev.preventDefault();
     saveRename();
@@ -4197,6 +4357,7 @@ async function init() {
       if (ui.tab === 'settings') { renderUsage(); if (changed) loadUsage(); }
       if (u && changed) syncNow({ announce: login === 'ok' });
       if (u && changed) loadCalendar(true);
+      if (u && changed) syncInterests();
     });
   }
   if ('serviceWorker' in navigator) {

@@ -18,3 +18,7 @@ id = "52092527be724991a2c1b994ac997896"
 # 말해서 넣기의 음성 인식 (Workers AI Whisper, 하루 무료 사용량 안에서)
 [ai]
 binding = "AI"
+
+# 매일 한국 시간 새벽 4시(UTC 19시): 관심사 화제 미리 찾기
+[triggers]
+crons = ["0 19 * * *"]

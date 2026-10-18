@@ -269,11 +269,11 @@ const clean = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim()
 /** 대화 상대 이름 = 고른 목소리 이름 (marin → Marin) */
 const voiceName = (voice) => voice.charAt(0).toUpperCase() + voice.slice(1);
 
-function talkInstructions(learn, know, practice, name, voice) {
+function talkInstructions(learn, know, practice, name, botName) {
   const list = practice.length
     ? `\nThey are currently reviewing these expressions. When it fits naturally, steer the conversation so they get a chance to use one (never list them, quiz them, or say you are doing this):\n${practice.map((p) => `- ${p}`).join('\n')}`
     : '';
-  return `You are ${voiceName(voice)}, the learner's friendly conversation buddy. If you introduce yourself, just say your name (${voiceName(voice)}); don't describe yourself as a character or anything else. The learner is a ${know} speaker practicing ${learn}.
+  return `You are ${botName}, the learner's friendly conversation buddy. If you introduce yourself, just say your name (${botName}); don't describe yourself as a character or anything else. The learner is a ${know} speaker practicing ${learn}.
 - Speak only ${learn}, a little slower than normal, with simple everyday words. Keep every turn short: one or two sentences, usually ending with one easy question.
 ${name ? `- Call the learner "${name}" (that is how they want to be called; use it naturally, not in every turn).
 ` : ''}- Start the conversation yourself: greet them warmly and ask one casual question about their day, what they are up to, or something they enjoy.
@@ -291,6 +291,8 @@ async function handleTalkToken(request, env, reply, key, user) {
   const practice = (Array.isArray(body?.practice) ? body.practice : []).map((p) => clean(p, 80)).filter(Boolean).slice(0, 5);
   const voice = REALTIME_VOICES.includes(body?.voice) ? body.voice : REALTIME_VOICE;
   const name = clean(body?.name, 20).replace(/["\\]/g, '');
+  // 대화 상대 이름: 앱에서 정한 이름, 없으면 목소리 이름
+  const botName = clean(body?.botName, 20).replace(/["\\]/g, '') || voiceName(voice);
 
   const used = Number(await env.USAGE.get(key)) || 0;
   if (used >= TALK_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: TALK_LIMIT });
@@ -303,7 +305,7 @@ async function handleTalkToken(request, env, reply, key, user) {
       session: {
         type: 'realtime',
         model: REALTIME_MODEL,
-        instructions: talkInstructions(target, native, practice, name, voice),
+        instructions: talkInstructions(target, native, practice, name, botName),
         audio: {
           input: {
             // 휴대폰을 들고 말하는 경우: 주변 소리 줄이기
@@ -328,18 +330,19 @@ async function handleTalkToken(request, env, reply, key, user) {
 }
 
 // 목소리 미리 듣기: 목소리마다 한 번만 만들어 KV에 저장해 두고 계속 같은 파일을 돌려줌 (처음 한 번만 비용)
-const sampleText = (voice) => `Hi! I'm ${voiceName(voice)}. How was your day today?`;
+// 이름은 앱에서 바꿀 수 있어서 미리 듣기에는 이름을 넣지 않음
+const SAMPLE_TEXT = 'Hi there! How was your day today? Tell me something fun.';
 async function handleTalkSample(request, env, reply, cors) {
   const voice = new URL(request.url).searchParams.get('voice');
   if (!REALTIME_VOICES.includes(voice)) return reply(400, { error: 'voice' });
-  const key = `sample:v2:${voice}`;   // v2: 목소리 이름으로 자기소개
+  const key = `sample:v3:${voice}`;   // v3: 이름 없는 인사
   let audio = await env.USAGE.get(key, 'arrayBuffer');
   if (!audio) {
     if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: sampleText(voice), instructions: 'Cheerful, warm and friendly, a little slower than normal.', response_format: 'mp3' }),
+      body: JSON.stringify({ model: 'gpt-4o-mini-tts', voice, input: SAMPLE_TEXT, instructions: 'Cheerful, warm and friendly, a little slower than normal.', response_format: 'mp3' }),
     });
     if (!res.ok) {
       console.error('talk sample failed', res.status, (await res.text().catch(() => '')).slice(0, 300));

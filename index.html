@@ -686,7 +686,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v59';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1113,8 +1113,8 @@ async function deleteCategory(name, mode, to) {
 // ================= 설정값 · 소리 =================
 const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
-  // talkVoice: 대화 목소리, talkName: 복숭아가 나를 부를 이름
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '' };
+  // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'Poor Story', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '' };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; } catch { return base; }
 })();
 function setPref(key, value) {
@@ -1840,6 +1840,15 @@ async function sendAsk() {
 
 // ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
 const TALK_VOICES = [['marin', 'Marin'], ['cedar', 'Cedar'], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
+/** 대화 상대 이름: 정한 이름, 없으면 고른 목소리 이름 */
+const botName = () => prefs.talkBotName || (TALK_VOICES.find(([v]) => v === prefs.talkVoice) || TALK_VOICES[0])[1];
+/** 이름 뒤 조사: 한글은 받침으로, 영어 이름은 l·m·n·ng로 끝나면 받침 있는 것으로 (Marin → 마린이, Cedar → 시더가) */
+function josa(name, withBatchim, without) {
+  const last = name.trim().slice(-1);
+  const code = last.charCodeAt(0) - 0xAC00;
+  const batchim = code >= 0 && code <= 11171 ? code % 28 !== 0 : /(l|m|n|ng)$/i.test(name.trim());
+  return name + (batchim ? withBatchim : without);
+}
 const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
 // 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
@@ -1884,16 +1893,16 @@ function renderTalk() {
   const log = shown.length ? `<div class="talk-log">${shown.map((x) => `<div class="bubble ${x.role === 'user' ? 'me' : 'mooni'}${x.text ? '' : ' wait'}">${x.text ? esc(x.text) : '…'}</div>`).join('')}</div>` : '';
   let body = '', actions = '';
   if (!fbReady || !user) {
-    body = `<div class="talk-hero">${MASCOT}<b>로그인하면 복숭아랑 대화할 수 있어요</b></div>`;
+    body = `<div class="talk-hero">${MASCOT}<b>로그인하면 ${josa(botName(), '이랑', '랑')} 대화할 수 있어요</b></div>`;
     actions = fbReady ? '<button class="btn primary wide" data-act="login">Google로 로그인</button>' : '';
   } else if (t.status === 'idle') {
-    body = `<div class="talk-hero">${MASCOT}<b>복숭아랑 ${learn}로 수다 떨기</b>
-      <p>복숭아가 먼저 말을 걸어요. 말로 대답하면 돼요.<br>${TALK_MAX_SEC / 60}분 대화가 끝나면 더 자연스러운 표현을 카드로 만들어 줘요.</p></div>`;
+    body = `<div class="talk-hero">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b>
+      <p>${josa(botName(), '이', '가')} 먼저 말을 걸어요. 말로 대답하면 돼요.<br>${TALK_MAX_SEC / 60}분 대화가 끝나면 더 자연스러운 표현을 카드로 만들어 줘요.</p></div>`;
     actions = '<button class="btn primary wide" data-act="talk-start">🎙 대화 시작</button>';
   } else if (t.status === 'connecting') {
-    body = `<div class="talk-hero live">${MASCOT}<b>복숭아를 부르고 있어요…</b></div>`;
+    body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
-    body = `<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? '복숭아가 말하고 있어요' : '듣고 있어요. 편하게 말해 보세요'}</b>
+    body = `<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
       <p><span id="talk-left">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span> 남음</p></div>${log}`;
     actions = '<button class="btn primary wide" data-act="talk-end">대화 끝내고 정리하기</button>';
   } else if (t.status === 'reviewing') {
@@ -1914,7 +1923,7 @@ function renderTalk() {
       ? `<p class="sync-line">카드로 만들 표현을 고르세요.</p>
         ${group('fix', '✏️ 내가 한 말, 이렇게 고쳐요')}
         ${group('translate', `🌏 이건 ${learnName}로 이렇게 말해요`)}
-        ${group('mooni', '🍑 복숭아가 쓴 좋은 표현')}${log}`
+        ${group('mooni', `💬 ${josa(botName(), '이', '가')} 쓴 좋은 표현`)}${log}`
       : `<div class="talk-hero">${MASCOT}<b>고칠 데가 없었어요! 👏</b><p>다음엔 조금 더 길게 이야기해 봐요.</p></div>${log}`;
     actions = t.items.length
       ? `<button class="btn primary wide" data-act="talk-cards" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 카드로 만들기` : '만들 표현을 골라 주세요'}</button>`
@@ -1974,10 +1983,10 @@ async function startTalk() {
     const res = await fetch(talkURL('/talk/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName }),
+      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || '복숭아를 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || `${josa(botName(), '을', '를')} 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.`);
     if (talk !== t) { t.stream.getTracks().forEach((x) => x.stop()); return; }
 
     const pc = new RTCPeerConnection();
@@ -1987,7 +1996,7 @@ async function startTalk() {
     const dc = pc.createDataChannel('oai-events');
     t.dc = dc;
     dc.onmessage = (m) => { try { onTalkEvent(JSON.parse(m.data)); } catch {} };
-    dc.onopen = () => dc.send(JSON.stringify({ type: 'response.create' }));   // 복숭아가 먼저 말 걸기
+    dc.onopen = () => dc.send(JSON.stringify({ type: 'response.create' }));   // 대화 상대가 먼저 말 걸기
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     const sdp = await fetch('https://api.openai.com/v1/realtime/calls', {
@@ -2011,7 +2020,7 @@ async function startTalk() {
     if (talk !== t) return;
     t.status = 'idle';
     renderTalk();
-    toast(err instanceof ScanError ? err.message : `복숭아를 부르지 못했어요. (${errText(err)})`);
+    toast(err instanceof ScanError ? err.message : `${josa(botName(), '을', '를')} 부르지 못했어요. (${errText(err)})`);
   }
 }
 function hangUp(t = talk) {
@@ -2559,7 +2568,7 @@ const SETTINGS = [
   ['theme', '🌗', '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', '🔤', '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
   ['sound', '🔊', '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
-  ['talk', '🍑', '대화', () => `목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '이름 없이'}`],
+  ['talk', '🍑', '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}`],
   ['backup', '💾', '백업', () => '파일로 저장 · 복원'],
   ['feedback', '💌', '의견 보내기', () => '버그 · 제안 · 문의'],
 ];
@@ -2672,12 +2681,17 @@ function renderSettingsPage(page) {
     </div>`;
   } else if (page === 'talk') {
     box.innerHTML = `<div class="field">
-      <label class="sub">복숭아 목소리</label>
+      <label class="sub">대화 상대 목소리</label>
       <div class="chips">${TALK_VOICES.map(([v, label]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}</button>`).join('')}</div>
       <p class="sync-line">목소리를 누르면 바로 들려줘요. 다음 대화부터 바뀌어요.</p>
     </div>
     <div class="field">
-      <label class="sub" for="talk-name">복숭아가 나를 부를 이름</label>
+      <label class="sub" for="talk-bot-name">대화 상대 이름</label>
+      <input class="text" id="talk-bot-name" maxlength="20" enterkeyhint="done" placeholder="${esc((TALK_VOICES.find(([v]) => v === prefs.talkVoice) || TALK_VOICES[0])[1])}" value="${esc(prefs.talkBotName)}">
+      <p class="sync-line">비워 두면 목소리 이름(${esc((TALK_VOICES.find(([v]) => v === prefs.talkVoice) || TALK_VOICES[0])[1])})으로 불러요.</p>
+    </div>
+    <div class="field">
+      <label class="sub" for="talk-name">대화 상대가 나를 부를 이름</label>
       <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" value="${esc(prefs.talkName)}">
       <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
     </div>`;
@@ -2825,7 +2839,7 @@ function renderUsage() {
       <p class="sync-line">오늘 <b>${u.used}${unit}</b> 썼어요 · <b>${u.remaining}${unit}</b> 남았어요</p>
       <div class="usage-meter" role="img" aria-label="${u.limit}${unit} 중 ${u.used}${unit} 사용"><i style="width:${Math.min(100, (u.used / u.limit) * 100)}%"></i></div>
       <p class="sync-line">하루 ${u.limit}${unit}까지</p></div>`;
-    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('🍑 복숭아와 대화', usageState.talk, '번') : '')
+    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('🍑 대화', usageState.talk, '번') : '')
       + '<p class="sync-line center-note">매일 자정(한국 시간)에 다시 채워져요.</p>';
     box.innerHTML = body;
     return;
@@ -3006,7 +3020,7 @@ function renderStats() {
   // 연속 기록
   const { n, doneToday } = streakInfo(days);
   let streakSub;
-  if (n === 0) streakSub = '오늘 1장이라도 풀거나 복숭아와 대화하면 연속 기록이 시작돼요.';
+  if (n === 0) streakSub = '오늘 1장이라도 풀거나 대화하면 연속 기록이 시작돼요.';
   else if (doneToday) streakSub = '연속 공부 중 · 오늘도 했어요';
   else streakSub = `오늘 공부하면 ${n + 1}일째가 돼요.`;
 
@@ -3052,7 +3066,7 @@ function renderStats() {
             <li><span>복습</span><b>${info.review}장</b></li>
             <li><span>자유 연습</span><b>${info.practice}장</b></li>
             <li><span>새 표현</span><b>${info.add}개</b></li>
-            <li><span>🍑 복숭아와 대화</span><b>${info.talk}번</b></li>
+            <li><span>🍑 대화</span><b>${info.talk}번</b></li>
           </ul>`
         : '<p class="sync-line">공부 기록이 없어요.</p>'}
     </section>`;
@@ -3307,6 +3321,7 @@ document.addEventListener('input', (ev) => {
     return;
   }
   if (ev.target.id === 'talk-name') { setPref('talkName', ev.target.value.trim().slice(0, 20)); return; }
+  if (ev.target.id === 'talk-bot-name') { setPref('talkBotName', ev.target.value.trim().slice(0, 20)); return; }
   if (ev.target.matches?.('#new-target-flag, #new-native-flag')) {
     // 국기 칸에는 이모지 하나만 남김
     const emoji = firstEmoji(ev.target.value);

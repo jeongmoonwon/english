@@ -623,6 +623,10 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] :is(.setup-title, .empty h2) { font-weight: 800; letter-spacing: -0.03em; }
 /* 버튼 */
 :root[data-skin="pastel"] .btn { border-radius: 16px; font-weight: 700; }
+/* 그라데이션은 테두리 자리까지 한 번만 칠함 (테두리 칸에 반대쪽 끝이 반복돼 줄처럼 보이지 않게) */
+:root[data-skin="pastel"] :is(.btn.primary, .pill.solid, .cat[aria-pressed="true"], .seg-btn[aria-pressed="true"], .grade.good, .bubble.me, .set-icon) {
+  background-origin: border-box; background-repeat: no-repeat;
+}
 :root[data-skin="pastel"] :is(.btn.primary, .pill.solid) {
   background: var(--sheen), var(--g2); color: var(--on-g); border-radius: 999px;
   box-shadow: var(--sheen-edge), 0 8px 20px rgba(195, 170, 255, .4);
@@ -632,9 +636,11 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] .pill { background: var(--glass); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
 :root[data-skin="pastel"] .mode-pill { background: var(--glass); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
 /* 칩·선택 */
-:root[data-skin="pastel"] .cat { background: var(--glass); border-color: transparent; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .cat { background: var(--glass); border: 0; padding: 7px 14px; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .cat.ghost { background: none; border: 1px dashed var(--line); padding: 6px 13px; box-shadow: none; }
 :root[data-skin="pastel"] .cat[aria-pressed="true"] { background: var(--sheen), var(--g2); color: var(--on-g); border-color: transparent; box-shadow: var(--sheen-edge), 0 4px 12px rgba(195, 170, 255, .35); }
-:root[data-skin="pastel"] .seg-btn { background: var(--glass); border-color: transparent; border-radius: 16px; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .seg-btn { background: var(--glass); border: 0; padding: 13px 11px; border-radius: 16px; box-shadow: 0 0 0 .5px var(--line) inset; }
+:root[data-skin="pastel"] .seg-btn.small { padding: 11px 7px; }
 :root[data-skin="pastel"] .seg-btn[aria-pressed="true"] { background: var(--sheen), var(--g2); color: var(--on-g); border-color: transparent; box-shadow: var(--sheen-edge), 0 6px 16px rgba(195, 170, 255, .35); }
 :root[data-skin="pastel"] .seg-btn[aria-pressed="true"] small { color: var(--on-g); opacity: .75; }
 :root[data-skin="pastel"] :is(textarea, input.text) { border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
@@ -802,7 +808,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

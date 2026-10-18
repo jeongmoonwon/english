@@ -472,12 +472,13 @@ async function handleCalendarEvents(request, env, reply, user) {
   let body;
   try { body = await request.json(); } catch { body = null; }
   const from = new Date(body?.from), to = new Date(body?.to);
-  if (isNaN(from) || isNaN(to) || to - from > 3 * 86400000 || to <= from) return reply(400, { error: 'range' });
+  // 앱은 그저께부터 내일까지(4일)를 물음. 지난 일정 중 아직 얘기 안 한 것도 화제로 쓰려고
+  if (isNaN(from) || isNaN(to) || to - from > 5 * 86400000 || to <= from) return reply(400, { error: 'range' });
   let token;
   try { token = await calAccessToken(env, user.sub); } catch (err) { console.error('calendar refresh failed', err); return reply(502, { error: 'upstream' }); }
   if (!token) return reply(200, { connected: false, events: [] });
   const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
-  url.search = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '25', fields: 'items(summary,start,end,status,transparency)' }).toString();
+  url.search = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '40', fields: 'items(summary,start,end,status,transparency)' }).toString();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) { console.error('calendar list failed', res.status, (await res.text().catch(() => '')).slice(0, 300)); return reply(502, { error: 'upstream' }); }
   const data = await res.json();

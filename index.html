@@ -421,6 +421,13 @@ textarea.eng { font-family: var(--serif); }
 .talk-hero.small { padding-top: 0; }
 .talk-hero.small .mascot { width: 84px; height: 82px; }
 .talk-topic-chip { display: block; width: fit-content; margin: 0 auto 4px; padding: 5px 12px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 700; }
+.talk-swipe { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -20px; padding: 0 20px 2px; scrollbar-width: none; }
+.talk-swipe::-webkit-scrollbar { display: none; }
+.talk-swipe > .talk-card { flex: 0 0 calc(100% - 26px); scroll-snap-align: center; margin-bottom: 0; }
+.talk-dots { display: flex; justify-content: center; gap: 5px; margin: 8px 0 12px; }
+.talk-dots i { width: 6px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 30%, transparent); transition: width .2s; }
+.talk-dots i.on { width: 16px; background: var(--g2, var(--accent)); }
+#review-actions { display: flex; flex-direction: column; gap: 8px; }
 .today-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 .today-mini .btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; font-size: 14px; background: var(--glass, var(--surface)); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
 .today-streak-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; font-weight: 800; }
@@ -448,13 +455,6 @@ textarea.eng { font-family: var(--serif); }
 .today-streak .week i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 10px; font-weight: 700; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
 .today-streak .week i.on { color: var(--on-g, #fff); background: var(--g2, var(--accent)); }
 .today-streak .week i.now { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
-.setup-fold { padding: 0; gap: 0; }
-.setup-fold > summary { list-style: none; cursor: pointer; padding: 14px 16px; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-.setup-fold > summary::-webkit-details-marker { display: none; }
-.setup-fold > summary span { flex: 1; min-width: 0; color: var(--muted); font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.setup-fold > summary::after { content: '›'; color: var(--muted); font-size: 18px; transition: transform .2s; }
-.setup-fold[open] > summary::after { transform: rotate(90deg); }
-.setup-fold > .field { box-shadow: none; background: transparent; margin: 0; padding-top: 4px; }
 .ring-detail { display: flex; align-items: center; gap: 18px; }
 .ring-detail .rings { flex: none; }
 .ring-rows { list-style: none; margin: 0; padding: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
@@ -909,7 +909,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1467,7 +1467,23 @@ function renderReview() {
   }
 
   $('#review-title').textContent = ui.reviewStarted ? '복습' : '오늘';
-  // 시작 전: 오늘 홈 (오늘 링 · 복습 시작 · 바로가기 · 연속 기록, 복습 설정은 접어 둠)
+  // 복습 시작을 누른 뒤: 방향·카테고리를 고르고 시작
+  if (!ui.reviewStarted && ui.reviewSetup) {
+    ui.reviewShow = false; ui.reviewCardId = null;
+    filters.hidden = true;
+    $('#review-title').textContent = '복습';
+    const allDue = modeCards().filter((c) => toDate(c.srs.due) <= now);
+    if (!allDue.length) { ui.reviewSetup = false; renderReview(); return; }
+    const dueByCat = new Map();
+    for (const c of allDue) dueByCat.set(catOf(c), (dueByCat.get(catOf(c)) || 0) + 1);
+    main.innerHTML = `<div class="review-hero">${MASCOT}<h2 class="setup-title">${due.length ? `복습할 카드 ${due.length}장` : '고른 카테고리에는 복습할 카드가 없어요'}</h2>
+      ${due.length ? '' : '<p class="setup-note">아래에서 다른 카테고리를 골라 주세요.</p>'}</div>${setupHTML(dueByCat)}`;
+    bar.hidden = false;
+    bar.innerHTML = `<button class="btn primary wide" data-act="review-start" ${due.length ? '' : 'disabled'}>${due.length ? `이대로 시작 · ${due.length}장` : '복습할 카드가 있는 카테고리를 골라 주세요'}</button>
+      <button class="btn wide" data-act="review-setup-cancel">돌아가기</button>`;
+    return;
+  }
+  // 시작 전: 오늘 홈 (오늘 링 · 오늘의 대화 · 바로가기, 복습 설정은 복습 시작을 누른 뒤)
   if (!ui.reviewStarted) {
     ui.reviewShow = false; ui.reviewCardId = null;
     filters.hidden = true;
@@ -1482,7 +1498,7 @@ function renderReview() {
     const left = Math.max(0, prefs.goalReview - solvedOf(today));
     let line1, line2;
     if (!allDue.length) { line1 = `${name}오늘 복습 끝! ✨`; line2 = next ? `다음 복습은 ${intervalText(next, now)} 뒤예요.` : '새 표현을 추가해 보세요.'; }
-    else if (!due.length) { line1 = '고른 카테고리에는 복습할 카드가 없어요'; line2 = `전체에는 ${allDue.length}장 있어요. 아래 복습 설정에서 카테고리를 바꿔 보세요.`; }
+    else if (!due.length) { line1 = `${name}복습할 카드 ${allDue.length}장`; line2 = '고른 카테고리에는 없어요. 복습 시작에서 카테고리를 바꿔 보세요.'; }
     else { line1 = `${name}복습할 카드 ${due.length}장`; line2 = left ? `오늘 목표까지 ${left}장 남았어요.` : '오늘 복습 목표는 채웠어요! 👏'; }
     // 최근 7일 (오늘이 맨 오른쪽)
     const week = [...Array(7)].map((_, i) => { const d = new Date(now); d.setDate(d.getDate() - (6 - i)); return d; });
@@ -1498,16 +1514,14 @@ function renderReview() {
           <span class="today-streak-line"><span class="gtext">🔥 ${n}일 연속</span><span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}"></i>`).join('')}</span></span>
         </div>
       </section>
-      ${talkCardHTML(calTopic(), 'home')}
+      ${talkCardsHTML('home')}
       <div class="today-mini">
         <button class="btn" data-act="add">${icon('pen')} 표현 추가</button>
         <button class="btn" data-act="practice">${icon('type')} 자유 연습</button>
-      </div>
-      ${allDue.length ? `<details class="field setup-fold"${ui.setupOpen ? ' open' : ''}><summary>복습 설정 <span>${DIRECTIONS[study.dir].label}${selectedCats().length ? ` · ${selectedCats().map(esc).join(', ')}` : ''}</span></summary>${setupHTML(dueByCat)}</details>` : ''}`;
+      </div>`;
     bar.hidden = false;
-    bar.innerHTML = due.length
-      ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`
-      : allDue.length ? '<button class="btn primary wide" disabled>복습할 카드가 있는 카테고리를 골라 주세요</button>'
+    bar.innerHTML = allDue.length
+      ? `<button class="btn primary wide" data-act="review-setup">복습 시작 · ${due.length || allDue.length}장</button>`
       : `<button class="btn primary wide" data-act="talk-go">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
     return;
   }
@@ -2135,7 +2149,7 @@ function renderTalk() {
     actions = fbReady ? '<button class="btn primary wide" data-act="login">Google로 로그인</button>' : '';
   } else if (t.status === 'idle') {
     loadCalendar();
-    body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b></div>${talkCardHTML(calTopic(), 'talk')}`;
+    body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b></div>${talkCardsHTML('talk')}`;
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
@@ -2278,6 +2292,7 @@ async function endTalk() {
   // 기록 탭 캘린더에 대화한 날로 남김 (t=대화)
   const talkSec = Math.min(TALK_MAX_SEC, Math.max(1, Math.round((Date.now() - t.start) / 1000)));
   await recordActivity([{ id: `t|${t.start}|${talkSec}`, at: t.start }]);
+  markTalked(t.topic);   // 이 일정은 다음부터 다시 묻지 않음
   markChanged();
   t.status = 'reviewing';
   renderTalk();
@@ -2324,8 +2339,8 @@ async function loadCalendar(force = false) {
   if (!force && cal.events && Date.now() - cal.at < 10 * 60000) return;
   cal.loading = true;
   try {
-    const from = new Date(); from.setHours(0, 0, 0, 0);
-    const to = new Date(from); to.setDate(to.getDate() + 2);
+    const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 2);
+    const to = new Date(); to.setHours(0, 0, 0, 0); to.setDate(to.getDate() + 2);
     const res = await fetch(talkURL('/calendar/events'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
@@ -2346,36 +2361,62 @@ async function loadCalendar(force = false) {
   if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
 }
 const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.getMinutes() ? { minute: '2-digit' } : {}) });
-/** 오늘의 대화 화제: 오늘 끝난 일정 → 오늘 남은 일정 → 내일 일정 → 오늘 하루 종일 일정 */
-function calTopic() {
-  if (!prefs.calendar || !cal.events?.length) return null;
-  const now = new Date();
-  const todayKey = dayKey(now);
-  const tomorrowKey = dayKey(new Date(now.getTime() + 86400000));
-  const evs = cal.events.map((e) => ({ ...e, s: new Date(e.start), e: new Date(e.end) }))
-    .map((e) => ({ ...e, day: e.allDay ? String(e.start).slice(0, 10) : dayKey(e.s) }));
-  const timed = evs.filter((e) => !e.allDay);
-  const done = timed.filter((e) => e.day === todayKey && e.e <= now).sort((a, b) => b.e - a.e)[0];
-  if (done) return { kind: 'plan-after', title: done.title, when: `오늘 ${timeText(done.s)}` };
-  const later = timed.filter((e) => e.day === todayKey && e.s > now).sort((a, b) => a.s - b.s)[0];
-  if (later) return { kind: 'plan-before', title: later.title, when: `오늘 ${timeText(later.s)}` };
-  const tm = evs.filter((e) => e.day === tomorrowKey).sort((a, b) => a.s - b.s)[0];
-  if (tm) return { kind: 'plan-before', title: tm.title, when: tm.allDay ? '내일' : `내일 ${timeText(tm.s)}` };
-  const allDay = evs.find((e) => e.allDay && e.day === todayKey);
-  if (allDay) return { kind: 'plan-before', title: allDay.title, when: '오늘' };
-  return null;
+// 이미 얘기한 일정 (이 기기에만, 5일 지나면 지움): 같은 일정을 또 묻지 않으려고
+const TALKED_KEY = 'freedom-talked-topics';
+function talkedTopics() {
+  try {
+    const list = JSON.parse(localStorage.getItem(TALKED_KEY)) || {};
+    const cut = Date.now() - 5 * 86400000;
+    for (const k of Object.keys(list)) if (list[k] < cut) delete list[k];
+    return list;
+  } catch { return {}; }
 }
-/** 오늘의 대화 카드 (홈·대화 탭). topic이 없으면 그냥 수다 */
-function talkCardHTML(topic, where) {
+function markTalked(topic) {
+  if (!topic?.key) return;
+  const list = talkedTopics();
+  list[topic.key] = Date.now();
+  try { localStorage.setItem(TALKED_KEY, JSON.stringify(list)); } catch {}
+}
+/** 오늘의 대화 후보 (넘겨 가며 고름): 오늘 끝난 일정 → 어제·그저께 일정 중 아직 얘기 안 한 것 → 오늘 남은 일정 → 내일 일정. 이미 얘기한 일정은 뺌 */
+function calTopics() {
+  if (!prefs.calendar || !cal.events?.length) return [];
+  const now = new Date();
+  const dayName = (key) => {
+    for (const [n, label] of [[0, '오늘'], [-1, '어제'], [-2, '그저께'], [1, '내일']]) { const d = new Date(now); d.setDate(d.getDate() + n); if (dayKey(d) === key) return label; }
+    return '';
+  };
+  const talked = talkedTopics();
+  const evs = cal.events.map((e) => {
+    const sd = new Date(e.start), ed = new Date(e.end);
+    const day = e.allDay ? String(e.start).slice(0, 10) : dayKey(sd);
+    const label = dayName(day);
+    return { ...e, sd, ed, day, label, key: `${e.title}|${e.start}`, when: e.allDay ? label : `${label} ${timeText(sd)}` };
+  }).filter((e) => e.label && !talked[e.key]);
+  const today = dayKey(now);
+  const pick = (e, kind) => ({ kind, title: e.title, when: e.when, key: e.key });
+  const out = [];
+  // 오늘 끝난 일정 (최근 것부터)
+  evs.filter((e) => !e.allDay && e.day === today && e.ed <= now).sort((x, y) => y.ed - x.ed).forEach((e) => out.push(pick(e, 'plan-after')));
+  // 어제·그저께 일정 (하루 종일 포함, 최근 것부터)
+  evs.filter((e) => e.day < today).sort((x, y) => y.sd - x.sd).forEach((e) => out.push(pick(e, 'plan-after')));
+  // 오늘 남은 일정, 오늘 하루 종일
+  evs.filter((e) => !e.allDay && e.day === today && e.sd > now).sort((x, y) => x.sd - y.sd).forEach((e) => out.push(pick(e, 'plan-before')));
+  evs.filter((e) => e.allDay && e.day === today).forEach((e) => out.push(pick(e, 'plan-before')));
+  // 내일 일정
+  evs.filter((e) => e.day > today).sort((x, y) => x.sd - y.sd).forEach((e) => out.push(pick(e, 'plan-before')));
+  return out.slice(0, 6);
+}
+/** 오늘의 대화 카드 한 장. topic이 없으면 그냥 수다 */
+function talkCardHTML(topic, i, where) {
   const bot = botName();
   if (topic) {
-    const q = topic.kind === 'plan-after' ? `${josa(topic.title, '은', '는')} 어땠어?` : `${topic.when.startsWith('내일') ? '내일' : '오늘'} ${josa(topic.title, '이', '가')} 있지?`;
-    const p = topic.kind === 'plan-after' ? '다녀온 얘기를 말로 해 봐요. 끝나면 쓸 만한 표현을 카드로 챙겨 줘요.' : '어떤 일인지, 기분은 어떤지 얘기해 봐요. 거기서 쓸 만한 말도 같이 연습해요.';
+    const day = topic.when.split(' ')[0];
+    const q = topic.kind === 'plan-after' ? `${day === '오늘' ? '' : `${day} `}${josa(topic.title, '은', '는')} 어땠어?` : `${day} ${josa(topic.title, '이', '가')} 있지?`;
+    const p = topic.kind === 'plan-after' ? '있었던 얘기를 말로 해 봐요. 끝나면 쓸 만한 표현을 카드로 챙겨 줘요.' : '어떤 일인지, 기분은 어떤지 얘기해 봐요. 거기서 쓸 만한 말도 같이 연습해요.';
     return `<section class="talk-card">
-      <span class="talk-tag">📅 ${topic.kind === 'plan-after' ? '오늘 일정' : '다가오는 일정'} · ${esc(topic.when)}</span>
+      <span class="talk-tag">📅 ${topic.kind === 'plan-after' ? '지난 일정' : '다가오는 일정'} · ${esc(topic.when)}</span>
       <h3>${esc(q)}</h3><p>${p}</p>
-      <button class="btn primary wide" data-act="talk-go-topic">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기</button>
-      ${where === 'talk' ? '<button class="btn wide" data-act="talk-go">그냥 수다 떨기</button>' : ''}
+      <button class="btn primary wide" data-act="talk-go-topic" data-index="${i}">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기</button>
     </section>`;
   }
   return `<section class="talk-card">
@@ -2384,6 +2425,15 @@ function talkCardHTML(topic, where) {
     <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. ${TALK_MAX_SEC / 60}분 동안 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
     <button class="btn primary wide" data-act="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기</button>
   </section>`;
+}
+/** 오늘의 대화 카드들: 일정 후보가 있으면 옆으로 넘겨 보고, 맨 끝은 그냥 수다 */
+function talkCardsHTML(where) {
+  const topics = calTopics();
+  ui.talkTopics = topics;
+  if (!topics.length) return talkCardHTML(null, -1, where);
+  const cards = [...topics.map((t, i) => talkCardHTML(t, i, where)), talkCardHTML(null, -1, where)];
+  return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
+    <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
 }
 async function connectCalendar() {
   if (!user) { toast('먼저 로그인해 주세요.'); return; }
@@ -3566,7 +3616,7 @@ document.addEventListener('click', (ev) => {
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
     case 'talk-go': setTab('talk'); startTalk(null); break;
-    case 'talk-go-topic': setTab('talk'); startTalk(calTopic()); break;
+    case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
     case 'cal-connect': connectCalendar(); break;
     case 'cal-disconnect': disconnectCalendar(); break;
     case 'talk-start': startTalk(); break;
@@ -3574,7 +3624,9 @@ document.addEventListener('click', (ev) => {
     case 'talk-cards': talkToCards(); break;
     case 'talk-toggle': { const i = Number(el.dataset.index); talk.checked.has(i) ? talk.checked.delete(i) : talk.checked.add(i); renderTalk(); break; }
     case 'set-dir': setDirection(el.dataset.dir); break;
-    case 'review-start': ui.reviewStarted = true; ui.sessionDone = 0; renderReview(); $('#review-main').scrollTop = 0; break;
+    case 'review-setup': ui.reviewSetup = true; renderReview(); $('#review-main').scrollTop = 0; break;
+    case 'review-setup-cancel': ui.reviewSetup = false; renderReview(); break;
+    case 'review-start': ui.reviewSetup = false; ui.reviewStarted = true; ui.sessionDone = 0; renderReview(); $('#review-main').scrollTop = 0; break;
     case 'review-quit': {
       const left = dueCards(new Date()).length;
       ui.reviewStarted = false;
@@ -3582,7 +3634,7 @@ document.addEventListener('click', (ev) => {
       toast(ui.sessionDone ? `${ui.sessionDone}장 복습했어요. 남은 ${left}장은 언제든 이어서 할 수 있어요.` : '복습을 그만했어요. 언제든 다시 시작할 수 있어요.');
       break;
     }
-    case 'review-stop': ui.reviewStarted = false; renderReview(); break;
+    case 'review-stop': ui.reviewStarted = false; ui.reviewSetup = true; renderReview(); break;   // 복습 중 '설정 바꾸기' → 설정 화면
     case 'practice-start':
       practice.started = true; practice.show = false; pickPractice(); renderPractice();
       $('#practice-body').scrollTop = 0;
@@ -3766,8 +3818,13 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
-// 오늘 홈의 '복습 설정' 접기·펴기 상태 기억 (다시 그려도 유지)
-document.addEventListener('toggle', (ev) => { if (ev.target.matches?.('.setup-fold')) ui.setupOpen = ev.target.open; }, true);
+// 오늘의 대화 카드를 옆으로 넘기면 아래 점도 따라감
+document.addEventListener('scroll', (ev) => {
+  const box = ev.target;
+  if (!box.classList?.contains('talk-swipe')) return;
+  const i = Math.round(box.scrollLeft / (box.firstElementChild.offsetWidth + 10));
+  box.nextElementSibling?.querySelectorAll('i').forEach((dot, k) => dot.classList.toggle('on', k === i));
+}, true);
 
 // 새 언어 모드 드롭다운
 document.addEventListener('change', (ev) => {

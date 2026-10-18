@@ -385,7 +385,8 @@ function talkTopic(t) {
 // ----- 구글 캘린더: 사용자가 '캘린더 연결'을 고른 경우에만 -----
 // 앱 → /calendar/start (허락 화면 주소) → 구글 → /calendar/callback (refresh token을 암호화해 KV에 저장) → 앱으로 돌아감
 // 이후 앱이 /calendar/events로 오늘·내일 일정 제목과 시각만 받아 감. 일정은 서버에 저장하지 않음
-const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
+// 일정 읽기 + 캘린더 목록 읽기 (기본 캘린더 말고 직접 만든 캘린더의 일정도 읽으려고)
+const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/calendar.calendarlist.readonly';
 const calRedirect = (request) => `${new URL(request.url).origin}/calendar/callback`;
 const enc = new TextEncoder();
 const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -477,21 +478,34 @@ async function handleCalendarEvents(request, env, reply, user) {
   let token;
   try { token = await calAccessToken(env, user.sub); } catch (err) { console.error('calendar refresh failed', err); return reply(502, { error: 'upstream' }); }
   if (!token) return reply(200, { connected: false, events: [] });
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
-  url.search = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '40', fields: 'items(summary,start,end,status,transparency)' }).toString();
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) { console.error('calendar list failed', res.status, (await res.text().catch(() => '')).slice(0, 300)); return reply(502, { error: 'upstream' }); }
-  const data = await res.json();
-  // 원인 확인용: 기간과 개수만 남김 (일정 내용은 남기지 않음)
-  console.log('calendar events', JSON.stringify({ from: from.toISOString(), to: to.toISOString(), items: (data.items || []).length, untitled: (data.items || []).filter((e) => !e.summary).length, cancelled: (data.items || []).filter((e) => e.status === 'cancelled').length }));
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  // 캘린더 목록: 구글 캘린더에서 켜 둔 것만 (생일·공휴일 같은 자동 캘린더는 뺌). 예전에 연결해서 목록 권한이 없으면 기본 캘린더만
+  let calIds = ['primary'], needReconnect = false;
+  const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&fields=items(id,selected,primary)', auth);
+  if (listRes.ok) {
+    const items = (await listRes.json()).items || [];
+    const picked = items.filter((c) => (c.selected || c.primary) && !/#(contacts|holiday|weeknum)@/.test(c.id)).map((c) => c.id);
+    if (picked.length) calIds = picked.slice(0, 12);
+  } else if (listRes.status === 403) needReconnect = true;
+  else console.error('calendar list failed', listRes.status);
+  const fetchCal = async (id) => {
+    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events`);
+    url.search = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '40', fields: 'items(summary,start,end,status)' }).toString();
+    const res = await fetch(url, auth);
+    if (!res.ok) { console.error('calendar list events failed', res.status); return []; }
+    return (await res.json()).items || [];
+  };
+  const all = (await Promise.all(calIds.map(fetchCal))).flat();
+  // 원인 확인용: 기간·캘린더 수·개수만 남김 (일정 내용은 남기지 않음)
+  console.log('calendar events', JSON.stringify({ from: from.toISOString(), to: to.toISOString(), calendars: calIds.length, items: all.length, needReconnect }));
   // 제목과 시각만 앱에 줌 (설명·장소·참석자는 받지도 않음)
-  const events = (data.items || []).filter((e) => e.status !== 'cancelled' && e.summary).map((e) => ({
+  const events = all.filter((e) => e.status !== 'cancelled' && e.summary).map((e) => ({
     title: clean(e.summary, 80),
     start: e.start?.dateTime || e.start?.date || null,
     end: e.end?.dateTime || e.end?.date || null,
     allDay: !e.start?.dateTime,
-  }));
-  return reply(200, { connected: true, events });
+  })).sort((x, y) => String(x.start).localeCompare(String(y.start)));
+  return reply(200, { connected: true, events, needReconnect });
 }
 
 async function handleCalendarDisconnect(env, reply, user) {

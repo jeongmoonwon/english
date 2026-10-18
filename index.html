@@ -573,7 +573,7 @@ textarea::placeholder { font-family: var(--sans); }
   --gtext: linear-gradient(120deg, #6B8CF5, #9C7AEE 55%, #E886B8);
   --on-g: #2B2A4C;            /* 그라데이션 위 글자 */
   --sheen: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%);   /* 그라데이션 버튼 윗부분 빛 반사 */
-  --sheen-edge: 0 1px 0 rgba(255, 255, 255, .7) inset;
+  --sheen-edge: 0 0 0 transparent;   /* 위쪽 흰 선은 쓰지 않음 */
   --glass: rgba(255, 255, 255, .74);
   --glow1: rgba(197, 174, 250, .32); --glow2: rgba(167, 190, 255, .26); --glow3: rgba(250, 185, 219, .22);
 }
@@ -607,7 +607,7 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] :is(.field, .prompt, .card-list, .face, .set-list, .streak, .tile, .cal) {
   background: var(--glass); border-color: transparent; border-radius: 24px;
   -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 6px 22px rgba(30, 20, 60, .05);
+  box-shadow: 0 6px 22px rgba(30, 20, 60, .05);
 }
 :root[data-skin="pastel"] .face.back { background: var(--glass); }
 /* 플래시카드: 그라데이션 테두리 */
@@ -808,7 +808,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

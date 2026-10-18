@@ -579,6 +579,13 @@ textarea.eng { font-family: var(--serif); }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; }
 .tile b { font-size: 21px; font-weight: 750; }
+/* 기록 탭 위쪽 카드: 한 단계 작게 */
+#stats-main .streak { padding: 11px 14px; border-radius: 18px; margin-bottom: 8px; }
+#stats-main .streak b { font-size: 19px; }
+#stats-main .streak small, #stats-main .tile small { font-size: 12px; }
+#stats-main .tiles { gap: 8px; margin-bottom: 8px; }
+#stats-main .tile { padding: 9px 12px; border-radius: 16px; }
+#stats-main .tile b { font-size: 17px; }
 .cal { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px 14px; margin-bottom: 10px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .cal-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
@@ -936,7 +943,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v86';
+const APP_VERSION = 'v87';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

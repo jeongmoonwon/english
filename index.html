@@ -229,6 +229,14 @@ select.select {
 .custom-lang .flag-input:focus::placeholder { color: transparent; }
 .custom-lang input:not(.flag-input) { flex: 1; min-width: 0; }
 .small-note { font-size: 13px; margin-top: -4px; }
+.usage-row { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.usage-row + .usage-row { border-top: 1px solid var(--line); }
+.usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; }
+.usage-head span { color: var(--muted); font-size: 12px; }
+.usage-head span b { color: var(--ink); }
+#settings-main .usage-box { padding: 2px 0; gap: 0; margin: 4px 0 12px; }
+#settings-main .usage-box + .sync-line, #usage-box > .sync-line:first-child { margin-top: 2px; }
+.usage-box .usage-meter { height: 6px; }
 .usage-meter { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .usage-meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .tab[aria-selected="true"] { color: var(--accent); }
@@ -943,7 +951,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v87';
+const APP_VERSION = 'v88';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3036,7 +3044,7 @@ const ICON_PATHS = {
 const icon = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 const SETTINGS = [
   ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', icon('gauge'), '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
+  ['usage', icon('gauge'), '오늘 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
   ['lang', icon('globe'), '언어 모드', () => modeLabel()],
   ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
@@ -3330,11 +3338,13 @@ function renderUsage() {
   if (usageState === 'loading' || usageState === null) body = '<p class="sync-line">확인하는 중이에요…</p>';
   else if (usageState === 'error') body = '<p class="sync-line">사용량을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>';
   else {
-    const meter = (title, u, unit) => `<div class="field"><h3>${title}</h3>
-      <p class="sync-line">오늘 <b>${u.used}${unit}</b> 썼어요 · <b>${u.remaining}${unit}</b> 남았어요</p>
+    // 한 줄에 이름 · 남은 양, 그 아래 막대
+    const meter = (title, u, unit) => `<div class="usage-row">
+      <div class="usage-head"><b>${title}</b><span><b>${u.remaining}${unit}</b> 남음 · 하루 ${u.limit}${unit}</span></div>
       <div class="usage-meter" role="img" aria-label="${u.limit}${unit} 중 ${u.used}${unit} 사용"><i style="width:${Math.min(100, (u.used / u.limit) * 100)}%"></i></div>
-      <p class="sync-line">하루 ${u.limit}${unit}까지</p></div>`;
-    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('💬 대화', usageState.talk, '분') : '')
+    </div>`;
+    body = `<p class="sync-line">카드 자동 입력</p><div class="field usage-box">${meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '')}</div>`
+      + (usageState.talk ? `<p class="sync-line">대화</p><div class="field usage-box">${meter('💬 대화 시간', usageState.talk, '분')}</div>` : '')
       + '<p class="sync-line center-note">매일 자정(한국 시간)에 다시 채워져요.</p>';
     box.innerHTML = body;
     return;

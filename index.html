@@ -610,13 +610,8 @@ textarea::placeholder { font-family: var(--sans); }
   box-shadow: 0 6px 22px rgba(30, 20, 60, .05);
 }
 :root[data-skin="pastel"] .face.back { background: var(--glass); }
-/* 플래시카드: 그라데이션 테두리 */
+/* 플래시카드: 테두리 없이 둥글게 */
 :root[data-skin="pastel"] .face { border-radius: 30px; }
-:root[data-skin="pastel"] .face::before {
-  content: ''; position: absolute; inset: 0; padding: 1.5px; border-radius: inherit; background: var(--g); pointer-events: none;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-}
 :root[data-skin="pastel"] .face-tag { background: none; padding: 0; color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; font-size: 14px; top: 18px; left: 22px; }
 /* 큰 제목 */
 :root[data-skin="pastel"] .topbar h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
@@ -808,7 +803,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

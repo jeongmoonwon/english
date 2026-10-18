@@ -450,10 +450,11 @@ textarea.eng { font-family: var(--serif); }
 .talk-card h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .talk-card .btn { margin-top: 2px; }
-/* 홈 아래 '복습 시작' 폭 = 오늘의 대화 카드 안 버튼 폭 (화면 여백 20 + 카드 안 여백 18) */
-#review-actions.home { padding-left: 38px; padding-right: 38px; }
-/* 홈의 큰 버튼들은 높이를 같게 (오늘의 대화 · 아래 복습 시작) */
-:root[data-skin="pastel"] .talk-card .btn.wide { min-height: 54px; border-radius: 999px; }
+
+.talk-card.tap { cursor: pointer; transition: transform .15s ease; }
+.talk-card.tap:active { transform: scale(.98); }
+.talk-go { align-self: flex-end; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; font-size: 14px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
+.talk-go .ico { color: #9C7AEE; }
 .talk-tag { font-size: 12px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
 .talk-hero.small { padding-top: 0; }
 .talk-hero.small .mascot { width: 84px; height: 82px; }
@@ -953,7 +954,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v90';
+const APP_VERSION = 'v91';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1519,7 +1520,6 @@ function renderReview() {
   }
 
   $('#review-title').textContent = ui.reviewStarted ? '복습' : '오늘';
-  $('#review-actions').classList.remove('home');
   // 복습 시작을 누른 뒤: 방향·카테고리를 고르고 시작
   if (!ui.reviewStarted && ui.reviewSetup) {
     ui.reviewShow = false; ui.reviewCardId = null;
@@ -1575,10 +1575,10 @@ function renderReview() {
       </div>`;
     bar.hidden = false;
     checkOrbLevelUp(days);
-    bar.classList.add('home');   // 아래 버튼 폭을 오늘의 대화 카드 안 버튼과 같게
     bar.innerHTML = allDue.length
       ? `<button class="btn primary wide" data-act="review-setup">복습 시작 · ${due.length || allDue.length}장</button>`
-      : `<button class="btn primary wide" data-act="talk-go">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
+      : '';
+    bar.hidden = !allDue.length;
     return;
   }
 
@@ -2208,6 +2208,7 @@ function renderTalk() {
   } else if (t.status === 'idle') {
     loadCalendar();
     body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b></div>${talkCardsHTML('talk')}`;
+    actions = `<button class="btn primary wide" data-act="talk-go-current">${icon('mic')} 대화 시작</button>`;
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
@@ -2487,17 +2488,17 @@ function talkCardHTML(topic, i, where) {
     const day = topic.when.split(' ')[0];
     const q = topic.kind === 'plan-after' ? `${day === '오늘' ? '' : `${day} `}${josa(topic.title, '은', '는')} 어땠어?` : `${day} ${josa(topic.title, '이', '가')} 있지?`;
     const p = topic.kind === 'plan-after' ? '있었던 얘기를 말로 해 봐요. 끝나면 쓸 만한 표현을 카드로 챙겨 줘요.' : '어떤 일인지, 기분은 어떤지 얘기해 봐요. 거기서 쓸 만한 말도 같이 연습해요.';
-    return `<section class="talk-card">
+    return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go-topic" data-index="${i}">
       <span class="talk-tag">📅 ${topic.kind === 'plan-after' ? '지난 일정' : '다가오는 일정'} · ${esc(topic.when)}</span>
       <h3>${esc(q)}</h3><p>${p}</p>
-      <button class="btn primary wide" data-act="talk-go-topic" data-index="${i}">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기</button>
+      <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기 ›</span>
     </section>`;
   }
-  return `<section class="talk-card">
+  return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go">
     <span class="talk-tag">💬 오늘의 대화</span>
     <h3>오늘 하루는 어땠어?</h3>
     <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. 한 번에 최대 ${TALK_MAX_SEC / 60}분 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${talkLeftSec != null ? ` 오늘 남은 시간 ${Math.floor(talkLeftSec / 60)}분.` : ''}${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
-    <button class="btn primary wide" data-act="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기</button>
+    <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기 ›</span>
   </section>`;
 }
 /** 오늘의 대화 카드들: 일정 후보가 있으면 옆으로 넘겨 보고, 맨 끝은 그냥 수다 */
@@ -3844,6 +3845,12 @@ document.addEventListener('click', (ev) => {
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
     case 'talk-go': setTab('talk'); startTalk(null); break;
+    case 'talk-go-current': {   // 대화 탭 아래 버튼: 지금 보이는 카드의 화제로
+      const box = $('#talk-main .talk-swipe');
+      const i = box ? Math.round(box.scrollLeft / (box.firstElementChild.offsetWidth + 10)) : -1;
+      startTalk(ui.talkTopics?.[i] || null);
+      break;
+    }
     case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
     case 'cal-connect': connectCalendar(); break;
     case 'cal-disconnect': disconnectCalendar(); break;

@@ -13,7 +13,9 @@ const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // OpenAI 키가 없을 �
 const TRANSCRIBE = 'gpt-4o-mini-transcribe';            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
 const MAX_ASK_CHARS = 300;
-const TALK_LIMIT = 10;                       // 1인당 하루 복숭아와 대화하기 횟수 (한 번에 3분, 앱에서 멈춤)
+const TALK_DAY_SEC = 15 * 60;                // 1인당 하루 대화 시간 (초)
+const TALK_SESSION_SEC = 5 * 60;             // 한 번 대화 최대 길이 (앱에서 멈춤)
+const TALK_MIN_SEC = 30;                     // 남은 시간이 이보다 적으면 새 대화를 열지 않음
 const REALTIME_MODEL = 'gpt-realtime-2.1';   // OpenAI 실시간 음성 대화
 const REALTIME_VOICE = 'marin';   // 기본 목소리 (앱 설정에서 바꿀 수 있음)
 const REALTIME_VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'];
@@ -85,7 +87,7 @@ export async function handle(request, env, deps = {}) {
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
   const isAsk = request.method === 'POST' && path === '/ask';
-  const isTalk = request.method === 'POST' && (path === '/talk/token' || path === '/talk/review');
+  const isTalk = request.method === 'POST' && ['/talk/token', '/talk/review', '/talk/end'].includes(path);
   const isCalendar = request.method === 'POST' && ['/calendar/start', '/calendar/events', '/calendar/disconnect'].includes(path);
   const isFeedback = request.method === 'POST' && path === '/feedback';
   if (!isUsage && !isVoice && !isAsk && !isTalk && !isCalendar && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
@@ -104,7 +106,7 @@ export async function handle(request, env, deps = {}) {
   const key = `use:${user.sub}:${day}`;
   const voiceKey = `voice:${user.sub}:${day}`;
   const askKey = `ask:${user.sub}:${day}`;
-  const talkKey = `talk:${user.sub}:${day}`;
+  const talkKey = `talksec:${user.sub}:${day}`;   // 오늘 쓴 대화 시간(초)
 
   // 오늘 사용량만 알려 주기 (설정 화면). 사진은 예전 앱을 위해 맨 위에 그대로
   if (isUsage) {
@@ -116,12 +118,13 @@ export async function handle(request, env, deps = {}) {
       used, remaining: Math.max(0, DAILY_LIMIT - used), limit: DAILY_LIMIT,
       voice: { used: vUsed, remaining: Math.max(0, VOICE_LIMIT - vUsed), limit: VOICE_LIMIT },
       ask: { used: aUsed, remaining: Math.max(0, ASK_LIMIT - aUsed), limit: ASK_LIMIT },
-      talk: { used: tUsed, remaining: Math.max(0, TALK_LIMIT - tUsed), limit: TALK_LIMIT },
+      talk: { used: Math.ceil(tUsed / 60), remaining: Math.floor(Math.max(0, TALK_DAY_SEC - tUsed) / 60), limit: TALK_DAY_SEC / 60, remainingSec: Math.max(0, TALK_DAY_SEC - tUsed) },
     });
   }
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
   if (isAsk) return handleAsk(request, env, reply, askKey);
   if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
+  if (path === '/talk/end') return handleTalkEnd(request, env, reply, talkKey, user);
   if (path === '/calendar/start') return handleCalendarStart(request, env, reply, user);
   if (path === '/calendar/events') return handleCalendarEvents(request, env, reply, user);
   if (path === '/calendar/disconnect') return handleCalendarDisconnect(env, reply, user);
@@ -302,7 +305,9 @@ async function handleTalkToken(request, env, reply, key, user) {
   const topic = talkTopic(body?.topic);
 
   const used = Number(await env.USAGE.get(key)) || 0;
-  if (used >= TALK_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: TALK_LIMIT });
+  const left = TALK_DAY_SEC - used;
+  if (left < TALK_MIN_SEC) return reply(429, { error: 'limit', remainingSec: Math.max(0, left) });
+  const allow = Math.min(TALK_SESSION_SEC, left);   // 이번 대화 길이
   // OpenAI에 남길 사용자 구분값 (Firebase 아이디를 그대로 보내지 않고 해시)
   const hashed = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`mooni:${user.sub}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
   const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
@@ -332,8 +337,33 @@ async function handleTalkToken(request, env, reply, key, user) {
     console.error('talk token failed', res.status, JSON.stringify(data).slice(0, 500));
     return reply(res.status === 429 ? 503 : 502, { error: 'upstream' });
   }
-  await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
-  return reply(200, { value: data.value, remaining: TALK_LIMIT - used - 1, limit: TALK_LIMIT });
+  // 이번 대화 길이만큼 먼저 쓰고, 끝나면(/talk/end) 실제로 쓴 만큼만 남기고 돌려줌. 앱이 끝을 못 알리면 미리 쓴 그대로
+  await env.USAGE.put(key, String(used + allow), { expirationTtl: 2 * 86400 });
+  const reservation = crypto.randomUUID();
+  await env.USAGE.put(`talkres:${user.sub}:${reservation}`, JSON.stringify({ key, allow, at: Date.now() }), { expirationTtl: 86400 });
+  return reply(200, { value: data.value, seconds: allow, reservation, remainingSec: left - allow });
+}
+
+/** 대화가 끝나면 앱이 실제로 쓴 시간을 알려 줌 → 남은 시간만큼 돌려줌 (미리 쓴 것보다 더 쓰게 되지는 않음) */
+async function handleTalkEnd(request, env, reply, todayKey, user) {
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const id = typeof body?.reservation === 'string' ? body.reservation.slice(0, 64) : '';
+  const resKey = `talkres:${user.sub}:${id}`;
+  const res = id ? JSON.parse(await env.USAGE.get(resKey) || 'null') : null;
+  if (res) {
+    await env.USAGE.delete(resKey);
+    // 실제 시간: 앱이 알린 값과 서버가 잰 시간(키를 준 뒤 지난 시간에서 연결 준비 30초를 뺀 값) 중 큰 쪽
+    const measured = (Date.now() - res.at) / 1000 - 30;
+    const spent = Math.min(res.allow, Math.ceil(Math.max(Number(body.seconds) || 0, measured, 0)));
+    const refund = res.allow - spent;
+    if (refund > 0) {
+      const used = Number(await env.USAGE.get(res.key)) || 0;
+      await env.USAGE.put(res.key, String(Math.max(0, used - refund)), { expirationTtl: 2 * 86400 });
+    }
+  }
+  const usedNow = Number(await env.USAGE.get(todayKey)) || 0;
+  return reply(200, { remainingSec: Math.max(0, TALK_DAY_SEC - usedNow) });
 }
 
 // 목소리 미리 듣기: 목소리마다 한 번만 만들어 KV에 저장해 두고 계속 같은 파일을 돌려줌 (처음 한 번만 비용)

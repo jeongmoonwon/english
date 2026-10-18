@@ -934,7 +934,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v84';
+const APP_VERSION = 'v85';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2136,7 +2136,9 @@ function josa(name, withBatchim, without) {
   const batchim = code >= 0 && code <= 11171 ? code % 28 !== 0 : /(l|m|n|ng)$/i.test(name.trim());
   return name + (batchim ? withBatchim : without);
 }
-const TALK_MAX_SEC = 180;    // 한 번 대화 길이 (Worker 하루 횟수와 함께 비용을 묶어 둠)
+const TALK_MAX_SEC = 300;    // 한 번 대화 최대 길이 (실제 길이는 Worker가 오늘 남은 시간에 맞춰 정해 줌)
+const TALK_DAY_MIN = 15;     // 하루 대화 시간 (Worker와 같게)
+let talkLeftSec = null;      // 오늘 남은 대화 시간 (마지막으로 받은 값)
 // 목소리 미리 듣기 (Worker가 만들어 둔 짧은 인사말).
 // 아이폰은 누른 순간에 시작한 소리만 허락하므로, 기다림 없이 그 자리에서 <audio>로 바로 틂 (무음 스위치와 상관없이 들림)
 let samplePlayer = null;
@@ -2155,7 +2157,7 @@ function playVoiceSample(voice) {
 
 const TALK_ERRORS = {
   401: '로그인이 만료됐어요. 다시 로그인해 주세요.',
-  429: '오늘 대화할 수 있는 횟수를 모두 썼어요. 내일 다시 할 수 있어요.',
+  429: `오늘 대화할 수 있는 ${TALK_DAY_MIN}분을 모두 썼어요. 내일 다시 할 수 있어요.`,
   503: '대화 기능을 아직 쓸 수 없어요. 잠시 뒤 다시 시도해 주세요.',
 };
 // status: idle | connecting | live | reviewing | result
@@ -2174,7 +2176,7 @@ function renderTalk() {
   const t = talk;
   const mode = t.mode ?? prefs.mode;   // 대화 중에는 시작할 때의 언어 모드
   const learn = targetLang(mode).name;
-  const left = t.status === 'live' ? Math.max(0, TALK_MAX_SEC - Math.floor((Date.now() - t.start) / 1000)) : 0;
+  const left = t.status === 'live' ? Math.max(0, (t.maxSec || TALK_MAX_SEC) - Math.floor((Date.now() - t.start) / 1000)) : 0;
   // 내 말은 받아쓰기가 끝나서 글자가 있을 때만 보여 줌 (소음으로 잡힌 빈 차례는 안 보임)
   const shown = t.turns.filter((x) => x.role !== 'user' || x.text);
   const log = shown.length ? `<div class="talk-log">${shown.map((x) => `<div class="bubble ${x.role === 'user' ? 'me' : 'mooni'}${x.text ? '' : ' wait'}">${x.text ? esc(x.text) : '…'}</div>`).join('')}</div>` : '';
@@ -2273,7 +2275,10 @@ async function startTalk(topic = null) {
       body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic }),
     });
     const data = await res.json().catch(() => ({}));
+    if (typeof data.remainingSec === 'number') talkLeftSec = data.remainingSec;
     if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || `${josa(botName(), '을', '를')} 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.`);
+    t.maxSec = Number(data.seconds) || TALK_MAX_SEC;
+    t.reservation = data.reservation;
     if (talk !== t) { t.stream.getTracks().forEach((x) => x.stop()); return; }
 
     const pc = new RTCPeerConnection();
@@ -2296,7 +2301,7 @@ async function startTalk(topic = null) {
     t.status = 'live';
     t.start = Date.now();
     t.timer = setInterval(() => {
-      const left = TALK_MAX_SEC - Math.floor((Date.now() - t.start) / 1000);
+      const left = t.maxSec - Math.floor((Date.now() - t.start) / 1000);
       const el = $('#talk-left');
       if (el) el.textContent = `${Math.floor(Math.max(0, left) / 60)}:${String(Math.max(0, left) % 60).padStart(2, '0')}`;
       if (left <= 0) endTalk();
@@ -2312,11 +2317,24 @@ async function startTalk(topic = null) {
 }
 function hangUp(t = talk) {
   clearInterval(t.timer);
+  reportTalkEnd(t);
   try { t.dc?.close(); } catch {}
   try { t.pc?.close(); } catch {}
   t.stream?.getTracks().forEach((x) => x.stop());
   if (t.audio) t.audio.srcObject = null;
   t.pc = t.dc = t.stream = null;
+}
+/** 대화를 끝내면 실제로 쓴 시간을 서버에 알려 남은 시간을 돌려받음 (한 번만) */
+function reportTalkEnd(t) {
+  if (!t.reservation || !user) return;
+  const reservation = t.reservation;
+  t.reservation = null;
+  const seconds = t.start ? Math.round((Date.now() - t.start) / 1000) : 0;
+  user.getIdToken().then((tok) => fetch(talkURL('/talk/end'), {
+    method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+    body: JSON.stringify({ reservation, seconds }),
+  })).then((r) => r.json()).then((d) => { if (typeof d.remainingSec === 'number') { talkLeftSec = d.remainingSec; renderTalk(); } }).catch(() => {});
 }
 async function endTalk() {
   const t = talk;
@@ -2325,7 +2343,7 @@ async function endTalk() {
   const turns = t.turns.filter((x) => x.text).map((x) => ({ role: x.role, text: x.text }));
   if (!turns.some((x) => x.role === 'user')) { t.status = 'idle'; t.turns = []; renderTalk(); toast('말한 내용이 없어서 정리할 게 없어요.'); return; }
   // 기록 탭 캘린더에 대화한 날로 남김 (t=대화)
-  const talkSec = Math.min(TALK_MAX_SEC, Math.max(1, Math.round((Date.now() - t.start) / 1000)));
+  const talkSec = Math.min(t.maxSec || TALK_MAX_SEC, Math.max(1, Math.round((Date.now() - t.start) / 1000)));
   await recordActivity([{ id: `t|${t.start}|${talkSec}`, at: t.start }]);
   markTalked(t.topic);   // 이 일정은 다음부터 다시 묻지 않음
   markChanged();
@@ -2457,7 +2475,7 @@ function talkCardHTML(topic, i, where) {
   return `<section class="talk-card">
     <span class="talk-tag">💬 오늘의 대화</span>
     <h3>오늘 하루는 어땠어?</h3>
-    <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. ${TALK_MAX_SEC / 60}분 동안 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
+    <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. 한 번에 최대 ${TALK_MAX_SEC / 60}분 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${talkLeftSec != null ? ` 오늘 남은 시간 ${Math.floor(talkLeftSec / 60)}분.` : ''}${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
     <button class="btn primary wide" data-act="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기</button>
   </section>`;
 }
@@ -3009,7 +3027,7 @@ const ICON_PATHS = {
 const icon = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 const SETTINGS = [
   ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', icon('gauge'), '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? 10}번 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 10번`)],
+  ['usage', icon('gauge'), '자동 입력 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
   ['lang', icon('globe'), '언어 모드', () => modeLabel()],
   ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
@@ -3288,6 +3306,7 @@ async function loadUsage() {
     scanRemaining = usageState.remaining;
     if (usageState.voice) voiceRemaining = usageState.voice.remaining;
     if (usageState.ask) askRemaining = usageState.ask.remaining;
+    if (typeof usageState.talk?.remainingSec === 'number') talkLeftSec = usageState.talk.remainingSec;
   } catch {
     usageState = 'error';
   }
@@ -3306,7 +3325,7 @@ function renderUsage() {
       <p class="sync-line">오늘 <b>${u.used}${unit}</b> 썼어요 · <b>${u.remaining}${unit}</b> 남았어요</p>
       <div class="usage-meter" role="img" aria-label="${u.limit}${unit} 중 ${u.used}${unit} 사용"><i style="width:${Math.min(100, (u.used / u.limit) * 100)}%"></i></div>
       <p class="sync-line">하루 ${u.limit}${unit}까지</p></div>`;
-    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('💬 대화', usageState.talk, '번') : '')
+    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('💬 대화', usageState.talk, '분') : '')
       + '<p class="sync-line center-note">매일 자정(한국 시간)에 다시 채워져요.</p>';
     box.innerHTML = body;
     return;

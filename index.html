@@ -420,6 +420,8 @@ textarea.eng { font-family: var(--serif); }
 .orb-text > b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .orb-text span { font-size: 12px; color: var(--muted); }
 .orb-text span b { color: var(--ink); }
+.orb-warn { color: var(--again) !important; font-weight: 600; }
+.orb-warn.soft { color: var(--hard) !important; }
 .orb-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 15%, transparent); overflow: hidden; }
 .orb-bar i { display: block; height: 100%; border-radius: 4px; background: var(--g2, var(--accent)); }
 .orb-party { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(20, 16, 40, .45); animation: fade .25s ease-out; }
@@ -931,7 +933,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v81';
+const APP_VERSION = 'v82';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3459,17 +3461,34 @@ function dailyActivity() {
 }
 const solvedOf = (d) => (d ? d.review + d.practice : 0);
 
-// ---------- 구슬 키우기: 쌓인 공부 점수로 구슬이 10단계까지 자라요 (단계는 내려가지 않음) ----------
+// ---------- 구슬 키우기: 쌓인 공부 점수로 구슬이 10단계까지 자라요 ----------
 // 점수: 복습·자유 연습 1장 1점, 표현 추가 3점, 대화 1분 5점, 그날 링 3개를 모두 채우면 +20점
+// 쉬는 날: 이틀까지는 그대로, 3일째 연속으로 안 한 날부터 하루 30점씩 줄어듦 (0점 아래로는 안 내려감). 점수가 줄면 단계도 내려갈 수 있음
 const ORB_LEVELS = [
-  [0, '물방울'], [200, '말랑 구슬'], [600, '반짝 구슬'], [1200, '오로라 구슬'], [2000, '진주 구슬'],
-  [2800, '은하수 구슬'], [3600, '달빛 구슬'], [5500, '오로라 구슬 II'], [8000, '별자리 구슬'], [12000, '무지개 은하 구슬'],
+  [0, '물방울'], [150, '말랑 구슬'], [450, '반짝 구슬'], [900, '오로라 구슬'], [1500, '진주 구슬'],
+  [2100, '은하수 구슬'], [2700, '달빛 구슬'], [4000, '오로라 구슬 II'], [6000, '별자리 구슬'], [9000, '무지개 은하 구슬'],
 ];
-function orbPoints(days = dailyActivity()) {
-  let pts = 0;
-  for (const d of days.values()) pts += solvedOf(d) + d.add * 3 + Math.floor((d.talkSec || 0) / 60) * 5 + (ringsDone(d) === 3 ? 20 : 0);
-  return pts;
+const ORB_REST_DAYS = 2, ORB_DECAY = 30;
+/** 첫 공부한 날부터 오늘까지 하루씩: 공부한 날은 더하고, 오래 쉰 날은 뺌. 반환: { pts, idle(오늘까지 연속으로 쉰 날 수) } */
+function orbScore(days = dailyActivity()) {
+  const keys = [...days.keys()].sort();
+  if (!keys.length) return { pts: 0, idle: 0 };
+  let pts = 0, idle = 0;
+  const today = dayKey(new Date());
+  for (const d = new Date(`${keys[0]}T00:00:00`); dayKey(d) <= today; d.setDate(d.getDate() + 1)) {
+    const info = days.get(dayKey(d));
+    if (studiedOn(info)) {
+      idle = 0;
+      pts += solvedOf(info) + info.add * 3 + Math.floor((info.talkSec || 0) / 60) * 5 + (ringsDone(info) === 3 ? 20 : 0);
+    } else {
+      idle += 1;
+      // 오늘은 아직 하루가 안 끝났으니 빼지 않음
+      if (idle > ORB_REST_DAYS && dayKey(d) !== today) pts = Math.max(0, pts - ORB_DECAY);
+    }
+  }
+  return { pts, idle };
 }
+const orbPoints = (days) => orbScore(days).pts;
 function orbLevel(pts) {
   let lv = 1;
   ORB_LEVELS.forEach(([min], i) => { if (pts >= min) lv = i + 1; });
@@ -3544,7 +3563,7 @@ function orbSVG(level, sleepy = false, cls = 'orb-svg') {
 }
 /** 홈의 구슬 카드 */
 function orbCardHTML(days, today) {
-  const pts = orbPoints(days);
+  const { pts, idle } = orbScore(days);
   const lv = orbLevel(pts);
   const [min, name] = ORB_LEVELS[lv - 1];
   const next = ORB_LEVELS[lv];
@@ -3557,6 +3576,8 @@ function orbCardHTML(days, today) {
       <b>${name}</b>
       <div class="orb-bar"><i style="width:${pct}%"></i></div>
       <span>${next ? `다음 단계 <b>${next[1]}</b>까지 ${(next[0] - pts).toLocaleString()}점` : '가장 높은 단계예요! ✨'}</span>
+      ${idle > ORB_REST_DAYS ? `<span class="orb-warn">${idle}일째 못 만났어요.${idle > ORB_REST_DAYS + 1 ? ` 지금까지 ${((idle - ORB_REST_DAYS - 1) * ORB_DECAY).toLocaleString()}점 줄었어요.` : ''} 오늘도 쉬면 ${ORB_DECAY}점 줄어요.</span>`
+        : idle === ORB_REST_DAYS ? '<span class="orb-warn soft">내일도 쉬면 점수가 줄기 시작해요.</span>' : ''}
     </div>
   </section>`;
 }
@@ -3564,7 +3585,8 @@ function orbCardHTML(days, today) {
 function checkOrbLevelUp(days) {
   const lv = orbLevel(orbPoints(days));
   if (prefs.orbLevel == null) { setPref('orbLevel', lv); return; }
-  if (lv <= prefs.orbLevel) return;
+  if (lv < prefs.orbLevel) { setPref('orbLevel', lv); toast(`오래 쉬어서 구슬이 ${ORB_LEVELS[lv - 1][1]}(으)로 작아졌어요. 다시 키워 봐요!`); return; }
+  if (lv === prefs.orbLevel) return;
   setPref('orbLevel', lv);
   const el = document.createElement('div');
   el.className = 'orb-party';

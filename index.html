@@ -412,6 +412,23 @@ textarea.eng { font-family: var(--serif); }
 .day.ring-day.today .dnum { color: var(--ink); font-weight: 800; }
 .day.ring-day.today { box-shadow: none; background: color-mix(in srgb, var(--soft) 70%, transparent); }
 .day.ring-day .rings-blank { width: 34px; height: 34px; }
+/* 오늘의 대화 카드 (홈·대화 탭) */
+.talk-card { padding: 18px; margin-bottom: 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.talk-card h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.talk-card .btn { margin-top: 2px; }
+.talk-tag { font-size: 12px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
+.talk-hero.small { padding-top: 0; }
+.talk-hero.small .mascot { width: 84px; height: 82px; }
+.talk-topic-chip { display: block; width: fit-content; margin: 0 auto 4px; padding: 5px 12px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 700; }
+.today-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.today-mini .btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; font-size: 14px; background: var(--glass, var(--surface)); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
+.today-streak-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; font-weight: 800; }
+.today-streak-line .week { display: flex; gap: 3px; }
+.today-streak-line .week i { width: 9px; height: 9px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 18%, transparent); }
+.today-streak-line .week i.on { background: var(--g2, var(--accent)); }
+.today-streak-line .week i.now { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+.opt-badge { margin-left: 4px; padding: 1px 6px; border-radius: 6px; background: var(--soft); color: var(--accent); font-size: 10px; font-weight: 700; vertical-align: 1px; }
 /* 오늘 홈 */
 .today-hero { display: flex; align-items: center; gap: 16px; padding: 18px; margin: 4px 0 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
 .today-hero .rings { flex: none; }
@@ -892,7 +909,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1321,7 +1338,7 @@ const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
   // design: 3 = 기본 글씨체를 나눔스퀘어라운드로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값으로)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5 };
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false };
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
   if (saved && saved.design !== 3) { saved.font = base.font; saved.design = 3; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
@@ -1470,6 +1487,7 @@ function renderReview() {
     // 최근 7일 (오늘이 맨 오른쪽)
     const week = [...Array(7)].map((_, i) => { const d = new Date(now); d.setDate(d.getDate() - (6 - i)); return d; });
     const { n } = streakInfo(days);
+    loadCalendar();   // 캘린더를 연결했으면 오늘·내일 일정 (10분마다 새로)
     main.innerHTML = `
       <section class="today-hero">
         ${ringsSVG(today, 96, '오늘 목표 링')}
@@ -1477,23 +1495,20 @@ function renderReview() {
           <b>${line1}</b>
           <span>${line2}</span>
           <ul class="today-rings">${RINGS.map((r) => `<li><i style="background:linear-gradient(120deg, ${r.c1}, ${r.c2})"></i><span>${r.name} <b>${r.value(today)}</b> / ${r.goal()}${r.unit}</span></li>`).join('')}</ul>
+          <span class="today-streak-line"><span class="gtext">🔥 ${n}일 연속</span><span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}"></i>`).join('')}</span></span>
         </div>
       </section>
-      <div class="set-list today-links">
-        <button class="set-row" data-act="home-talk"><span class="set-icon">${icon('chat')}</span><span class="set-txt"><b>${josa(botName(), '이랑', '랑')} 대화하기</b><small>말로 수다 떨고 표현 챙기기</small></span><span class="set-go">›</span></button>
-        <button class="set-row" data-act="add"><span class="set-icon">${icon('pen')}</span><span class="set-txt"><b>표현 추가</b><small>사진 · 말하기 · 텍스트로 채우기</small></span><span class="set-go">›</span></button>
-        <button class="set-row" data-act="practice"><span class="set-icon">${icon('type')}</span><span class="set-txt"><b>자유 연습</b><small>복습 일정과 상관없이 풀어 보기</small></span><span class="set-go">›</span></button>
+      ${talkCardHTML(calTopic(), 'home')}
+      <div class="today-mini">
+        <button class="btn" data-act="add">${icon('pen')} 표현 추가</button>
+        <button class="btn" data-act="practice">${icon('type')} 자유 연습</button>
       </div>
-      <section class="today-streak">
-        <span class="gtext">🔥 ${n}일 연속</span>
-        <span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}">${'일월화수목금토'[d.getDay()]}</i>`).join('')}</span>
-      </section>
       ${allDue.length ? `<details class="field setup-fold"${ui.setupOpen ? ' open' : ''}><summary>복습 설정 <span>${DIRECTIONS[study.dir].label}${selectedCats().length ? ` · ${selectedCats().map(esc).join(', ')}` : ''}</span></summary>${setupHTML(dueByCat)}</details>` : ''}`;
     bar.hidden = false;
     bar.innerHTML = due.length
       ? `<button class="btn primary wide" data-act="review-start">복습 시작 · ${due.length}장</button>`
       : allDue.length ? '<button class="btn primary wide" disabled>복습할 카드가 있는 카테고리를 골라 주세요</button>'
-      : `<button class="btn primary wide" data-act="home-talk">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
+      : `<button class="btn primary wide" data-act="talk-go">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
     return;
   }
 
@@ -2119,13 +2134,12 @@ function renderTalk() {
     body = `<div class="talk-hero">${MASCOT}<b>로그인하면 ${josa(botName(), '이랑', '랑')} 대화할 수 있어요</b></div>`;
     actions = fbReady ? '<button class="btn primary wide" data-act="login">Google로 로그인</button>' : '';
   } else if (t.status === 'idle') {
-    body = `<div class="talk-hero">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b>
-      <p>${josa(botName(), '이', '가')} 먼저 말을 걸어요. 말로 대답하면 돼요.<br>${TALK_MAX_SEC / 60}분 대화가 끝나면 더 자연스러운 표현을 카드로 만들어 줘요.</p></div>`;
-    actions = `<button class="btn primary wide" data-act="talk-start">${icon('mic')} 대화 시작</button>`;
+    loadCalendar();
+    body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b></div>${talkCardHTML(calTopic(), 'talk')}`;
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
-    body = `<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
+    body = `${t.topic ? `<span class="talk-topic-chip">📅 ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
       <p><span id="talk-left">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span> 남음</p></div>${log}`;
     actions = '<button class="btn primary wide" data-act="talk-end">대화 끝내고 정리하기</button>';
   } else if (t.status === 'reviewing') {
@@ -2185,11 +2199,12 @@ function onTalkEvent(ev) {
   renderTalk();
 }
 
-async function startTalk() {
+async function startTalk(topic = null) {
   if (!user || talk.status !== 'idle') return;
   const t = talk;
   t.mode = prefs.mode;
   t.turns = [];
+  t.topic = topic;
   // 아이폰: 소리 재생과 마이크는 버튼을 누른 그 순간에 준비해야 함
   t.audio = new Audio();
   t.audio.autoplay = true;
@@ -2206,7 +2221,7 @@ async function startTalk() {
     const res = await fetch(talkURL('/talk/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName }),
+      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || `${josa(botName(), '을', '를')} 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.`);
@@ -2299,6 +2314,111 @@ function talkToCards() {
   editor.checked = new Set(items.map((_, i) => i));
   useFound(editor);
   renderEditor();
+}
+
+// ---------- 구글 캘린더 (설정에서 '구글 캘린더 연결'을 고른 사람만) ----------
+// 서버가 오늘·내일 일정의 제목과 시각만 줌. 기기에도 서버에도 저장하지 않고 화면을 그릴 때만 씀
+const cal = { events: null, at: 0, loading: false };
+async function loadCalendar(force = false) {
+  if (!prefs.calendar || !user || !SCAN_URL || cal.loading) return;
+  if (!force && cal.events && Date.now() - cal.at < 10 * 60000) return;
+  cal.loading = true;
+  try {
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    const to = new Date(from); to.setDate(to.getDate() + 2);
+    const res = await fetch(talkURL('/calendar/events'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ from: from.toISOString(), to: to.toISOString() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status);
+    if (data.connected === false) { setPref('calendar', false); cal.events = null; toast('구글 캘린더 연결이 끊겼어요. 설정에서 다시 연결할 수 있어요.'); }
+    else { cal.events = Array.isArray(data.events) ? data.events : []; cal.at = Date.now(); }
+  } catch {
+    cal.at = Date.now();   // 실패해도 10분 동안은 다시 묻지 않음
+    cal.events ??= [];
+  } finally {
+    cal.loading = false;
+  }
+  if (!ui.reviewStarted) renderReview();
+  renderTalk();
+  if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
+}
+const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.getMinutes() ? { minute: '2-digit' } : {}) });
+/** 오늘의 대화 화제: 오늘 끝난 일정 → 오늘 남은 일정 → 내일 일정 → 오늘 하루 종일 일정 */
+function calTopic() {
+  if (!prefs.calendar || !cal.events?.length) return null;
+  const now = new Date();
+  const todayKey = dayKey(now);
+  const tomorrowKey = dayKey(new Date(now.getTime() + 86400000));
+  const evs = cal.events.map((e) => ({ ...e, s: new Date(e.start), e: new Date(e.end) }))
+    .map((e) => ({ ...e, day: e.allDay ? String(e.start).slice(0, 10) : dayKey(e.s) }));
+  const timed = evs.filter((e) => !e.allDay);
+  const done = timed.filter((e) => e.day === todayKey && e.e <= now).sort((a, b) => b.e - a.e)[0];
+  if (done) return { kind: 'plan-after', title: done.title, when: `오늘 ${timeText(done.s)}` };
+  const later = timed.filter((e) => e.day === todayKey && e.s > now).sort((a, b) => a.s - b.s)[0];
+  if (later) return { kind: 'plan-before', title: later.title, when: `오늘 ${timeText(later.s)}` };
+  const tm = evs.filter((e) => e.day === tomorrowKey).sort((a, b) => a.s - b.s)[0];
+  if (tm) return { kind: 'plan-before', title: tm.title, when: tm.allDay ? '내일' : `내일 ${timeText(tm.s)}` };
+  const allDay = evs.find((e) => e.allDay && e.day === todayKey);
+  if (allDay) return { kind: 'plan-before', title: allDay.title, when: '오늘' };
+  return null;
+}
+/** 오늘의 대화 카드 (홈·대화 탭). topic이 없으면 그냥 수다 */
+function talkCardHTML(topic, where) {
+  const bot = botName();
+  if (topic) {
+    const q = topic.kind === 'plan-after' ? `${josa(topic.title, '은', '는')} 어땠어?` : `${topic.when.startsWith('내일') ? '내일' : '오늘'} ${josa(topic.title, '이', '가')} 있지?`;
+    const p = topic.kind === 'plan-after' ? '다녀온 얘기를 말로 해 봐요. 끝나면 쓸 만한 표현을 카드로 챙겨 줘요.' : '어떤 일인지, 기분은 어떤지 얘기해 봐요. 거기서 쓸 만한 말도 같이 연습해요.';
+    return `<section class="talk-card">
+      <span class="talk-tag">📅 ${topic.kind === 'plan-after' ? '오늘 일정' : '다가오는 일정'} · ${esc(topic.when)}</span>
+      <h3>${esc(q)}</h3><p>${p}</p>
+      <button class="btn primary wide" data-act="talk-go-topic">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기</button>
+      ${where === 'talk' ? '<button class="btn wide" data-act="talk-go">그냥 수다 떨기</button>' : ''}
+    </section>`;
+  }
+  return `<section class="talk-card">
+    <span class="talk-tag">💬 오늘의 대화</span>
+    <h3>오늘 하루는 어땠어?</h3>
+    <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. ${TALK_MAX_SEC / 60}분 동안 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
+    <button class="btn primary wide" data-act="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기</button>
+  </section>`;
+}
+async function connectCalendar() {
+  if (!user) { toast('먼저 로그인해 주세요.'); return; }
+  try {
+    const res = await fetch(talkURL('/calendar/start'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ ret: location.href.split('#')[0] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 503) { toast('캘린더 연결은 아직 준비 중이에요.'); return; }
+    if (!res.ok || !data.url) throw new Error(res.status);
+    location.href = data.url;   // 구글 허락 화면 → 다시 이 앱으로 돌아옴 (#calendar=...)
+  } catch (err) {
+    toast(`캘린더를 연결하지 못했어요. (${errText(err)})`);
+  }
+}
+async function disconnectCalendar() {
+  if (!confirm('구글 캘린더 연결을 끊을까요? 이 앱이 받은 캘린더 권한도 함께 지워요.')) return;
+  try {
+    await fetch(talkURL('/calendar/disconnect'), { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  } catch {}
+  setPref('calendar', false);
+  cal.events = null;
+  renderSettingsPage('talk');
+  renderReview();
+  toast('캘린더 연결을 끊었어요.');
+}
+/** 구글 허락 화면에서 돌아온 경우 (#calendar=connected | denied | error) */
+function handleCalendarReturn() {
+  const m = /[#&]calendar=(\w+)/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (m[1] === 'connected') { setPref('calendar', true); cal.events = null; toast('구글 캘린더를 연결했어요. 이제 일정으로 말을 걸어요.'); }
+  else toast(m[1] === 'denied' ? '캘린더 연결을 취소했어요.' : '캘린더를 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
 }
 
 class ScanError extends Error {}   // 사용자에게 그대로 보여 줄 안내
@@ -2810,7 +2930,7 @@ const SETTINGS = [
   ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
   ['sound', icon('volume'), '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
   ['goal', icon('target'), '하루 목표', () => `복습 ${prefs.goalReview}장 · 표현 ${prefs.goalAdd}개 · 대화 ${prefs.goalTalk}분`],
-  ['talk', icon('chat'), '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}`],
+  ['talk', icon('chat'), '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}${prefs.calendar ? ' · 캘린더 연결됨' : ''}`],
   ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원'],
   ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의'],
 ];
@@ -2946,6 +3066,14 @@ function renderSettingsPage(page) {
       <label class="sub" for="talk-name">대화 상대가 나를 부를 이름</label>
       <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" value="${esc(prefs.talkName)}">
       <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
+    </div>
+    <div class="field">
+      <label class="sub">구글 캘린더로 일상 대화 <span class="opt-badge">선택</span></label>
+      ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>'
+        : prefs.calendar ? `<p class="sync-line"><b>연결됨</b> · 오늘·내일 일정으로 "치과 어땠어?"처럼 말을 걸어요.${cal.events ? ` 지금 읽은 일정 ${cal.events.length}개.` : ''}</p>
+          <button class="btn wide" data-act="cal-disconnect">연결 끊기</button>`
+        : `<p class="sync-line">켜면 오늘과 내일 일정의 <b>제목과 시간만</b> 읽어서 일정으로 말을 걸어요. 일정은 저장하지 않고, 대화를 시작할 때 고른 일정 하나의 제목만 대화 AI(OpenAI)에 전해요. 언제든 끌 수 있어요.</p>
+          <button class="btn primary wide" data-act="cal-connect">구글 캘린더 연결</button>`}
     </div>`;
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
@@ -3437,7 +3565,10 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
-    case 'home-talk': setTab('talk'); break;
+    case 'talk-go': setTab('talk'); startTalk(null); break;
+    case 'talk-go-topic': setTab('talk'); startTalk(calTopic()); break;
+    case 'cal-connect': connectCalendar(); break;
+    case 'cal-disconnect': disconnectCalendar(); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
     case 'talk-cards': talkToCards(); break;
@@ -3699,6 +3830,7 @@ async function init() {
   // Drive 동기화를 쓰던 이전 버전의 로그인 정보는 더 이상 쓰지 않음
   try { localStorage.removeItem('freedom-auth'); localStorage.removeItem('freedom-oauth-silent'); } catch {}
   if (fbReady) {
+    handleCalendarReturn();
     // Google 로그인에서 돌아온 경우
     const login = await handleOAuthReturn().catch((err) => ({ error: errText(err) }));
     if (login && login !== 'ok') toast(login.error === 'access_denied' ? 'Google 로그인을 취소했어요.' : `로그인하지 못했어요. (${login.error})`);
@@ -3709,6 +3841,7 @@ async function init() {
       renderSyncStatus();
       if (ui.tab === 'settings') { renderUsage(); if (changed) loadUsage(); }
       if (u && changed) syncNow({ announce: login === 'ok' });
+      if (u && changed) loadCalendar(true);
     });
   }
   if ('serviceWorker' in navigator) {

@@ -7,6 +7,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 FIREBASE_PROJECT_ID = "mooni-wordbook-66dd9"
 ALLOWED_ORIGINS = "https://jeongmoonwon.github.io,http://localhost:8000"
+# 구글 캘린더 연결 (OAuth 웹 클라이언트 ID). 비밀번호는 `npx wrangler secret put GOOGLE_CLIENT_SECRET`
+GOOGLE_CLIENT_ID = "380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com"
 
 # 하루 사용량 기록. `npx wrangler kv namespace create USAGE`로 만든 id를 넣으세요
 [[kv_namespaces]]

@@ -954,7 +954,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v93';
+const APP_VERSION = 'v94';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3751,7 +3751,6 @@ function renderStats() {
         <ul class="ring-rows">${RINGS.map((r) => `<li><i style="background:linear-gradient(120deg, ${r.c1}, ${r.c2})"></i><span>${r.name}</span><b>${r.value(info)}<small> / ${r.goal(info)}${r.unit}</small></b></li>`).join('')}</ul>
       </div>
       <p class="sync-line ring-msg">${done === 3 ? '세 링을 모두 채웠어요! ✨' : done ? `${done}개 채웠어요. ${3 - done}개 남았어요.` : selected === todayKey ? '오늘의 링을 채워 볼까요?' : studiedOn(info) || info.add ? '이날은 채운 링이 없어요.' : '이날은 기록이 없어요.'}</p>
-      ${info?.practice ? `<p class="sync-line">복습 ${info.review}장 · 자유 연습 ${info.practice}장</p>` : ''}
       ${selected === todayKey ? '<button class="btn wide" data-act="goal-open">목표 바꾸기</button>' : ''}
     </section>`;
   }

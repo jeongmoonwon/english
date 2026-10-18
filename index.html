@@ -504,15 +504,15 @@ textarea.eng { font-family: var(--serif); }
 .ring-msg { margin: 0; }
 .wheels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .wheel-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-.wheel-name { font-size: 12px; font-weight: 700; color: var(--muted); }
+.wheel-name { font-size: 13px; font-weight: 700; color: var(--muted); }
 .wheel-wrap { position: relative; width: 100%; }
-.wheel-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 72px; height: 36px; border-radius: 12px; background: var(--soft); pointer-events: none; }
-.wheel { position: relative; list-style: none; margin: 0; padding: 72px 0; height: 180px; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain;
+.wheel-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 64px; height: 32px; border-radius: 12px; background: var(--soft); pointer-events: none; }
+.wheel { position: relative; list-style: none; margin: 0; padding: 64px 0; height: 160px; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain;
   -webkit-mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); }
 .wheel::-webkit-scrollbar { display: none; }
-.wheel li { height: 36px; display: flex; align-items: center; justify-content: center; gap: 2px; scroll-snap-align: center; font-size: 17px; font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer; transition: color .15s, transform .15s; }
-.wheel li small { font-size: 12px; }
-.wheel li.on { color: var(--ink); font-weight: 800; transform: scale(1.08); }
+.wheel li { height: 32px; display: flex; align-items: center; justify-content: center; gap: 2px; scroll-snap-align: center; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer; transition: color .15s, transform .15s; }
+.wheel li small { font-size: 11px; }
+.wheel li.on { color: var(--ink); font-weight: 700; }
 .goal-edit { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
 .legend .ring-key { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
 .legend .ring-key i { width: 8px; height: 8px; border-radius: 50%; }
@@ -969,7 +969,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v97';
+const APP_VERSION = 'v98';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3069,7 +3069,7 @@ const GOAL_WHEELS = [
   ['goalAdd', '카드 추가', '개', () => range(1, 30, 1)],
   ['goalTalk', '대화', '분', () => range(5, TALK_DAY_MIN, 5)],   // 하루 대화 한도까지
 ];
-const WHEEL_ROW = 36;
+const WHEEL_ROW = 32;
 /** 지금 값에 가장 가까운 칸 번호 */
 const wheelIndex = (list, v) => list.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(list[best] - v) ? i : best), 0);
 const goalControlsHTML = () => `<div class="wheels">${GOAL_WHEELS.map(([key, name, unit, list]) => {

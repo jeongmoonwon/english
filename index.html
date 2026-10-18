@@ -109,6 +109,9 @@ img { max-width: 100%; }
 #settings-main .field + .field { margin-top: 0; }
 .version a { color: inherit; }
 /* 복습 글자 크기 (설정) */
+:root[data-size="small"] .face-text { font-size: 21px; }
+:root[data-size="small"] .prompt-text { font-size: 19px; }
+:root[data-size="small"] .face-text.serif { font-size: 23px; }
 :root[data-size="large"] :is(.prompt-text, .face-text) { font-size: 28px; }
 :root[data-size="large"] .face-text.serif { font-size: 31px; }
 :root[data-size="xlarge"] :is(.prompt-text, .face-text) { font-size: 32px; }
@@ -143,6 +146,7 @@ img { max-width: 100%; }
 .speak-row { display: flex; justify-content: center; margin-top: 12px; }
 .prompt .speak-row { justify-content: flex-start; }
 .seg.three { grid-template-columns: repeat(3, 1fr); }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
 .field label.sub { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: -4px; }
 .seg-btn.small { font-size: 15px; padding: 10px 6px; }
 .size-sample { margin: 0; text-align: center; font-family: var(--serif); }
@@ -686,7 +690,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v59';
+const APP_VERSION = 'v60';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2553,10 +2557,10 @@ async function syncNow({ quiet = true, announce = false } = {}) {
   }
 }
 
-const segHTML = (key, options) => `<div class="seg ${options.length === 3 ? 'three' : ''}">${options.map(([value, label]) =>
+const segHTML = (key, options) => `<div class="seg ${options.length === 3 ? 'three' : options.length === 4 ? 'four' : ''}">${options.map(([value, label]) =>
   `<button class="seg-btn small" data-act="pref" data-key="${key}" data-value="${value}" aria-pressed="${String(prefs[key]) === String(value)}">${label}</button>`).join('')}</div>`;
 const THEME_NAMES = { system: '기기 설정 따라', light: '항상 밝게', dark: '항상 어둡게' };
-const SIZE_NAMES = { normal: '보통', large: '크게', xlarge: '아주 크게' };
+const SIZE_NAMES = { small: '작게', normal: '보통', large: '크게', xlarge: '아주 크게' };
 const RATE_NAMES = { 0.7: '느리게', 0.9: '보통', 1.1: '빠르게' };
 const SAMPLE = { en: "Let's call it a day.", ja: '今日はここまでにしよう。', zh: '今天就到这里吧。', es: 'Lo dejamos aquí por hoy.', fr: "On s'arrête là pour aujourd'hui.", de: 'Machen wir für heute Schluss.', it: 'Per oggi basta così.', pt: 'Vamos parar por hoje.', ru: 'На сегодня хватит.', vi: 'Hôm nay đến đây thôi.', th: 'วันนี้พอแค่นี้', ko: '오늘은 여기까지 하자.' };
 const sampleOf = (m = prefs.mode) => SAMPLE[modeParts(m).target] || SAMPLE.en;
@@ -2659,7 +2663,7 @@ function renderSettingsPage(page) {
   } else if (page === 'text') {
     box.innerHTML = `<div class="field">
       <label class="sub">복습 카드 글자 크기</label>
-      ${segHTML('size', [['normal', '보통'], ['large', '크게'], ['xlarge', '아주 크게']])}
+      ${segHTML('size', [['small', '작게'], ['normal', '보통'], ['large', '크게'], ['xlarge', '아주 크게']])}
       <p class="prompt-text size-sample">오늘은 여기까지 하자</p>
     </div>
     <div class="field">

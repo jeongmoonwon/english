@@ -313,6 +313,12 @@ select.select {
 .row-eng { font-family: var(--serif); color: var(--muted); }
 .row-meta { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .row-meta .due-now { color: var(--accent); font-weight: 600; }
+/* 카드 목록: 한 단계 작게 */
+#cards-main .row { padding: 11px 14px; gap: 10px; }
+#cards-main .row-kor { font-size: 15px; }
+#cards-main .row-eng { font-size: 14px; }
+#cards-main .row-meta { font-size: 11px; gap: 10px; }
+#cards-main .thumb { width: 46px; height: 46px; }
 
 /* ---------- 전체화면 시트 (편집, 연습, 백업) ---------- */
 .sheet {
@@ -860,7 +866,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

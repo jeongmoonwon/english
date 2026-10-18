@@ -413,16 +413,17 @@ textarea.eng { font-family: var(--serif); }
 .day.ring-day.today { box-shadow: none; background: color-mix(in srgb, var(--soft) 70%, transparent); }
 .day.ring-day .rings-blank { width: 34px; height: 34px; }
 /* 구슬 키우기 */
-.orb-card { display: flex; align-items: center; gap: 14px; padding: 14px 18px; margin: 4px 0 12px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
-.orb-card .orb-svg { width: 104px; height: 104px; flex: none; overflow: visible; animation: bob 3s ease-in-out infinite; }
-.orb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.orb-card { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; margin: 4px 0 10px; border-radius: 24px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
+.orb-card .orb-svg { width: 58px; height: 58px; flex: none; overflow: visible; animation: bob 3s ease-in-out infinite; }
+.orb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.orb-head { display: flex; align-items: baseline; gap: 6px; }
 .orb-text small { font-size: 12px; font-weight: 800; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
-.orb-text > b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
-.orb-text span { font-size: 12px; color: var(--muted); }
+.orb-text .orb-head b { font-size: 15px; font-weight: 800; letter-spacing: -0.02em; }
+.orb-text span { font-size: 11px; color: var(--muted); }
 .orb-text span b { color: var(--ink); }
 .orb-warn { color: var(--again) !important; font-weight: 600; }
 .orb-warn.soft { color: var(--hard) !important; }
-.orb-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 15%, transparent); overflow: hidden; }
+.orb-bar { height: 6px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 15%, transparent); overflow: hidden; }
 .orb-bar i { display: block; height: 100%; border-radius: 4px; background: var(--g2, var(--accent)); }
 .orb-party { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgba(20, 16, 40, .45); animation: fade .25s ease-out; }
 .orb-party-card { width: min(340px, 100%); padding: 26px 22px 20px; border-radius: 30px; background: var(--surface); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 0 20px 60px rgba(30, 20, 60, .3); animation: party-pop .5s cubic-bezier(.3, 1.6, .5, 1); }
@@ -933,7 +934,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3572,8 +3573,7 @@ function orbCardHTML(days, today) {
   return `<section class="orb-card">
     ${orbSVG(lv, sleepy)}
     <div class="orb-text">
-      <small>Lv.${lv}${sleepy ? ' · 쿨쿨 자는 중' : ''}</small>
-      <b>${name}</b>
+      <div class="orb-head"><small>Lv.${lv}</small><b>${name}</b>${sleepy ? '<small>· 쿨쿨</small>' : ''}</div>
       <div class="orb-bar"><i style="width:${pct}%"></i></div>
       <span>${next ? `다음 단계 <b>${next[1]}</b>까지 ${(next[0] - pts).toLocaleString()}점` : '가장 높은 단계예요! ✨'}</span>
       ${idle > ORB_REST_DAYS ? `<span class="orb-warn">${idle}일째 못 만났어요.${idle > ORB_REST_DAYS + 1 ? ` 지금까지 ${((idle - ORB_REST_DAYS - 1) * ORB_DECAY).toLocaleString()}점 줄었어요.` : ''} 오늘도 쉬면 ${ORB_DECAY}점 줄어요.</span>`

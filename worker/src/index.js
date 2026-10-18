@@ -482,6 +482,8 @@ async function handleCalendarEvents(request, env, reply, user) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) { console.error('calendar list failed', res.status, (await res.text().catch(() => '')).slice(0, 300)); return reply(502, { error: 'upstream' }); }
   const data = await res.json();
+  // 원인 확인용: 기간과 개수만 남김 (일정 내용은 남기지 않음)
+  console.log('calendar events', JSON.stringify({ from: from.toISOString(), to: to.toISOString(), items: (data.items || []).length, untitled: (data.items || []).filter((e) => !e.summary).length, cancelled: (data.items || []).filter((e) => e.status === 'cancelled').length }));
   // 제목과 시각만 앱에 줌 (설명·장소·참석자는 받지도 않음)
   const events = (data.items || []).filter((e) => e.status !== 'cancelled' && e.summary).map((e) => ({
     title: clean(e.summary, 80),

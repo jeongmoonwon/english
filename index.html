@@ -502,6 +502,17 @@ textarea.eng { font-family: var(--serif); }
 .ring-rows b { font-variant-numeric: tabular-nums; font-size: 17px; }
 .ring-rows b small { font-size: 13px; color: var(--muted); font-weight: 500; }
 .ring-msg { margin: 0; }
+.wheels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.wheel-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.wheel-name { font-size: 12px; font-weight: 700; color: var(--muted); }
+.wheel-wrap { position: relative; width: 100%; }
+.wheel-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 72px; height: 36px; border-radius: 12px; background: var(--soft); pointer-events: none; }
+.wheel { position: relative; list-style: none; margin: 0; padding: 72px 0; height: 180px; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); }
+.wheel::-webkit-scrollbar { display: none; }
+.wheel li { height: 36px; display: flex; align-items: center; justify-content: center; gap: 2px; scroll-snap-align: center; font-size: 17px; font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer; transition: color .15s, transform .15s; }
+.wheel li small { font-size: 12px; }
+.wheel li.on { color: var(--ink); font-weight: 800; transform: scale(1.08); }
 .goal-edit { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
 .legend .ring-key { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
 .legend .ring-key i { width: 8px; height: 8px; border-radius: 50%; }
@@ -955,7 +966,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v95';
+const APP_VERSION = 'v96';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3048,13 +3059,38 @@ const ICON_PATHS = {
   pen: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>',
 };
 const icon = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
-/** 하루 목표 고르기 (설정과 기록 탭에서 같이 씀) */
-const goalControlsHTML = () => `<label class="sub">복습 (복습 + 자유 연습으로 푼 카드)</label>
-  ${segHTML('goalReview', [[10, '10장'], [20, '20장'], [30, '30장'], [50, '50장']])}
-  <label class="sub">카드 추가</label>
-  ${segHTML('goalAdd', [[1, '1개'], [3, '3개'], [5, '5개'], [10, '10개']])}
-  <label class="sub">대화 시간</label>
-  ${segHTML('goalTalk', [[3, '3분'], [5, '5분'], [10, '10분'], [15, '15분']])}`;
+/** 하루 목표 고르기 (설정과 기록 탭에서 같이 씀): 위아래로 돌려서 고르는 휠 세 개 */
+const range = (from, to, step) => Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step);
+const GOAL_WHEELS = [
+  ['goalReview', '복습', '장', () => range(5, 200, 5)],
+  ['goalAdd', '카드 추가', '개', () => range(1, 30, 1)],
+  ['goalTalk', '대화', '분', () => range(5, TALK_DAY_MIN, 5)],   // 하루 대화 한도까지
+];
+const WHEEL_ROW = 36;
+/** 지금 값에 가장 가까운 칸 번호 */
+const wheelIndex = (list, v) => list.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(list[best] - v) ? i : best), 0);
+const goalControlsHTML = () => `<div class="wheels">${GOAL_WHEELS.map(([key, name, unit, list]) => {
+  const vals = list();
+  const on = wheelIndex(vals, prefs[key]);
+  return `<div class="wheel-col"><span class="wheel-name">${name}</span>
+    <div class="wheel-wrap"><ul class="wheel" data-key="${key}" data-index="${on}" tabindex="0" aria-label="${name} 목표">${vals.map((v, i) => `<li data-v="${v}" class="${i === on ? 'on' : ''}">${v}<small>${unit}</small></li>`).join('')}</ul></div></div>`;
+}).join('')}</div>`;
+/** 휠을 지금 값 위치로 (다시 그린 뒤 부름) */
+function initWheels() {
+  document.querySelectorAll('.wheel').forEach((w) => { w.scrollTop = Number(w.dataset.index) * WHEEL_ROW; });
+}
+/** 휠이 멈추면 그 값으로 목표를 바꿈 */
+function commitWheel(w) {
+  const items = w.querySelectorAll('li');
+  const i = Math.max(0, Math.min(items.length - 1, Math.round(w.scrollTop / WHEEL_ROW)));
+  const v = Number(items[i].dataset.v);
+  if (prefs[w.dataset.key] === v) return;
+  setPref(w.dataset.key, v);
+  renderStats();
+  renderReview();
+  if (ui.tab === 'settings' && ui.settingsPage === 'goal') renderSettingsPage('goal');
+  initWheels();
+}
 const SETTINGS = [
   ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
   ['usage', icon('gauge'), '오늘 AI 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
@@ -3179,6 +3215,7 @@ function renderSettingsPage(page) {
       <p class="sync-line">기록 탭 달력에 날마다 세 개의 링으로 보여요. 목표를 채우면 링이 한 바퀴 꽉 차요. 바꾸면 오늘부터 적용돼요.</p>
       ${goalControlsHTML()}
     </div>`;
+    initWheels();
   } else if (page === 'talk') {
     box.innerHTML = `<div class="field">
       <label class="sub">대화 상대 목소리</label>
@@ -3780,6 +3817,7 @@ function renderStats() {
       </div>
     </section>
     ${detail}`;
+  initWheels();
 }
 
 // ================= 화면 전환 =================
@@ -4059,6 +4097,23 @@ document.addEventListener('keydown', (ev) => {
 });
 
 // 오늘의 대화 카드를 옆으로 넘기면 아래 점도 따라감
+// 목표 휠: 돌리는 동안 가운데 값을 진하게, 멈추면 저장
+const wheelTimers = new WeakMap();
+document.addEventListener('scroll', (ev) => {
+  const w = ev.target;
+  if (!w.classList?.contains('wheel')) return;
+  const i = Math.round(w.scrollTop / WHEEL_ROW);
+  w.querySelectorAll('li').forEach((li, k) => li.classList.toggle('on', k === i));
+  clearTimeout(wheelTimers.get(w));
+  wheelTimers.set(w, setTimeout(() => commitWheel(w), 180));
+}, true);
+// 휠 칸을 눌러도 그 값으로
+document.addEventListener('click', (ev) => {
+  const li = ev.target.closest?.('.wheel li');
+  if (!li) return;
+  const w = li.parentElement;
+  w.scrollTo({ top: [...w.children].indexOf(li) * WHEEL_ROW, behavior: 'smooth' });
+});
 document.addEventListener('scroll', (ev) => {
   const box = ev.target;
   if (!box.classList?.contains('talk-swipe')) return;

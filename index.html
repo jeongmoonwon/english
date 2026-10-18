@@ -373,7 +373,8 @@ textarea.eng { font-family: var(--serif); }
 .talk-said.plain { text-decoration: none; }
 .talk-group { margin: 14px 0 8px; font-size: 15px; font-weight: 700; }
 .row-meta .from-talk { color: var(--accent); }
-.day .talk-mark { position: absolute; top: 1px; right: 2px; font-size: 9px; line-height: 1; }
+.day .talk-mark { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: linear-gradient(120deg, #7E9DFF, #A888F5 55%, #F09BC8); }
+.legend .talk-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: linear-gradient(120deg, #7E9DFF, #A888F5 55%, #F09BC8); }
 .missing { color: var(--muted); font-size: 15px; }
 .found-item { flex-direction: row; align-items: flex-start; gap: 10px; }
 .found-item .check {
@@ -680,7 +681,7 @@ textarea::placeholder { font-family: var(--sans); }
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="g-stroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7E9DFF"/><stop offset=".55" stop-color="#A888F5"/><stop offset="1" stop-color="#F09BC8"/></linearGradient></defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="g-stroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7E9DFF"/><stop offset=".55" stop-color="#A888F5"/><stop offset="1" stop-color="#F09BC8"/></linearGradient><linearGradient id="m-body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A7BEFF"/><stop offset=".45" stop-color="#C5AEFA"/><stop offset=".8" stop-color="#FAB9DB"/><stop offset="1" stop-color="#FFD0BD"/></linearGradient><radialGradient id="m-hi" cx=".32" cy=".28" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs></svg>
 <div class="app">
   <!-- 복습 -->
   <section class="view" id="view-review">
@@ -798,7 +799,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1416,7 +1417,7 @@ async function gradeCard(rating) {
   ui.reviewShow = false;
   renderReview();
   $('#review-main').scrollTop = 0;
-  if (!ui.reviewStarted) toast(`지금 복습할 카드를 다 끝냈어요! ${ui.sessionDone}장 복습했어요 🍑`);
+  if (!ui.reviewStarted) toast(`지금 복습할 카드를 다 끝냈어요! ${ui.sessionDone}장 복습했어요 ✨`);
 }
 
 // ================= 자유 연습 =================
@@ -1519,7 +1520,7 @@ function rowHTML(c, now, showCat) {
     <span class="row-text">
       <span class="row-kor">${sideLabel(c.korText, c.korImages)}</span>
       <span class="row-eng">${sideLabel(c.engText, c.engImages)}</span>
-      <span class="row-meta">${c.source === 'talk' ? '<span class="from-talk">🍑 대화에서</span>' : ''}${showCat ? `<span>${esc(catOf(c))}</span>` : ''}${status}<span>연습 ${c.practiceScore}점</span></span>
+      <span class="row-meta">${c.source === 'talk' ? '<span class="from-talk">💬 대화에서</span>' : ''}${showCat ? `<span>${esc(catOf(c))}</span>` : ''}${status}<span>연습 ${c.practiceScore}점</span></span>
     </span>
   </button></li>`;
 }
@@ -1765,20 +1766,16 @@ function setScanStage(e, stage) {
   e.scanStage = stage;
   if (editor === e) renderEditor();
 }
-// 웃는 복숭아 캐릭터 (빈 화면, 사진 읽는 중)
+// 말랑 구슬 캐릭터 (빈 화면, 기다리는 중, 대화). 색은 맨 위 svg의 #m-body, #m-hi (여러 번 그려도 한 벌만 정의)
 const MASCOT = `<svg class="mascot" viewBox="0 0 120 116" aria-hidden="true">
-  <ellipse cx="60" cy="110" rx="34" ry="5" fill="#3D2B26" opacity=".08"/>
-  <path d="M60 26 C38 12 8 28 10 62 C12 92 38 106 60 106 C82 106 108 92 110 62 C112 28 82 12 60 26 Z" fill="#FFB49A"/>
-  <path d="M60 26 C82 12 112 28 110 62 C109 80 99 93 86 100 C98 86 102 70 100 56 C97 38 80 26 60 26 Z" fill="#FF8F70" opacity=".55"/>
-  <ellipse cx="34" cy="46" rx="10" ry="6" fill="#fff" opacity=".55" transform="rotate(-30 34 46)"/>
-  <path d="M60 27 C55 36 55 46 58 54" fill="none" stroke="#F0795A" stroke-width="3" stroke-linecap="round" opacity=".6"/>
-  <path d="M60 26 C59 19 56 14 52 10" fill="none" stroke="#8A5A44" stroke-width="3.5" stroke-linecap="round"/>
-  <path d="M58 20 C62 8 76 2 90 6 C84 18 72 24 58 20 Z" fill="#7CCB8F"/>
-  <path d="M62 18 C70 13 78 10 86 8" fill="none" stroke="#5AAE70" stroke-width="2" stroke-linecap="round"/>
-  <ellipse cx="45" cy="66" rx="5.5" ry="7" fill="#3D2B26"/><ellipse cx="75" cy="66" rx="5.5" ry="7" fill="#3D2B26"/>
-  <circle cx="47" cy="63" r="2.2" fill="#fff"/><circle cx="77" cy="63" r="2.2" fill="#fff"/>
-  <ellipse cx="33" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/><ellipse cx="87" cy="78" rx="8" ry="5" fill="#FF6F8E" opacity=".45"/>
-  <path d="M54 77 q6 7 12 0" fill="none" stroke="#3D2B26" stroke-width="3.5" stroke-linecap="round"/>
+  <ellipse cx="60" cy="110" rx="32" ry="5" fill="#2B2A4C" opacity=".07"/>
+  <path d="M60 14C88 14 108 34 108 62S88 106 60 106 12 90 12 62 32 14 60 14Z" fill="url(#m-body)"/>
+  <path d="M60 14C88 14 108 34 108 62S88 106 60 106 12 90 12 62 32 14 60 14Z" fill="url(#m-hi)"/>
+  <path d="M88 20l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#fff" opacity=".9"/>
+  <ellipse cx="45" cy="64" rx="5" ry="6.3" fill="#2B2A4C"/><ellipse cx="75" cy="64" rx="5" ry="6.3" fill="#2B2A4C"/>
+  <circle cx="46.8" cy="61.4" r="1.8" fill="#fff"/><circle cx="76.8" cy="61.4" r="1.8" fill="#fff"/>
+  <ellipse cx="34" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/><ellipse cx="86" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/>
+  <path d="M55 74q5 6 10 0" fill="none" stroke="#2B2A4C" stroke-width="3" stroke-linecap="round"/>
 </svg>`;
 // ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(Whisper + Claude) ----------
 const VOICE_MAX_SEC = 30;
@@ -2796,7 +2793,7 @@ function renderSettingsPage(page) {
     </div>
     <div class="field">
       <label class="sub">글씨체</label>
-      <div class="font-list">${FONTS.map(([f, label]) => `<button class="font-opt" data-act="pref" data-key="font" data-value="${f}" aria-pressed="${prefs.font === f}" style="font-family:'${f}'">${label}<small>오늘도 한 문장씩 🍑</small></button>`).join('')}</div>
+      <div class="font-list">${FONTS.map(([f, label]) => `<button class="font-opt" data-act="pref" data-key="font" data-value="${f}" aria-pressed="${prefs.font === f}" style="font-family:'${f}'">${label}<small>오늘도 한 문장씩 ✨</small></button>`).join('')}</div>
       <label class="sub">외국어 표현 글씨체</label>
       ${segHTML('engFont', [['serif', '명조 (또렷하게)'], ['same', '위와 같은 글씨체']])}
       <p class="size-sample eng-sample">Let's call it a day.</p>
@@ -2971,7 +2968,7 @@ function renderUsage() {
       <p class="sync-line">오늘 <b>${u.used}${unit}</b> 썼어요 · <b>${u.remaining}${unit}</b> 남았어요</p>
       <div class="usage-meter" role="img" aria-label="${u.limit}${unit} 중 ${u.used}${unit} 사용"><i style="width:${Math.min(100, (u.used / u.limit) * 100)}%"></i></div>
       <p class="sync-line">하루 ${u.limit}${unit}까지</p></div>`;
-    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('🍑 대화', usageState.talk, '번') : '')
+    body = meter('📷 사진', usageState, '장') + (usageState.voice ? meter('🎙 말하기', usageState.voice, '번') : '') + (usageState.ask ? meter('✏️ 글로 물어보기', usageState.ask, '번') : '') + (usageState.talk ? meter('💬 대화', usageState.talk, '번') : '')
       + '<p class="sync-line center-note">매일 자정(한국 시간)에 다시 채워져요.</p>';
     box.innerHTML = body;
     return;
@@ -3181,7 +3178,7 @@ function renderStats() {
     const label = `${m + 1}월 ${d}일, ${solved ? `${solved}장 풀었어요` : '공부 기록 없음'}${info?.add ? `, 새 표현 ${info.add}개` : ''}${info?.talk ? `, 대화 ${info.talk}번` : ''}`;
     cells += `<button class="day${solved ? ` l${levelOf(solved)}` : ''}${k === todayKey ? ' today' : ''}${future ? ' future' : ''}"
       data-act="cal-day" data-day="${k}" aria-pressed="${k === selected}" aria-label="${label}" ${future ? 'disabled' : ''}>
-      ${d}${!solved && info?.add ? '<span class="add-dot"></span>' : ''}${info?.talk ? '<span class="talk-mark" aria-hidden="true">🍑</span>' : ''}
+      ${d}${!solved && info?.add ? '<span class="add-dot"></span>' : ''}${info?.talk ? '<span class="talk-mark" aria-hidden="true"></span>' : ''}
     </button>`;
   }
 
@@ -3198,7 +3195,7 @@ function renderStats() {
             <li><span>복습</span><b>${info.review}장</b></li>
             <li><span>자유 연습</span><b>${info.practice}장</b></li>
             <li><span>새 표현</span><b>${info.add}개</b></li>
-            <li><span>🍑 대화</span><b>${info.talk}번</b></li>
+            <li><span>💬 대화</span><b>${info.talk}번</b></li>
           </ul>`
         : '<p class="sync-line">공부 기록이 없어요.</p>'}
     </section>`;
@@ -3222,7 +3219,7 @@ function renderStats() {
       <div class="cal-grid">${cells}</div>
       <div class="legend" aria-hidden="true">
         적음 <i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> 많음
-        <span class="gap"></span><i class="dot"></i> 표현만 추가 <span class="gap"></span>🍑 대화
+        <span class="gap"></span><i class="dot"></i> 표현만 추가 <span class="gap"></span><i class="talk-dot"></i> 대화
       </div>
     </section>
     ${detail}`;

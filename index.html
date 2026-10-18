@@ -656,7 +656,9 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
 :root[data-skin="pastel"] .face { border-radius: 30px; }
 :root[data-skin="pastel"] .face-tag { background: none; padding: 0; color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; font-size: 14px; top: 18px; left: 22px; }
 /* 큰 제목 */
-:root[data-skin="pastel"] .topbar h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+:root[data-skin="pastel"] .topbar h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.025em; }
+/* 탭마다 제목 줄 높이를 같게 (오른쪽 버튼 크기가 달라도) */
+:root[data-skin="pastel"] .topbar { min-height: calc(env(safe-area-inset-top, 0px) + 62px); }
 :root[data-skin="pastel"] :is(.setup-title, .empty h2) { font-weight: 800; letter-spacing: -0.03em; }
 /* 버튼 */
 :root[data-skin="pastel"] .btn { border-radius: 16px; font-weight: 700; }
@@ -854,7 +856,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

@@ -450,6 +450,8 @@ textarea.eng { font-family: var(--serif); }
 .talk-card h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .talk-card .btn { margin-top: 2px; }
+/* 홈 아래 '복습 시작' 폭 = 오늘의 대화 카드 안 버튼 폭 (화면 여백 20 + 카드 안 여백 18) */
+#review-actions.home { padding-left: 38px; padding-right: 38px; }
 /* 홈의 큰 버튼들은 높이를 같게 (오늘의 대화 · 아래 복습 시작) */
 :root[data-skin="pastel"] .talk-card .btn.wide { min-height: 54px; border-radius: 999px; }
 .talk-tag { font-size: 12px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
@@ -951,7 +953,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v88';
+const APP_VERSION = 'v90';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1517,6 +1519,7 @@ function renderReview() {
   }
 
   $('#review-title').textContent = ui.reviewStarted ? '복습' : '오늘';
+  $('#review-actions').classList.remove('home');
   // 복습 시작을 누른 뒤: 방향·카테고리를 고르고 시작
   if (!ui.reviewStarted && ui.reviewSetup) {
     ui.reviewShow = false; ui.reviewCardId = null;
@@ -1572,6 +1575,7 @@ function renderReview() {
       </div>`;
     bar.hidden = false;
     checkOrbLevelUp(days);
+    bar.classList.add('home');   // 아래 버튼 폭을 오늘의 대화 카드 안 버튼과 같게
     bar.innerHTML = allDue.length
       ? `<button class="btn primary wide" data-act="review-setup">복습 시작 · ${due.length || allDue.length}장</button>`
       : `<button class="btn primary wide" data-act="talk-go">${josa(botName(), '이랑', '랑')} 대화하기</button>`;
@@ -3044,7 +3048,7 @@ const ICON_PATHS = {
 const icon = (name, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 const SETTINGS = [
   ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', icon('gauge'), '오늘 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
+  ['usage', icon('gauge'), '오늘 AI 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
   ['lang', icon('globe'), '언어 모드', () => modeLabel()],
   ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
@@ -3501,6 +3505,8 @@ function dailyActivity() {
   return days;
 }
 const solvedOf = (d) => (d ? d.review + d.practice : 0);
+/** 그날 대화한 분 (30초 이상이면 1분으로 반올림) */
+const talkMin = (d) => Math.round((d?.talkSec ?? 0) / 60);
 
 // ---------- 구슬 키우기: 쌓인 공부 점수로 구슬이 10단계까지 자라요 ----------
 // 점수: 복습·자유 연습 1장 1점, 표현 추가 3점, 대화 1분 5점, 그날 링 3개를 모두 채우면 +20점
@@ -3520,7 +3526,7 @@ function orbScore(days = dailyActivity()) {
     const info = days.get(dayKey(d));
     if (studiedOn(info)) {
       idle = 0;
-      pts += solvedOf(info) + info.add * 3 + Math.floor((info.talkSec || 0) / 60) * 5 + (ringsDone(info) === 3 ? 20 : 0);
+      pts += solvedOf(info) + info.add * 3 + talkMin(info) * 5 + (ringsDone(info) === 3 ? 20 : 0);
     } else {
       idle += 1;
       // 오늘은 아직 하루가 안 끝났으니 빼지 않음
@@ -3645,7 +3651,7 @@ function checkOrbLevelUp(days) {
 const RINGS = [
   { key: 'review', name: '복습', unit: '장', c1: '#7E9DFF', c2: '#A888F5', value: (d) => solvedOf(d), goal: (d) => goalsOn(d?.day).review },
   { key: 'add', name: '카드 추가', unit: '개', c1: '#C59BF5', c2: '#F498C6', value: (d) => d?.add ?? 0, goal: (d) => goalsOn(d?.day).add },
-  { key: 'talk', name: '대화', unit: '분', c1: '#F7A6C4', c2: '#FFB898', value: (d) => Math.floor((d?.talkSec ?? 0) / 60), goal: (d) => goalsOn(d?.day).talk },
+  { key: 'talk', name: '대화', unit: '분', c1: '#F7A6C4', c2: '#FFB898', value: (d) => talkMin(d), goal: (d) => goalsOn(d?.day).talk },
 ];
 let ringSeq = 0;
 /** 세 겹 링 (바깥부터 복습·추가·대화). size: 지름(px). 목표를 넘으면 한 바퀴로 꽉 참 */
@@ -3744,8 +3750,8 @@ function renderStats() {
         <ul class="ring-rows">${RINGS.map((r) => `<li><i style="background:linear-gradient(120deg, ${r.c1}, ${r.c2})"></i><span>${r.name}</span><b>${r.value(info)}<small> / ${r.goal(info)}${r.unit}</small></b></li>`).join('')}</ul>
       </div>
       <p class="sync-line ring-msg">${done === 3 ? '세 링을 모두 채웠어요! ✨' : done ? `${done}개 채웠어요. ${3 - done}개 남았어요.` : selected === todayKey ? '오늘의 링을 채워 볼까요?' : '이날은 기록이 없어요.'}</p>
-      ${info && (info.practice || info.talk) ? `<p class="sync-line">${info.practice ? `복습 ${info.review}장 · 자유 연습 ${info.practice}장` : ''}${info.practice && info.talk ? ' · ' : ''}${info.talk ? `대화 ${info.talk}번` : ''}</p>` : ''}
-      <button class="btn wide" data-act="goal-open">목표 바꾸기</button>
+      ${info?.practice ? `<p class="sync-line">복습 ${info.review}장 · 자유 연습 ${info.practice}장</p>` : ''}
+      ${selected === todayKey ? '<button class="btn wide" data-act="goal-open">목표 바꾸기</button>' : ''}
     </section>`;
   }
 

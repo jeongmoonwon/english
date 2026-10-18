@@ -442,6 +442,8 @@ textarea.eng { font-family: var(--serif); }
 .talk-card h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .talk-card .btn { margin-top: 2px; }
+/* 홈의 큰 버튼들은 높이를 같게 (오늘의 대화 · 아래 복습 시작) */
+:root[data-skin="pastel"] .talk-card .btn.wide { min-height: 54px; border-radius: 999px; }
 .talk-tag { font-size: 12px; font-weight: 700; color: transparent; background-image: var(--gtext, linear-gradient(var(--accent), var(--accent))); -webkit-background-clip: text; background-clip: text; }
 .talk-hero.small { padding-top: 0; }
 .talk-hero.small .mascot { width: 84px; height: 82px; }
@@ -847,7 +849,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
     <header class="topbar">
       <h1 id="cards-title">표현</h1>
       <button class="mode-pill" data-act="mode-sheet" aria-label="언어 모드 바꾸기"></button>
-      <button class="pill solid" data-act="add" aria-label="표현 추가">추가</button>
+      <button class="pill solid" data-act="add" aria-label="카드 추가">추가</button>
     </header>
     <div class="filters" id="cards-filters" hidden></div>
     <main class="scroll" id="cards-main"></main>
@@ -934,7 +936,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v86';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1493,7 +1495,7 @@ function renderReview() {
     main.innerHTML = `<div class="empty">${MASCOT}
       <h2>아직 표현이 없어요</h2>
       <p>카드 탭에서 유튜브에서 본 표현을 추가해 보세요.</p>
-      <button class="btn primary" data-act="add">표현 추가하기</button>
+      <button class="btn primary" data-act="add">카드 추가하기</button>
     </div>`;
     bar.hidden = true; bar.innerHTML = '';
     return;
@@ -1550,7 +1552,7 @@ function renderReview() {
       </section>
       ${talkCardsHTML('home')}
       <div class="today-mini">
-        <button class="btn" data-act="add">${icon('pen')} 표현 추가</button>
+        <button class="btn" data-act="add">${icon('pen')} 카드 추가</button>
         <button class="btn" data-act="practice">${icon('type')} 자유 연습</button>
       </div>`;
     bar.hidden = false;
@@ -1721,7 +1723,7 @@ function renderCards() {
     main.innerHTML = `<div class="empty">${MASCOT}
       <h2>${cards.length ? `${targetLang().name} 표현이 아직 없어요` : '아직 표현이 없어요'}</h2>
       <p>유튜브에서 본 표현을 캡처해서 추가해 보세요.</p>
-      <button class="btn primary" data-act="add">표현 추가하기</button>
+      <button class="btn primary" data-act="add">카드 추가하기</button>
     </div>`;
     return;
   }
@@ -3032,7 +3034,7 @@ const SETTINGS = [
   ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
   ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
   ['sound', icon('volume'), '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
-  ['goal', icon('target'), '하루 목표', () => `복습 ${prefs.goalReview}장 · 표현 ${prefs.goalAdd}개 · 대화 ${prefs.goalTalk}분`],
+  ['goal', icon('target'), '하루 목표', () => `복습 ${prefs.goalReview}장 · 카드 ${prefs.goalAdd}개 · 대화 ${prefs.goalTalk}분`],
   ['talk', icon('chat'), '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}${prefs.calendar ? ' · 캘린더 연결됨' : ''}`],
   ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원'],
   ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의'],
@@ -3149,7 +3151,7 @@ function renderSettingsPage(page) {
       <p class="sync-line">기록 탭 달력에 날마다 세 개의 링으로 보여요. 목표를 채우면 링이 한 바퀴 꽉 차요.</p>
       <label class="sub">복습 (복습 + 자유 연습으로 푼 카드)</label>
       ${segHTML('goalReview', [[10, '10장'], [20, '20장'], [30, '30장'], [50, '50장']])}
-      <label class="sub">표현 추가</label>
+      <label class="sub">카드 추가</label>
       ${segHTML('goalAdd', [[1, '1개'], [3, '3개'], [5, '5개'], [10, '10개']])}
       <label class="sub">대화 시간</label>
       ${segHTML('goalTalk', [[3, '3분'], [5, '5분'], [10, '10분'], [15, '15분']])}
@@ -3625,7 +3627,7 @@ function checkOrbLevelUp(days) {
 // ---------- 하루 목표 링: 복습(푼 카드), 추가(새 표현), 대화(분) ----------
 const RINGS = [
   { key: 'review', name: '복습', unit: '장', c1: '#7E9DFF', c2: '#A888F5', value: (d) => solvedOf(d), goal: (d) => goalsOn(d?.day).review },
-  { key: 'add', name: '표현 추가', unit: '개', c1: '#C59BF5', c2: '#F498C6', value: (d) => d?.add ?? 0, goal: (d) => goalsOn(d?.day).add },
+  { key: 'add', name: '카드 추가', unit: '개', c1: '#C59BF5', c2: '#F498C6', value: (d) => d?.add ?? 0, goal: (d) => goalsOn(d?.day).add },
   { key: 'talk', name: '대화', unit: '분', c1: '#F7A6C4', c2: '#FFB898', value: (d) => Math.floor((d?.talkSec ?? 0) / 60), goal: (d) => goalsOn(d?.day).talk },
 ];
 let ringSeq = 0;

@@ -572,6 +572,8 @@ textarea::placeholder { font-family: var(--sans); }
   --g2: linear-gradient(120deg, #A7BEFF, #C5AEFA 55%, #FAB9DB);
   --gtext: linear-gradient(120deg, #6B8CF5, #9C7AEE 55%, #E886B8);
   --on-g: #2B2A4C;            /* 그라데이션 위 글자 */
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 55%);   /* 그라데이션 버튼 윗부분 빛 반사 */
+  --sheen-edge: 0 1px 0 rgba(255, 255, 255, .7) inset;
   --glass: rgba(255, 255, 255, .74);
   --glow1: rgba(197, 174, 250, .32); --glow2: rgba(167, 190, 255, .26); --glow3: rgba(250, 185, 219, .22);
 }
@@ -622,8 +624,8 @@ textarea::placeholder { font-family: var(--sans); }
 /* 버튼 */
 :root[data-skin="pastel"] .btn { border-radius: 16px; font-weight: 700; }
 :root[data-skin="pastel"] :is(.btn.primary, .pill.solid) {
-  background: var(--g2); color: var(--on-g); border-radius: 999px;
-  box-shadow: 0 10px 24px rgba(197, 174, 250, .35);
+  background: var(--sheen), var(--g2); color: var(--on-g); border-radius: 999px;
+  box-shadow: var(--sheen-edge), 0 8px 20px rgba(195, 170, 255, .4);
 }
 :root[data-skin="pastel"] .actions .btn.wide { min-height: 54px; border-radius: 999px; }
 :root[data-skin="pastel"] .actions { background: transparent; border-top: 0; }
@@ -631,15 +633,15 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] .mode-pill { background: var(--glass); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
 /* 칩·선택 */
 :root[data-skin="pastel"] .cat { background: var(--glass); border-color: transparent; box-shadow: 0 0 0 .5px var(--line) inset; }
-:root[data-skin="pastel"] .cat[aria-pressed="true"] { background: var(--g2); color: var(--on-g); box-shadow: none; }
+:root[data-skin="pastel"] .cat[aria-pressed="true"] { background: var(--sheen), var(--g2); color: var(--on-g); border-color: transparent; box-shadow: var(--sheen-edge), 0 4px 12px rgba(195, 170, 255, .35); }
 :root[data-skin="pastel"] .seg-btn { background: var(--glass); border-color: transparent; border-radius: 16px; box-shadow: 0 0 0 .5px var(--line) inset; }
-:root[data-skin="pastel"] .seg-btn[aria-pressed="true"] { background: var(--g2); color: var(--on-g); box-shadow: none; }
+:root[data-skin="pastel"] .seg-btn[aria-pressed="true"] { background: var(--sheen), var(--g2); color: var(--on-g); border-color: transparent; box-shadow: var(--sheen-edge), 0 6px 16px rgba(195, 170, 255, .35); }
 :root[data-skin="pastel"] .seg-btn[aria-pressed="true"] small { color: var(--on-g); opacity: .75; }
 :root[data-skin="pastel"] :is(textarea, input.text) { border-radius: 14px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
 /* 평가 버튼: 흰 바탕 + 색 글자, '알맞음'만 그라데이션 */
 :root[data-skin="pastel"] .grade { background: var(--glass); border-radius: 14px; padding: 10px 4px; box-shadow: 0 2px 10px rgba(30, 20, 60, .05); }
 :root[data-skin="pastel"] .grade span { font-size: 15px; line-height: 1.3; }
-:root[data-skin="pastel"] .grade.good { background: var(--g2); color: var(--on-g); }
+:root[data-skin="pastel"] .grade.good { background: var(--sheen), var(--g2); color: var(--on-g); box-shadow: var(--sheen-edge), 0 6px 16px rgba(195, 170, 255, .35); }
 /* 떠 있는 탭 바 */
 :root[data-skin="pastel"] .tabbar {
   margin: 0 14px calc(env(safe-area-inset-bottom, 0px) + 8px); padding: 6px 4px; border: 0; border-radius: 999px;
@@ -650,12 +652,12 @@ textarea::placeholder { font-family: var(--sans); }
 :root[data-skin="pastel"] .tab[aria-selected="true"] { color: var(--ink); }
 :root[data-skin="pastel"] .tab[aria-selected="true"] svg { stroke: url(#g-stroke); }
 /* 설정 목록 아이콘: 그라데이션 타일 */
-:root[data-skin="pastel"] .set-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--g2); color: var(--on-g); font-size: 0; flex: none; }
+:root[data-skin="pastel"] .set-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--sheen), var(--g2); color: var(--on-g); font-size: 0; flex: none; }
 :root[data-skin="pastel"] .set-icon svg { width: 19px; height: 19px; }
 /* 대화 말풍선 */
 :root[data-skin="pastel"] .bubble { border-radius: 22px; }
 :root[data-skin="pastel"] .bubble.mooni { background: var(--glass); border: 0; box-shadow: 0 0 0 .5px var(--line) inset; }
-:root[data-skin="pastel"] .bubble.me { background: var(--g2); color: var(--on-g); }
+:root[data-skin="pastel"] .bubble.me { background: var(--sheen), var(--g2); color: var(--on-g); box-shadow: var(--sheen-edge); }
 /* 그라데이션 글자 */
 :root[data-skin="pastel"] .gtext { color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; }
 :root[data-skin="pastel"] .streak b { color: transparent; background-image: var(--gtext); -webkit-background-clip: text; background-clip: text; }
@@ -800,7 +802,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v65';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',

@@ -954,7 +954,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v91';
+const APP_VERSION = 'v92';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2497,7 +2497,7 @@ function talkCardHTML(topic, i, where) {
   return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go">
     <span class="talk-tag">💬 오늘의 대화</span>
     <h3>오늘 하루는 어땠어?</h3>
-    <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. 한 번에 최대 ${TALK_MAX_SEC / 60}분 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${talkLeftSec != null ? ` 오늘 남은 시간 ${Math.floor(talkLeftSec / 60)}분.` : ''}${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
+    <p>${josa(bot, '이', '가')} 먼저 말을 걸어요. 한 번에 최대 ${TALK_MAX_SEC / 60}분 말로 수다 떨고, 끝나면 표현을 카드로 챙겨요.${prefs.calendar || where !== 'talk' ? '' : ' 설정에서 구글 캘린더를 연결하면 일정으로 말을 걸어요.'}</p>
     <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 대화하기 ›</span>
   </section>`;
 }

@@ -483,6 +483,20 @@ textarea.eng { font-family: var(--serif); }
 .speak-result { margin-top: 14px; padding: 14px 16px; border-radius: 18px; background: var(--surface); display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
 .speak-label { font-size: 12px; font-weight: 700; color: var(--muted); }
 .speak-words { margin: 0; font-family: var(--serif); font-size: 18px; line-height: 1.5; }
+.hero-edit { border: 0; background: var(--soft); color: var(--accent); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.hero-edit .ico { width: 13px; height: 13px; }
+.link-mini { align-self: flex-end; border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; padding: 2px 0; }
+.nudge { display: flex; align-items: center; gap: 10px; padding: 12px 10px 12px 14px; margin-bottom: 12px; border-radius: 18px; background: var(--glass, var(--surface)); box-shadow: 0 6px 22px rgba(30, 20, 60, .05); }
+.nudge-ico { color: var(--accent); display: grid; }
+.nudge-txt { flex: 1; font-size: 14px; font-weight: 600; }
+.nudge .x-mini { border: 0; background: none; color: var(--muted); font-size: 14px; padding: 4px 6px; }
+.ob-body { display: flex; flex-direction: column; gap: 12px; }
+.ob-title { margin: 10px 0 2px; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.ob-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 4px; }
+.ob-dots i { width: 6px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.ob-dots i.on { width: 18px; background: var(--g2, var(--accent)); }
+.set-group { margin: 20px 6px 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.set-group:first-child { margin-top: 4px; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sw { flex: none; position: relative; width: 51px; height: 31px; border: 0; border-radius: 999px; padding: 0; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .2s; cursor: pointer; }
 .sw i { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .2); transition: transform .2s; }
@@ -999,6 +1013,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
 <div class="sheet" id="editor" hidden></div>
 <div class="sheet" id="practice" hidden></div>
 <div class="sheet" id="brief" hidden></div>
+<div class="sheet" id="onboard" hidden></div>
 <input type="file" id="scan-input" accept="image/*" multiple hidden>
 <input type="file" id="backup-input" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -1035,7 +1050,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v128';
+const APP_VERSION = 'v129';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1474,10 +1489,12 @@ const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
   // design: 3 = 기본 글씨체를 나눔스퀘어라운드로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값으로)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {}, talkInterest: true, talkStory: true, push: false, alarms: [] };
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {}, talkInterest: true, talkStory: true, push: false, alarms: [], onboarded: false };
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
   if (saved && saved.design !== 3) { saved.font = base.font; saved.design = 3; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
+  // 이미 쓰던 사람(저장된 설정이 있음)은 처음 안내를 보지 않음
+  if (saved && saved.onboarded === undefined) saved.onboarded = true;
   return { ...base, ...saved };
 })();
 function setPref(key, value) {
@@ -1659,6 +1676,8 @@ function renderReview() {
           <span class="today-streak-line"><span class="gtext">🔥 ${n}일 연속</span><span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}"></i>`).join('')}</span></span>
         </div>
       </section>
+      ${pushNudge() ? `<section class="nudge"><span class="nudge-ico">${icon('bell')}</span><span class="nudge-txt">정해 둔 시간에 복습·대화 알림을 받을까요?</span>
+        <button class="btn small primary" data-act="nudge-push">켜기</button><button class="x-mini" data-act="nudge-push-no" aria-label="다시 묻지 않기">✕</button></section>` : ''}
       <div class="today-mini">
         <button class="btn" data-tab="talk">${icon('chat')} 대화하기</button>
         <button class="btn" data-act="add">${icon('pen')} 카드 추가</button>
@@ -2587,7 +2606,8 @@ function renderTalk() {
     actions = fbReady ? '<button class="btn primary wide" data-act="login">Google로 로그인</button>' : '';
   } else if (t.status === 'idle') {
     loadCalendar();
-    body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b></div>${talkCardsHTML('talk')}`;
+    body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b>
+      <button class="hero-edit" data-act="goto-settings" data-page="partner">${icon('chat')} 목소리·이름</button></div>${talkCardsHTML('talk')}`;
     actions = `<button class="btn primary wide" data-act="talk-go-current">${icon('mic')} 대화 시작</button>`;
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
@@ -2906,7 +2926,7 @@ async function loadCalendar(force = false) {
   }
   if (!ui.reviewStarted) renderReview();
   renderTalk();
-  if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
+  refreshSettings();
 }
 const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.getMinutes() ? { minute: '2-digit' } : {}) });
 // 배우는 언어 수준 (언어 모드마다, CEFR): 대화 상대의 말 난이도, 화제 브리핑·표현, 대화 정리에 반영
@@ -2972,6 +2992,63 @@ async function disablePush() {
   renderSettingsPage('alarm');
   try { await (await pushSubscription(false))?.unsubscribe(); await pushPost('/push/off', {}); } catch {}
 }
+// ---------- 처음 한 번 안내 (3단계): 공부할 언어·수준 → 하루 목표 → 부를 이름·알림. 언제든 건너뛸 수 있음 ----------
+const ob = { step: 0, target: 'en', native: 'ko', level: 'B1' };
+function openOnboard() {
+  const [target, native] = prefs.mode.split('>');
+  Object.assign(ob, { step: 0, target: LANGS[target] ? target : 'en', native: LANGS[native] ? native : 'ko', level: learnLevel() });
+  renderOnboard();
+}
+function closeOnboard() {
+  setPref('onboarded', true);
+  $('#onboard').hidden = true;
+  $('#onboard').innerHTML = '';
+  renderAll();
+}
+/** 1단계에서 고른 언어·수준을 적용 */
+function applyOnboardLang() {
+  const mode = `${ob.target}>${ob.native}`;
+  if (!prefs.modes.includes(mode)) setPref('modes', [...prefs.modes, mode]);
+  if (prefs.mode !== mode) setPref('mode', mode);
+  setPref('levels', { ...(prefs.levels || {}), [mode]: ob.level });
+}
+function renderOnboard() {
+  const el = $('#onboard');
+  const dots = `<div class="ob-dots" aria-hidden="true">${[0, 1, 2].map((i) => `<i class="${i === ob.step ? 'on' : ''}"></i>`).join('')}</div>`;
+  let body, next;
+  if (ob.step === 0) {
+    const langs = Object.entries(LANGS).filter(([c]) => c !== ob.native);
+    body = `<h2 class="ob-title">어떤 언어를 공부할까요?</h2>
+      <div class="chips">${langs.map(([c, l]) => `<button class="cat" data-act="ob-target" data-v="${c}" aria-pressed="${ob.target === c}">${l.flag} ${l.name}</button>`).join('')}</div>
+      <h2 class="ob-title">지금 ${LANGS[ob.target].name} 실력은요?</h2>
+      <div class="chips">${LEVEL_OPTS.map(([v, label]) => `<button class="cat" data-act="ob-level" data-v="${v}" aria-pressed="${ob.level === v}">${label} <small>${v}</small></button>`).join('')}</div>
+      <p class="sync-line">대화 상대가 이 수준에 맞춰 말하고, 화제와 표현의 난이도도 맞춰요. 나중에 설정에서 바꿀 수 있어요.</p>`;
+    next = '다음';
+  } else if (ob.step === 1) {
+    body = `<h2 class="ob-title">하루에 얼마나 할까요?</h2>${goalControlsHTML()}
+      <p class="sync-line">돌려서 고르세요. 오늘 탭의 링이 이 목표만큼 채워져요.</p>`;
+    next = '다음';
+  } else {
+    const can = user && 'PushManager' in window && 'Notification' in window && Notification.permission !== 'denied';
+    body = `<h2 class="ob-title">대화 상대가 나를 뭐라고 부를까요?</h2>
+      <input class="text" id="ob-name" maxlength="20" enterkeyhint="done" placeholder="비워 두면 이름 없이 불러요" value="${esc(prefs.talkName)}">
+      <h2 class="ob-title">알림을 받을까요?</h2>
+      ${can ? `${prefs.push ? '<p class="sync-line"><b>알림을 켰어요.</b> 설정 → 알림에서 시간을 바꿀 수 있어요.</p>' : '<button class="btn wide" data-act="ob-push">🔔 오후 8시에 복습 알림 받기</button>'}`
+        : '<p class="sync-line">로그인하고 홈 화면에 추가한 앱에서 설정 → 알림으로 켤 수 있어요.</p>'}`;
+    next = '시작하기';
+  }
+  el.innerHTML = `<header class="sheet-head">
+      ${ob.step ? '<button class="link start" data-act="ob-back">이전</button>' : '<span class="head-note"></span>'}
+      <h2>시작하기</h2>
+      <button class="link end" data-act="ob-skip">건너뛰기</button>
+    </header>
+    <div class="sheet-body ob-body">${dots}${body}</div>
+    <div class="actions"><button class="btn primary wide" data-act="ob-next">${next}</button></div>`;
+  el.hidden = false;
+  if (ob.step === 1) initWheels();
+}
+/** 오늘 탭에서 알림 켜기를 한 번 권함: 알림을 받을 수 있고, 아직 안 켰고, 그만 묻기를 안 눌렀을 때 */
+const pushNudge = () => !!(user && 'PushManager' in window && 'Notification' in window && Notification.permission !== 'denied' && !prefs.push && !prefs.pushAsked && modeCards().length);
 /** 알림이나 링크로 바로 들어오기: ?go=review(복습) · talk(대화) · add(카드 추가) */
 function handleGo(go) {
   if (go === 'review') {
@@ -2980,6 +3057,8 @@ function handleGo(go) {
   } else if (go === 'talk') setTab('talk');
   else if (go === 'add') { setTab('review'); if (!editor) openEditor(); }
 }
+/** 설정 화면을 보고 있으면 지금 페이지를 다시 그림 */
+function refreshSettings() { if (ui.tab === 'settings' && ui.settingsPage) renderSettingsPage(ui.settingsPage); }
 /** 설정의 켜고 끄는 줄: 이름 + 오른쪽 스위치 (로그인 안 했으면 못 누름) */
 const swRow = (label, on, act) => `<div class="sw-row"><span class="sub">${label}</span>
   <button class="sw" role="switch" aria-checked="${on}" aria-label="${label}" data-act="${act}" ${user ? '' : 'disabled'}><i></i></button></div>`;
@@ -2990,7 +3069,7 @@ const MEMORY_KEY = 'freedom-talk-memory';
 function talkMemory() { try { const m = JSON.parse(localStorage.getItem(MEMORY_KEY)); return Array.isArray(m) ? m : []; } catch { return []; } }
 function setTalkMemory(list) {
   try { if (list.length) localStorage.setItem(MEMORY_KEY, JSON.stringify(list.slice(0, 30))); else localStorage.removeItem(MEMORY_KEY); } catch {}
-  if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
+  refreshSettings();
 }
 // 이미 얘기한 일정 (이 기기에만, 5일 지나면 지움): 같은 일정을 또 묻지 않으려고
 const TALKED_KEY = 'freedom-talked-topics';
@@ -3067,6 +3146,7 @@ function interestCardHTML(g) {
     <span class="talk-tag">✨ 관심사 · ${esc(g.interest)}</span>
     <h3>오늘의 화제</h3>
     <div class="topic-rows">${rows}</div>
+    <div class="talk-bottom"><button class="link-mini" data-act="goto-settings" data-page="topics">관심사 바꾸기 ›</button></div>
   </section>`;
 }
 /** 내가 가져온 이야기 카드: 최근에 넣은 이야기 + 새로 넣기 */
@@ -3263,7 +3343,7 @@ async function saveInterests(list) {
   setPref('interests', list);
   intState.data = null;
   try { localStorage.removeItem(INT_CACHE_KEY); } catch {}
-  if (ui.tab === 'settings') renderSettingsPage('talk');
+  refreshSettings();
   if (!user) return;
   try {
     const { target, native } = modeParts(prefs.mode);
@@ -3320,7 +3400,7 @@ async function disconnectCalendar() {
   } catch {}
   setPref('calendar', false);
   cal.events = null;
-  renderSettingsPage('talk');
+  refreshSettings();
   renderReview();
   toast('캘린더 연결을 끊었어요.');
 }
@@ -3827,6 +3907,8 @@ const ICON_PATHS = {
   type: '<path d="M4 7V5h12v2M10 5v14M7 19h6M14 12h6M17 12v7M15.5 19h3"/>',
   volume: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
   chat: '<path d="M20 12a7.5 7.5 0 0 1-11 6.6L4 20l1.4-4.6A7.5 7.5 0 1 1 20 12z"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>',
   bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8.5 2.5 8.5h-17S6 15.5 6 9z"/><path d="M10.3 20.5a2 2 0 0 0 3.4 0"/>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
@@ -3891,34 +3973,40 @@ function commitWheel(w) {
   if (ui.tab === 'settings' && ui.settingsPage === 'goal') renderSettingsPage('goal');
   initWheels();
 }
+// 설정 목록: [페이지, 아이콘, 이름, 지금 상태, 묶음]
+const voiceLabel = () => TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin';
 const SETTINGS = [
-  ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨')],
-  ['usage', icon('gauge'), '오늘 AI 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`)],
-  ['lang', icon('globe'), '언어 모드', () => modeLabel()],
-  ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme]],
-  ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`],
-  ['sound', icon('volume'), '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐')],
-  ['goal', icon('target'), '하루 목표', () => `복습 ${prefs.goalReview}장 · 카드 ${prefs.goalAdd}개 · 대화 ${prefs.goalTalk}분`],
-  ['alarm', icon('bell'), '알림', () => (!prefs.push ? '꺼짐' : (prefs.alarms || []).filter((a) => a.on).map((a) => `${a.time} ${a.kind === 'talk' ? '대화' : '복습'}`).join(' · ') || '켜 둔 알림이 없어요')],
-  ['talk', icon('chat'), '대화', () => `${botName()} · 목소리 ${TALK_VOICES.find(([v]) => v === prefs.talkVoice)?.[1] ?? 'Marin'} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}${prefs.calendar ? ' · 캘린더 연결됨' : ''}`],
-  ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원'],
-  ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의'],
+  ['lang', icon('globe'), '언어 · 수준', () => `${modeLabel()} · ${(LEVEL_OPTS.find(([v]) => v === learnLevel()) || [])[1] || '중급'}(${learnLevel()})`, '학습'],
+  ['goal', icon('target'), '하루 목표', () => `복습 ${prefs.goalReview}장 · 카드 ${prefs.goalAdd}개 · 대화 ${prefs.goalTalk}분`, '학습'],
+  ['alarm', icon('bell'), '알림', () => (!prefs.push ? '꺼짐' : (prefs.alarms || []).filter((a) => a.on).map((a) => `${alarmTimeText(a.time)} ${a.kind === 'talk' ? '대화' : '복습'}`).join(' · ') || '켜 둔 알림이 없어요'), '학습'],
+  ['partner', icon('chat'), '대화 상대', () => `${botName()} · 목소리 ${voiceLabel()} · ${prefs.talkName ? `'${prefs.talkName}'(이)라고 불러요` : '내 이름 없이'}`, '대화'],
+  ['topics', icon('spark'), '대화 화제', () => [`캘린더 ${prefs.calendar ? '켜짐' : '꺼짐'}`, `관심사 ${prefs.talkInterest === false ? '꺼짐' : (prefs.interests || []).join(', ') || '없음'}`, `가져온 이야기 ${prefs.talkStory === false ? '꺼짐' : '켜짐'}`].join(' · '), '대화'],
+  ['memory', icon('heart'), () => `${josa(botName(), '이', '가')} 기억하는 나`, () => (talkMemory().length ? `${talkMemory().length}개 기억해요` : '아직 없어요'), '대화'],
+  ['theme', icon('contrast'), '화면 테마', () => THEME_NAMES[prefs.theme], '화면 · 소리'],
+  ['text', icon('type'), '글씨 크기 · 글씨체', () => `${SIZE_NAMES[prefs.size]} · ${(FONTS.find(([f]) => f === prefs.font) || FONTS[0])[1]}`, '화면 · 소리'],
+  ['sound', icon('volume'), '소리', () => (!canSpeak ? '이 기기에서는 쓸 수 없어요' : prefs.speak ? `자동으로 읽기 · ${RATE_NAMES[prefs.rate] || '보통'}` : '자동 읽기 꺼짐'), '화면 · 소리'],
+  ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨'), '계정 · 데이터'],
+  ['usage', icon('gauge'), '오늘 AI 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`), '계정 · 데이터'],
+  ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원', '계정 · 데이터'],
+  ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의', '도움'],
 ];
+const SETTING_GROUPS = ['학습', '대화', '화면 · 소리', '계정 · 데이터', '도움'];
+const settingName = (item) => (typeof item[2] === 'function' ? item[2]() : item[2]);
 const FEEDBACK_KINDS = [['bug', '🐛 버그'], ['idea', '💡 제안'], ['question', '❓ 문의'], ['etc', '💬 기타']];
 function renderSettings() {
   const page = ui.settingsPage;
   const item = SETTINGS.find(([p]) => p === page);
-  $('#settings-title').textContent = item ? item[2] : '설정';
+  $('#settings-title').textContent = item ? settingName(item) : '설정';
   $('#settings-back').hidden = !item;
   const main = $('#settings-main');
   if (!item) {
-    main.innerHTML = `<div class="set-list">${SETTINGS.filter(([p]) => p !== 'usage' || SCAN_URL).map(([p, icon, name, now]) => `
-      <button class="set-row" data-act="settings-open" data-page="${p}">
-        <span class="set-icon">${icon}</span>
-        <span class="set-txt"><b>${name}</b><small>${esc(now())}</small></span>
-        ${p === 'sync' && !$('#settings-dot').hidden ? '<span class="tab-dot static"></span>' : ''}
+    main.innerHTML = `${SETTING_GROUPS.map((g) => `<h3 class="set-group">${g}</h3><div class="set-list">${SETTINGS.filter((s) => s[4] === g && (s[0] !== 'usage' || SCAN_URL)).map((s) => `
+      <button class="set-row" data-act="settings-open" data-page="${s[0]}">
+        <span class="set-icon">${s[1]}</span>
+        <span class="set-txt"><b>${esc(settingName(s))}</b><small>${esc(s[3]())}</small></span>
+        ${s[0] === 'sync' && !$('#settings-dot').hidden ? '<span class="tab-dot static"></span>' : ''}
         <span class="set-go">›</span>
-      </button>`).join('')}</div>
+      </button>`).join('')}</div>`).join('')}
       <p class="version">앱 버전 ${APP_VERSION} · <a href="privacy.html">개인정보처리방침</a></p>`;
     return;
   }
@@ -3971,6 +4059,7 @@ async function saveFeedbackToStore(data) {
   }
 }
 function openSettingsPage(page, focusNew) {
+  if (page === 'talk') page = 'partner';   // 예전 이름
   ui.settingsPage = page;
   if (page === 'lang') { ui.newMode = { target: null, native: 'ko' }; ui.removingMode = null; }
   if (page === 'alarm') ui.alarmEdit = null;
@@ -4018,13 +4107,8 @@ function renderSettingsPage(page) {
       ${goalControlsHTML()}
     </div>`;
     initWheels();
-  } else if (page === 'talk') {
+  } else if (page === 'partner') {
     box.innerHTML = `<div class="field">
-      <label class="sub">내 ${targetLang().name} 수준</label>
-      <div class="chips">${LEVEL_OPTS.map(([v, label]) => `<button class="cat" data-act="level" data-value="${v}" aria-pressed="${learnLevel() === v}">${label} <small>${v}</small></button>`).join('')}</div>
-      <p class="sync-line">${josa(botName(), '이', '가')} 이 수준에 맞춰 말하고, 화제 브리핑과 대화에 쓸 표현의 난이도도 맞춰요. 언어 모드마다 따로 정해요.</p>
-    </div>
-    <div class="field">
       <label class="sub">대화 상대 목소리</label>
       <div class="chips">${TALK_VOICES.map(([v, label]) => `<button class="cat" data-act="pref" data-key="talkVoice" data-value="${v}" aria-pressed="${prefs.talkVoice === v}">${label}</button>`).join('')}</div>
       <p class="sync-line">목소리를 누르면 바로 들려줘요. 다음 대화부터 바뀌어요.</p>
@@ -4038,8 +4122,9 @@ function renderSettingsPage(page) {
       <label class="sub" for="talk-name">대화 상대가 나를 부를 이름</label>
       <input class="text" id="talk-name" maxlength="20" enterkeyhint="done" value="${esc(prefs.talkName)}">
       <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
-    </div>
-    <div class="field">
+    </div>`;
+  } else if (page === 'topics') {
+    box.innerHTML = `<div class="field">
       ${swRow('구글 캘린더로 일상 대화', !!prefs.calendar, 'cal-switch')}
       ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>'
         : prefs.calendar ? `<p class="sync-line">그저께부터 내일까지 일정으로 "치과 어땠어?"처럼 말을 걸어요.${cal.events ? ` 지금 읽은 일정 ${cal.events.length}개.` : ''}</p>
@@ -4058,8 +4143,9 @@ function renderSettingsPage(page) {
     <div class="field">
       ${swRow('내가 가져온 이야기로 대화', prefs.talkStory !== false, 'talk-story')}
       <p class="sync-line">대화 탭에서 본 영상·기사 링크나 본 내용을 넣으면 브리핑을 만들어 같이 얘기해요.</p>
-    </div>
-    <div class="field">
+    </div>`;
+  } else if (page === 'memory') {
+    box.innerHTML = `<div class="field">
       <label class="sub">${josa(botName(), '이', '가')} 기억하는 나</label>
       ${talkMemory().length ? `<ul class="mem-list">${talkMemory().map((m, i) => `<li><span>${esc(m)}</span><button class="x-mini" data-act="mem-remove" data-index="${i}" aria-label="이 기억 지우기">✕</button></li>`).join('')}</ul>
         <button class="btn wide" data-act="mem-clear">모두 잊게 하기</button>` : ''}
@@ -4125,6 +4211,11 @@ function renderSettingsPage(page) {
     </div>
     <p class="sync-line small-note">왼쪽 칸을 누른 뒤 키보드의 이모지 버튼에서 국기를 골라 주세요. 비워 두면 🌐로 보여요.</p>` : ''}`;
     box.innerHTML = `<div class="field">
+      <label class="sub">내 ${targetLang().name} 수준</label>
+      <div class="chips">${LEVEL_OPTS.map(([v, label]) => `<button class="cat" data-act="level" data-value="${v}" aria-pressed="${learnLevel() === v}">${label} <small>${v}</small></button>`).join('')}</div>
+      <p class="sync-line">${josa(botName(), '이', '가')} 이 수준에 맞춰 말하고, 화제 브리핑·대화에 쓸 표현·대화 정리의 난이도도 맞춰요. 언어 모드마다 따로 정해요.</p>
+    </div>
+    <div class="field">
       <p class="sync-line">언어 모드마다 카드, 카테고리, 복습이 따로예요. 지금 모드를 고르세요.</p>
       ${modeList().map(({ mode, count }) => `<div class="mode-line">
         <button class="mode-opt" data-act="mode-pick" data-mode="${mode}" aria-pressed="${mode === prefs.mode}">
@@ -4673,6 +4764,7 @@ function renderStats() {
 
 // ================= 화면 전환 =================
 function setTab(tab) {
+  ui.settingsFrom = null;
   if (tab !== 'review' && rv.ctx) closeSpeakReview();   // 다른 탭으로 가면 마이크를 끔 (돌아오면 '말하기 시작')
   ui.tab = tab;
   $('#view-review').hidden = tab !== 'review';
@@ -4759,7 +4851,7 @@ document.addEventListener('click', (ev) => {
     case 'story-make': makeStory(); break;
     case 'brief-close': closeBrief(); break;
     case 'brief-meaning': brief.meaning = !brief.meaning; renderBrief(); break;
-    case 'level': setPref('levels', { ...(prefs.levels || {}), [prefs.mode]: el.dataset.value }); intState.data = null; renderSettingsPage('talk'); break;
+    case 'level': setPref('levels', { ...(prefs.levels || {}), [prefs.mode]: el.dataset.value }); intState.data = null; refreshSettings(); break;
     case 'mem-remove': setTalkMemory(talkMemory().filter((_, i) => i !== Number(el.dataset.index))); break;
     case 'mem-clear': if (confirm(`${josa(botName(), '이', '가')} 기억하는 것을 모두 지울까요?`)) setTalkMemory([]); break;
     case 'brief-go': { const topic = brief.topic; closeBrief(); setTab('talk'); startTalk(topic); break; }
@@ -4769,6 +4861,17 @@ document.addEventListener('click', (ev) => {
     case 'int-remove': saveInterests((prefs.interests || []).filter((x) => x !== el.dataset.v)); break;
     case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
     case 'cal-connect': connectCalendar(); break;
+    case 'ob-target': ob.target = el.dataset.v; renderOnboard(); break;
+    case 'ob-level': ob.level = el.dataset.v; renderOnboard(); break;
+    case 'ob-back': ob.step = Math.max(0, ob.step - 1); renderOnboard(); break;
+    case 'ob-next':
+      if (ob.step === 0) applyOnboardLang();
+      if (ob.step === 2) { setPref('talkName', ($('#ob-name')?.value || '').trim().slice(0, 20)); closeOnboard(); break; }
+      ob.step += 1; renderOnboard(); break;
+    case 'ob-skip': if (ob.step === 0) applyOnboardLang(); closeOnboard(); break;
+    case 'ob-push': setPref('pushAsked', true); enablePush().then(() => { if (!$('#onboard').hidden) renderOnboard(); }); break;
+    case 'nudge-push': setPref('pushAsked', true); enablePush().then(() => renderReview()); break;
+    case 'nudge-push-no': setPref('pushAsked', true); renderReview(); break;
     case 'push-switch': prefs.push ? disablePush() : enablePush(); break;
     case 'push-test': pushPost('/push/test', {}).then((r) => toast(r.ok ? '시험 알림을 보냈어요. 곧 도착해요.' : '시험 알림을 보내지 못했어요. 알림을 껐다 켜 보세요.')).catch(() => toast('시험 알림을 보내지 못했어요.')); break;
     case 'alarm-edit': ui.alarmEdit = Number(el.dataset.index); renderSettingsPage('alarm'); break;
@@ -4778,8 +4881,8 @@ document.addEventListener('click', (ev) => {
     case 'alarm-on': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, on: !a.on } : a))); break;
     case 'alarm-kind': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, kind: el.dataset.kind } : a))); break;
     case 'cal-switch': prefs.calendar ? disconnectCalendar() : connectCalendar(); break;
-    case 'talk-interest': setPref('talkInterest', prefs.talkInterest === false); renderSettingsPage('talk'); renderTalk(); break;
-    case 'talk-story': setPref('talkStory', prefs.talkStory === false); renderSettingsPage('talk'); renderTalk(); break;
+    case 'talk-interest': setPref('talkInterest', prefs.talkInterest === false); refreshSettings(); renderTalk(); break;
+    case 'talk-story': setPref('talkStory', prefs.talkStory === false); refreshSettings(); renderTalk(); break;
     case 'cal-disconnect': disconnectCalendar(); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;
@@ -4887,7 +4990,11 @@ document.addEventListener('click', (ev) => {
       renderSettings();
       break;
     case 'fb-send': sendFeedback(); break;
-    case 'settings-back': ui.settingsPage = null; renderSettings(); $('#settings-main').scrollTop = 0; break;
+    case 'settings-back':
+      // 다른 탭에서 바로 들어왔으면 그 탭으로 돌아감
+      if (ui.settingsFrom) { const from = ui.settingsFrom; ui.settingsFrom = null; setTab(from); break; }
+      ui.settingsPage = null; renderSettings(); $('#settings-main').scrollTop = 0; break;
+    case 'goto-settings': { const from = ui.tab; setTab('settings'); ui.settingsFrom = from; openSettingsPage(el.dataset.page); break; }
     case 'mode-create': {
       const t = newModeCode('target'), n = newModeCode('native');
       if (!t || !n || t === n) break;
@@ -5087,6 +5194,8 @@ async function init() {
   }
   renderAll();
   // 알림이나 링크로 들어온 경우 (?go=review 등): 주소는 깨끗하게
+  // 처음 쓰는 사람만 안내 (이미 카드가 있으면 안내 없이 넘어감)
+  if (!prefs.onboarded) { if (cards.length) setPref('onboarded', true); else openOnboard(); }
   const go = new URLSearchParams(location.search).get('go');
   if (go) { history.replaceState(null, '', location.pathname); handleGo(go); }
   navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data?.go) handleGo(ev.data.go); });

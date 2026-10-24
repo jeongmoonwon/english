@@ -1035,7 +1035,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v127';
+const APP_VERSION = 'v128';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3087,7 +3087,10 @@ function talkCardsHTML(where) {
   const cal = calTopics();
   ui.talkTopics = cal;
   const groups = interestGroups();
-  const waiting = intState.loading && prefs.talkInterest !== false && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
+  const intOn = prefs.talkInterest !== false && (prefs.interests || []).length;
+  const waiting = intState.loading && intOn && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`]
+    // 화제를 못 받은 경우도 말없이 사라지지 않게
+    : !intState.loading && intOn && !groups.length && (intState.data || intState.failedAt) ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>${intState.data?.limited ? '오늘은 화제를 더 찾을 수 없어요' : '오늘의 화제를 가져오지 못했어요'}</h3><p>${intState.data?.limited ? '하루에 찾을 수 있는 횟수를 다 썼어요. 내일 새 화제를 찾아 줄게요.' : '잠시 뒤 대화 탭에 다시 들어오면 다시 찾아요.'}</p></section>`] : [];
   const cards = [...cal.map((t, i) => talkCardHTML(t, i, where)), ...groups.map(interestCardHTML), ...waiting, ...(user && SCAN_URL && prefs.talkStory !== false ? [storyCardHTML()] : []), talkCardHTML(null, -1, where)];
   if (cards.length === 1) return cards[0];
   return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
@@ -3176,7 +3179,7 @@ async function saveTopicExpression(e) {
 
 // ---------- 관심사 화제 (설정에서 관심사를 넣은 사람만) ----------
 // 오늘 화제를 서버에서 받아 옴 (그날 처음 열면 서버가 찾음). 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
-const INT_CACHE_KEY = 'freedom-int-topics2', INT_VOTE_KEY = 'freedom-int-votes';
+const INT_CACHE_KEY = 'freedom-int-topics3', INT_VOTE_KEY = 'freedom-int-votes';
 const intState = { data: null, loading: false, failedAt: 0 };
 function intVotes() { try { return JSON.parse(localStorage.getItem(INT_VOTE_KEY)) || {}; } catch { return {}; } }
 function setIntVote(key, v) {
@@ -3207,7 +3210,7 @@ async function loadInterestTopics(force = false) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(res.status);
-    intState.data = { day, mode: prefs.mode, sig: `${prefs.interests.join('|')}#${learnLevel()}`, topics: Array.isArray(data.topics) ? data.topics : [] };
+    intState.data = { day, mode: prefs.mode, sig: `${prefs.interests.join('|')}#${learnLevel()}`, topics: Array.isArray(data.topics) ? data.topics : [], limited: !!data.limited };
     try { localStorage.setItem(INT_CACHE_KEY, JSON.stringify(intState.data)); } catch {}
   } catch {
     intState.failedAt = Date.now();

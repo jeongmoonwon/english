@@ -801,7 +801,7 @@ async function handleCalendarDisconnect(env, reply, user) {
 
 // ----- 관심사 화제: 등록한 관심사로 하루 2개 화제 (같은 관심사·언어는 한 번만 찾아 여러 사람이 같이 씀) -----
 // 관심사는 계정마다 KV(int:아이디)에 저장. 화제는 topic:날짜:관심사키 에 이틀 동안 저장
-const INTEREST_MAX = 5, INTEREST_PER_DAY = 2, INTEREST_GEN_PER_USER = 4;
+const INTEREST_MAX = 5, INTEREST_PER_DAY = 2, INTEREST_GEN_PER_USER = 6;
 const STORY_LIMIT = 10;                      // 1인당 하루 '내가 가져온 이야기' 수
 const MAX_STORY_CHARS = 500;
 // 관심사 화제는 앱을 연 날에만 만들어서 싼 모델로 (웹 검색 1번)
@@ -964,10 +964,22 @@ async function handleInterest(path, request, env, reply, user) {
   const found = await Promise.all(interests.map((interest) => interestTopicsFor(env, interest, learn, know, day, false, taste, who, level)));
   const todo = interests.map((_, i) => i).filter((i) => !found[i]).slice(0, Math.max(0, INTEREST_GEN_PER_USER - gens));
   if (todo.length) await env.USAGE.put(genKey, String(gens + todo.length), { expirationTtl: 2 * 86400 });
+  let failed = 0;
   await Promise.all(todo.map(async (i) => {
-    try { found[i] = await interestTopicsFor(env, interests[i], learn, know, day, true, taste, who, level); } catch (err) { console.error('interest topic failed', err); found[i] = []; }
+    try { found[i] = await interestTopicsFor(env, interests[i], learn, know, day, true, taste, who, level); } catch (err) { console.error('interest topic failed', err); found[i] = null; failed += 1; }
   }));
-  return reply(200, { topics: interests.map((interest, i) => ({ interest, items: found[i] || [] })) });
+  // 실패한 만큼은 횟수를 돌려줌
+  if (failed) await env.USAGE.put(genKey, String(Math.max(0, gens + todo.length - failed)), { expirationTtl: 2 * 86400 });
+  // 내 화제를 못 만들었으면(하루 횟수 끝·실패) 같은 관심사의 오늘 화제 중 이미 있는 것으로: 같은 수준 → 다른 수준
+  for (const [i, interest] of interests.entries()) {
+    if (found[i]?.length) continue;
+    for (const lv of [level, ...Object.keys(LEVELS).filter((x) => x !== level)]) {
+      const items = await interestTopicsFor(env, interest, learn, know, day, false, {}, '', lv);
+      if (items?.length) { found[i] = items; break; }
+    }
+  }
+  const limited = interests.some((_, i) => !found[i]?.length) && gens + todo.length - failed >= INTEREST_GEN_PER_USER;
+  return reply(200, { topics: interests.map((interest, i) => ({ interest, items: found[i] || [] })), limited });
 }
 // ----- 내가 가져온 이야기: 링크(기사·영상)나 본 내용을 적으면 브리핑과 대화 화제로 정리 -----
 const STORY_SCHEMA = { type: 'object', properties: { item: TOPIC_SCHEMA.properties.items.items }, required: ['item'], additionalProperties: false };

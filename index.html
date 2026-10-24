@@ -1035,7 +1035,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v126';
+const APP_VERSION = 'v127';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1679,14 +1679,14 @@ function renderReview() {
   if (ui.reviewCardId !== card.id) { ui.reviewCardId = card.id; ui.reviewShow = false; ui.speakRes = null; }
   // 말로 답하기: 늘 뜻을 보여 주고 표현을 말하게 함 (표현 글자가 없는 카드는 평소처럼)
   const speaking = speakOn() && !!card.engText;
+  if (speaking && !ui.reviewShow) listenFor(card);   // 먼저 듣기 시작해야 움직이는 마이크로 그려짐
   main.innerHTML = flashHTML(card, ui.reviewShow, 'reveal', speaking ? ['kor', 'eng'] : undefined)
     + (speaking ? (ui.reviewShow ? speakResultHTML() : speakPanelHTML()) : '');
   if (ui.flipNow) { ui.flipNow = false; flipIn('#review-main'); }
   if (!(speaking && !ui.reviewShow)) autoSpeak(`r|${card.id}|${card.srs.reps}|${card.srs.lapses}|${ui.reviewShow && (speaking || DIRECTIONS[study.dir].sides[0] !== 'eng')}`, card, ui.reviewShow);
   bar.hidden = false;
   if (!ui.reviewShow) {
-    bar.innerHTML = speaking ? '<button class="btn wide" data-act="reveal">모르겠어요 · 정답 보기</button>' : '<button class="btn primary wide" data-act="reveal">정답 보기</button>';
-    if (speaking) listenFor(card);
+    bar.innerHTML = `<button class="btn ${speaking ? '' : 'primary '}wide" data-act="reveal">정답 보기</button>`;
   } else {
     bar.innerHTML = `<div class="grades">${GRADES.map((g) => `
       <button class="grade ${g.cls}" data-act="grade" data-r="${g.r}"><span>${g.label}</span></button>`).join('')}</div>`;
@@ -1733,6 +1733,23 @@ async function openSpeakReview(ctx) {
     mute.gain.value = 0;
     src.connect(node).connect(mute).connect(ctx.destination);
     node.port.onmessage = (m) => { if (m.data !== 'flushed') onSpeakAudio(m.data); };
+    // 마이크 동그라미: 목소리 크기를 화면 그릴 때마다 재서 부드럽게 (빨리 커지고 천천히 작아짐)
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let lvl = 0;
+    const tick = () => {
+      if (rv.ctx !== ctx) return;
+      an.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) sum += v * v;
+      const target = rv.listening ? Math.min(1, Math.max(0, (20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-6) + 50) / 35)) : 0;
+      lvl += (target - lvl) * (target > lvl ? 0.5 : 0.12);
+      document.querySelector('#rv-mic')?.style.setProperty('--lvl', lvl.toFixed(3));
+      requestAnimationFrame(tick);
+    };
+    tick();
     await connectSpeak();
   } catch (err) {
     console.warn('speak review off', err);
@@ -1790,7 +1807,6 @@ function onSpeakAudio(buf) {
   let sum = 0;
   for (const v of pcm) sum += v * v;
   const rms = Math.sqrt(sum / pcm.length) / 32768;
-  document.querySelector('#rv-mic')?.style.setProperty('--lvl', Math.min(1, Math.max(0, (20 * Math.log10(rms || 1e-6) + 50) / 35)).toFixed(3));
   if (rms > SPEAK.level) { rv.spoke = true; rv.quiet = 0; }
   else if (rv.spoke && (rv.quiet += pcm.length / 24) >= SPEAK.quietMs) { finishSpeak(); return; }
   const took = Date.now() - rv.startAt;
@@ -1812,15 +1828,16 @@ function onSpeakEvent(m) {
   } else if (ev.type === 'conversation.item.input_audio_transcription.failed' && ev.item_id === rv.awaitItem) rv.notify?.();
 }
 /** 말이 끝남: 남은 소리를 받아쓰게 하고 정답과 함께 보여 줌 */
-async function finishSpeak() {
+async function finishSpeak(quiet = false) {
   if (!rv.listening) return;
   rv.listening = false;
   const id = rv.cardId;
   if (!rv.spoke && !rv.text) { wsSend({ type: 'input_audio_buffer.clear' }); renderReview(); return; }   // 아무 말도 안 함
-  Object.assign(rv, { checking: true, awaiting: true, awaitItem: null, final: null });
-  renderReview();
+  Object.assign(rv, { checking: !quiet, awaiting: true, awaitItem: null, final: null });
+  if (!quiet) renderReview();
   wsSend({ type: 'input_audio_buffer.commit' });
   await new Promise((done) => { const tm = setTimeout(done, 2500); rv.notify = () => { clearTimeout(tm); done(); }; });
+  if (rv.cardId !== id) return;   // 그사이 다음 카드로 넘어감
   rv.notify = null;
   rv.awaiting = rv.checking = false;
   if (rv.awaitItem) rv.closed.add(rv.awaitItem);
@@ -1828,7 +1845,9 @@ async function finishSpeak() {
 }
 /** 들린 말을 정답과 함께 보여 줌 (채점은 하지 않음) */
 function showSpoken(id, heard) {
-  if (ui.reviewCardId !== id || ui.reviewShow) return;
+  if (ui.reviewCardId !== id) return;
+  // '정답 보기'로 먼저 넘긴 경우: 받아쓰기가 마무리되면 문장만 고침
+  if (ui.reviewShow) { if (ui.speakRes && heard.trim() && heard.trim() !== ui.speakRes.heard) { ui.speakRes.heard = heard.trim(); renderReview(); } return; }
   ui.speakRes = { heard: heard.trim() };
   ui.reviewShow = true;
   ui.flipNow = true;
@@ -4708,8 +4727,12 @@ document.addEventListener('click', (ev) => {
   switch (act) {
     case 'reveal':
       if (ui.reviewShow || ui.flipping) break;
-      // 말로 답하기에서 '모르겠어요': 듣기를 멈추고 정답 보기
-      if (speakOn() && rv.ctx) { rv.listening = false; wsSend({ type: 'input_audio_buffer.clear' }); ui.speakRes = { heard: '' }; }
+      // 말로 답하기에서 '정답 보기': 말하던 중이면 지금까지 들린 문장과 함께 바로 정답 (받아쓰기 마무리는 뒤에서)
+      if (speakOn() && rv.ctx) {
+        ui.speakRes = { heard: rv.text.trim() };
+        if (rv.listening && (rv.spoke || rv.text)) finishSpeak(true);
+        else { rv.listening = false; wsSend({ type: 'input_audio_buffer.clear' }); }
+      }
       ui.flipping = true;
       flipOut('#review-main', () => { ui.flipping = false; ui.reviewShow = true; ui.flipNow = true; renderReview(); });
       break;

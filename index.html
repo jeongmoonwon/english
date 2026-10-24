@@ -977,7 +977,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v111';
+const APP_VERSION = 'v112';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2405,18 +2405,36 @@ function talkTurn(id, role) {
   if (!x) { x = { id, role, text: '' }; talk.turns.push(x); }
   return x;
 }
+// 잡음·스피커 소리를 받아쓰기가 흔히 이렇게 잘못 들음 (띄어쓰기·문장부호 빼고 비교). 이런 말에는 대답하지 않음
+const TALK_NOISE = new Set(['네', '넹', '예', '응', '어', '아', '음', '흠', '안녕', '감사합니다', '고맙습니다', '시청해주셔서감사합니다', '구독과좋아요부탁드립니다', 'mbc뉴스', 'you', 'thanksforwatching']);
+const isTalkNoise = (s) => { const k = s.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''); return !k || TALK_NOISE.has(k); };
+/** 대답 시키기 (서버는 스스로 대답하지 않음). 대답하는 중이면 끝난 뒤에 */
+function talkReply(t) {
+  if (t.responding) { t.wantReply = true; return; }
+  t.responding = true;
+  try { t.dc?.send(JSON.stringify({ type: 'response.create' })); } catch { t.responding = false; }
+}
+/** 잡음이었던 말은 화면과 대화 기록에서 지움 (대화 상대가 다음 대답 때 참고하지 않게) */
+function dropTalkTurn(t, id) {
+  t.turns = t.turns.filter((v) => v.id !== id);
+  try { t.dc?.send(JSON.stringify({ type: 'conversation.item.delete', item_id: id })); } catch {}
+}
 function onTalkEvent(ev) {
   const t = talk;
   if (ev.type === 'input_audio_buffer.committed') talkTurn(ev.item_id, 'user');   // 순서만 잡아 둠 (글자가 오기 전엔 안 보임)
   else if (ev.type === 'conversation.item.input_audio_transcription.completed') {
     const text = (ev.transcript || '').trim();
-    if (text) talkTurn(ev.item_id, 'user').text = text;
-    else t.turns = t.turns.filter((v) => v.id !== ev.item_id);   // 소음이었으면 지움
+    if (isTalkNoise(text)) dropTalkTurn(t, ev.item_id);
+    else { talkTurn(ev.item_id, 'user').text = text; talkReply(t); }
   }
-  else if (ev.type === 'conversation.item.input_audio_transcription.failed') t.turns = t.turns.filter((v) => v.id !== ev.item_id);
+  else if (ev.type === 'conversation.item.input_audio_transcription.failed') dropTalkTurn(t, ev.item_id);
   else if (ev.type === 'response.output_audio_transcript.delta') { talkTurn(ev.item_id, 'assistant').text += ev.delta || ''; t.speaking = true; }
   else if (ev.type === 'response.output_audio_transcript.done') talkTurn(ev.item_id, 'assistant').text = ev.transcript || '';
-  else if (ev.type === 'response.done') t.speaking = false;
+  else if (ev.type === 'response.done') {
+    t.speaking = false;
+    t.responding = false;
+    if (t.wantReply) { t.wantReply = false; talkReply(t); }
+  }
   else if (ev.type === 'error') { console.warn('talk error', ev.error); return; }
   else return;
   renderTalk();
@@ -2460,7 +2478,8 @@ async function startTalk(topic = null) {
     const dc = pc.createDataChannel('oai-events');
     t.dc = dc;
     dc.onmessage = (m) => { try { onTalkEvent(JSON.parse(m.data)); } catch {} };
-    dc.onopen = () => dc.send(JSON.stringify({ type: 'response.create' }));   // 대화 상대가 먼저 말 걸기
+    t.responding = false; t.wantReply = false;
+    dc.onopen = () => talkReply(t);   // 대화 상대가 먼저 말 걸기
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     const sdp = await fetch('https://api.openai.com/v1/realtime/calls', {
@@ -4143,12 +4162,7 @@ document.addEventListener('click', (ev) => {
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
     case 'talk-go': setTab('talk'); startTalk(null); break;
-    case 'talk-go-current': {   // 대화 탭 아래 버튼: 지금 보이는 카드의 화제로
-      const box = $('#talk-main .talk-swipe');
-      const i = box ? Math.round(box.scrollLeft / (box.firstElementChild.offsetWidth + 10)) : -1;
-      startTalk(ui.talkTopics?.[i] || null);
-      break;
-    }
+    case 'talk-go-current': startTalk(null); break;   // 대화 탭 아래 버튼: 화제 없이 그냥 수다 (화제 대화는 카드를 눌러서)
     case 'ext-link': break;   // 출처 링크는 그대로 열림 (카드 누름으로 안 넘어감)
     case 'int-vote': {
       const topic = ui.talkTopics?.[Number(el.dataset.index)];

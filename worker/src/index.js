@@ -396,10 +396,8 @@ async function handleTalkToken(request, env, reply, key, user) {
             noise_reduction: { type: 'near_field' },
             // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 어떤 말을 하는지 알려 줌
             transcription: { model: 'gpt-4o-mini-transcribe', prompt: `A ${native}-speaking learner talking with a tutor in ${target}. They mostly speak ${target}, sometimes ${native}.` },
-            // 학습자는 말하다 자주 멈추므로 끝났다고 서둘러 판단하지 않음.
-            // 대답은 앱이 받아쓴 글자를 보고 잡음이 아닐 때만 시킴 (잡음·스피커 소리를 "네." 등으로 잘못 듣고 혼자 대화하지 않게),
-            // 말하는 중에 들어온 소리로 말이 끊기지도 않게 함
-            turn_detection: { type: 'semantic_vad', eagerness: 'low', create_response: false, interrupt_response: false },
+            // ChatGPT 음성 대화처럼: 말이 끝나면 서버가 바로 대답하고, 끼어들면 멈춤 (짧은 "hi"도 바로 받음)
+            turn_detection: { type: 'semantic_vad', eagerness: 'auto' },
           },
           output: { voice },
         },

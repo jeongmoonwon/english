@@ -452,6 +452,9 @@ textarea.eng { font-family: var(--serif); }
 .talk-card .btn { margin-top: 2px; }
 
 .topic-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* 옆으로 넘기는 카드들은 높이가 같음 → 맨 아래 줄(👍👎, 이 얘기 하기)을 카드 바닥에 붙여 카드마다 같은 자리에 */
+.talk-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.talk-card > .talk-go { margin-top: auto; }
 .topic-src { color: var(--muted); font-size: 12px; text-decoration: none; }
 .topic-votes { display: flex; gap: 4px; }
 .topic-vote { border: 0; background: none; font-size: 15px; padding: 2px 4px; opacity: .45; filter: grayscale(1); }
@@ -974,7 +977,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v109';
+const APP_VERSION = 'v110';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2641,11 +2644,13 @@ function talkCardHTML(topic, i, where) {
     return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go-topic" data-index="${i}">
       <span class="talk-tag">✨ 관심사 · ${esc(topic.interest)}${topic.fact ? ' · 재미있는 사실' : ''}</span>
       <h3>${esc(topic.title)}</h3><p>${esc(topic.summary)}</p>
-      <div class="topic-foot">
-        ${topic.url ? `<a class="topic-src" href="${esc(topic.url)}" target="_blank" rel="noopener" data-act="ext-link">${esc(topic.source || '출처')} ↗</a>` : '<span></span>'}
-        <span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" data-index="${i}" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" data-index="${i}" aria-label="이 화제 그만">👎</button></span>
+      <div class="talk-bottom">
+        <div class="topic-foot">
+          ${topic.url ? `<a class="topic-src" href="${esc(topic.url)}" target="_blank" rel="noopener" data-act="ext-link">${esc(topic.source || '출처')} ↗</a>` : '<span></span>'}
+          <span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" data-index="${i}" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" data-index="${i}" aria-label="이 화제 그만">👎</button></span>
+        </div>
+        <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기 ›</span>
       </div>
-      <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기 ›</span>
     </section>`;
   }
   if (topic) {

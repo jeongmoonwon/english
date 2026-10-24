@@ -11,7 +11,8 @@ const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // OpenAI 키가 없을 �
 const TRANSCRIBE = 'gpt-4o-mini-transcribe';
 const LIVE_TRANSCRIBE = 'gpt-live-transcribe';         // 말해서 넣기 실시간 받아쓰기 (녹음하는 동안 글자가 옴)
 const VOICE_TOKEN_LIMIT = 30;                // 1인당 하루 실시간 받아쓰기 키 발급 수 (실패해도 녹음 파일로 다시 보내므로 넉넉히)
-const MAX_TRANSCRIPT_CHARS = 500;            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
+const MAX_TRANSCRIPT_CHARS = 500;
+const REVIEW_TOKEN_LIMIT = 20;               // 1인당 하루 '말로 답하는 복습' 받아쓰기 연결 수 (복습 한 번에 보통 1번)            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
 const MAX_ASK_CHARS = 300;
 const TALK_DAY_SEC = 15 * 60;                // 1인당 하루 대화 시간 (초)
@@ -129,7 +130,7 @@ export async function handle(request, env, deps = {}) {
     });
   }
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
-  if (isVoiceToken) return handleVoiceToken(request, env, reply, voiceKey, `voicetok:${user.sub}:${day}`);
+  if (isVoiceToken) return handleVoiceToken(request, env, reply, voiceKey, `voicetok:${user.sub}:${day}`, `revtok:${user.sub}:${day}`);
   if (isAsk) return handleAsk(request, env, reply, askKey);
   if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
   if (path === '/talk/end') return handleTalkEnd(request, env, reply, talkKey, user);
@@ -434,15 +435,18 @@ async function handleVoice(request, env, reply, key) {
 
 /** 말해서 넣기 실시간 받아쓰기: 앱이 녹음하면서 OpenAI로 바로 소리를 보내도록 몇 분짜리 임시 키를 줌.
  * 횟수는 받아쓴 글자로 /voice를 부를 때 셈 (여기서는 키 발급 수만 따로 제한) */
-async function handleVoiceToken(request, env, reply, voiceKey, tokenKey) {
+async function handleVoiceToken(request, env, reply, voiceKey, voiceTokenKey, reviewTokenKey) {
   if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
   let body;
   try { body = await request.json(); } catch { body = null; }
-  if ((Number(await env.USAGE.get(voiceKey)) || 0) >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
+  // review: 말로 답하는 복습 (복습 동안 연결 하나를 계속 씀). 말해서 넣기 횟수와 따로 셈
+  const review = body?.purpose === 'review';
+  const tokenKey = review ? reviewTokenKey : voiceTokenKey;
+  if (!review && (Number(await env.USAGE.get(voiceKey)) || 0) >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
   const issued = Number(await env.USAGE.get(tokenKey)) || 0;
-  if (issued >= VOICE_TOKEN_LIMIT) return reply(429, { error: 'token_limit' });
-  // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 두 언어를 알려 줌 (앱에서 직접 추가한 언어는 코드가 없어서 뺌)
-  const languages = [body?.target, body?.native].filter((c) => typeof c === 'string' && LANG_NAMES[c]);
+  if (issued >= (review ? REVIEW_TOKEN_LIMIT : VOICE_TOKEN_LIMIT)) return reply(429, { error: 'token_limit' });
+  // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 언어를 알려 줌 (복습은 배우는 언어만. 앱에서 직접 추가한 언어는 코드가 없어서 뺌)
+  const languages = (review ? [body?.target] : [body?.target, body?.native]).filter((c) => typeof c === 'string' && LANG_NAMES[c]);
   const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },

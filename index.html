@@ -503,6 +503,8 @@ textarea.eng { font-family: var(--serif); }
 .consent-card .small-note { color: var(--muted); font-size: 12.5px; }
 .report-btn { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 6px; }
 .report-btn.wide { display: block; margin: 16px auto 0; }
+.apple-login { background: #000; color: #fff; }
+:root[data-theme="dark"] .apple-login { background: #fff; color: #000; }
 .set-group { margin: 20px 6px 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .set-group:first-child { margin-top: 4px; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1059,7 +1061,10 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v133';
+const APP_VERSION = 'v134';
+// iOS·안드로이드 앱(Capacitor) 안에서 돌면 true: 로그인·알림을 기기 기능으로 (웹에서는 기존 방식 그대로)
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const NP = window.Capacitor?.Plugins || {};
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2121,7 +2126,7 @@ function scanEditorHTML(e) {
   let body;
   if (!fbReady || !user) {
     body = `<p class="sync-line">로그인하면 쓸 수 있어요.</p>
-      ${fbReady ? '<button class="btn wide" data-act="login">Google로 로그인</button>' : ''}`;
+      ${fbReady ? loginButtonsHTML(false) : ''}`;
   } else if (e.recording) {
     body = `<div class="rec" role="status" aria-live="polite">
       <b>${targetLang(e.mode).name}나 ${nativeLang(e.mode).name}로 말해 보세요</b>
@@ -2612,7 +2617,7 @@ function renderTalk() {
   let body = '', actions = '';
   if (!fbReady || !user) {
     body = `<div class="talk-hero">${MASCOT}<b>로그인하면 ${josa(botName(), '이랑', '랑')} 대화할 수 있어요</b></div>`;
-    actions = fbReady ? '<button class="btn primary wide" data-act="login">Google로 로그인</button>' : '';
+    actions = fbReady ? loginButtonsHTML() : '';
   } else if (t.status === 'idle') {
     loadCalendar();
     body = `<div class="talk-hero small">${MASCOT}<b>${josa(botName(), '이랑', '랑')} ${learn}로 수다 떨기</b>
@@ -2942,9 +2947,12 @@ const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.g
 // 배우는 언어 수준 (언어 모드마다, CEFR): 대화 상대의 말 난이도, 화제 브리핑·표현, 대화 정리에 반영
 // ---------- 푸시 알림: 정해 둔 시간에 복습·대화 알림 (서버가 5분마다 확인해서 보냄) ----------
 const PUSH_PUBLIC = 'BGNmCLCq2TfDghWABZzTeUg9XPg_Zyk5PqT7VAJCxJytv09pHFEdLp03eS3J6H5CV2X2f7ImLnkHHjFpcd8TWeQ';   // Worker 비밀값 VAPID_JWK의 공개 키
-const pushOn = () => !!(user && prefs.push && 'PushManager' in window);
+const canPush = () => NATIVE ? !!NP.FirebaseMessaging : 'PushManager' in window && 'serviceWorker' in navigator && 'Notification' in window;
+const pushBlocked = () => !NATIVE && 'Notification' in window && Notification.permission === 'denied';
+const pushOn = () => !!(user && prefs.push && canPush());
 const b64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 async function pushSubscription(create) {
+  if (NATIVE) return null;
   const reg = await navigator.serviceWorker.ready;
   return (await reg.pushManager.getSubscription()) || (create ? reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(PUSH_PUBLIC) }) : null);
 }
@@ -2970,10 +2978,12 @@ function reportPushStatus(now = false) {
   }, now ? 0 : 5000);
 }
 async function savePush(sub) {
-  sub ||= await pushSubscription(false);
-  if (!sub || !user) return;
+  // 앱: FCM 토큰(Firebase가 APNs로 전달), 웹: 웹 푸시 구독
+  const fcm = NATIVE ? (await NP.FirebaseMessaging.getToken()).token : null;
+  sub ||= NATIVE ? null : await pushSubscription(false);
+  if ((!sub && !fcm) || !user) return;
   const status = pushStatus();
-  const res = await pushPost('/push/save', { subscription: sub.toJSON(), alarms: prefs.alarms || [], tz: new Date().getTimezoneOffset(), app: location.origin + location.pathname, botName: botName(), status });
+  const res = await pushPost('/push/save', { ...(fcm ? { fcm } : { subscription: sub.toJSON() }), alarms: prefs.alarms || [], tz: new Date().getTimezoneOffset(), app: location.origin + location.pathname, botName: botName(), status });
   if (!res.ok) throw new Error(`save ${res.status}`);
   lastPushStatus = JSON.stringify(status);
 }
@@ -2984,12 +2994,12 @@ function savePushSoon() {
 }
 function setAlarms(list) { setPref('alarms', list); renderSettingsPage('alarm'); savePushSoon(); }
 async function enablePush(announce = true) {
-  if (!user || !('Notification' in window)) return;
+  if (!user || !canPush()) return;
   // 아이폰: 알림 허용 묻기는 누른 그 순간에
-  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-  if (perm !== 'granted') { toast('알림이 허용되지 않았어요.'); renderSettingsPage('alarm'); return; }
+  const perm = NATIVE ? (await NP.FirebaseMessaging.requestPermissions()).receive : Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (perm !== 'granted') { toast('알림이 허용되지 않았어요. 휴대폰 설정 → 알림에서 허용할 수 있어요.'); renderSettingsPage('alarm'); return; }
   try {
-    const sub = await pushSubscription(true);
+    const sub = NATIVE ? null : await pushSubscription(true);
     if (!(prefs.alarms || []).length) setPref('alarms', [{ time: '20:00', kind: 'review', on: true }]);
     await savePush(sub);
     setPref('push', true);
@@ -3000,7 +3010,7 @@ async function enablePush(announce = true) {
 async function disablePush() {
   setPref('push', false);
   renderSettingsPage('alarm');
-  try { await (await pushSubscription(false))?.unsubscribe(); await pushPost('/push/off', {}); } catch {}
+  try { if (NATIVE) await NP.FirebaseMessaging.deleteToken(); else await (await pushSubscription(false))?.unsubscribe(); await pushPost('/push/off', {}); } catch {}
 }
 // ---------- 외부 AI 사용 동의: AI 기능을 처음 쓸 때 무엇을 어디로 보내는지 알리고 허락받음 (설정에서 철회) ----------
 let consentPending = null;
@@ -3063,7 +3073,7 @@ function renderOnboard() {
       <p class="sync-line">돌려서 고르세요. 오늘 탭의 링이 이 목표만큼 채워져요.</p>`;
     next = '다음';
   } else {
-    const can = user && 'PushManager' in window && 'Notification' in window && Notification.permission !== 'denied';
+    const can = user && canPush() && !pushBlocked();
     body = `<h2 class="ob-title">대화 상대가 나를 뭐라고 부를까요?</h2>
       <input class="text" id="ob-name" maxlength="20" enterkeyhint="done" placeholder="비워 두면 이름 없이 불러요" value="${esc(prefs.talkName)}">
       <h2 class="ob-title">알림을 받을까요?</h2>
@@ -3082,7 +3092,7 @@ function renderOnboard() {
   if (ob.step === 1) initWheels();
 }
 /** 오늘 탭에서 알림 켜기를 한 번 권함: 알림을 받을 수 있고, 아직 안 켰고, 그만 묻기를 안 눌렀을 때 */
-const pushNudge = () => !!(user && 'PushManager' in window && 'Notification' in window && Notification.permission !== 'denied' && !prefs.push && !prefs.pushAsked && modeCards().length);
+const pushNudge = () => !!(user && canPush() && !pushBlocked() && !prefs.push && !prefs.pushAsked && modeCards().length);
 /** 알림이나 링크로 바로 들어오기: ?go=review(복습) · talk(대화) · add(카드 추가) */
 function handleGo(go) {
   if (go === 'review') {
@@ -3667,7 +3677,8 @@ function scheduleSync(delay = 3000) {
 // ----- 로그인 (아이폰 홈 화면 앱에서도 되도록 팝업 대신 페이지 이동 방식) -----
 // Google에서 받은 토큰으로 Firebase에 로그인하면, 이후로는 Firebase가 로그인을 유지해 줌
 const redirectUri = () => new URL('./', location.href).href;
-function startLogin() {
+function startLogin(provider = 'google') {
+  if (NATIVE) { nativeLogin(provider); return; }
   const state = uid();
   try { localStorage.setItem(OAUTH_STATE_KEY, state); } catch {}
   const params = new URLSearchParams({
@@ -3680,6 +3691,23 @@ function startLogin() {
   });
   location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 }
+/** 앱 안 로그인: 기기의 로그인 창(Google·Apple)으로 받은 토큰으로 Firebase 로그인 (웹뷰 안 구글 로그인은 구글이 막음) */
+async function nativeLogin(provider) {
+  try {
+    const A = NP.FirebaseAuthentication;
+    if (provider === 'apple') {
+      const r = await A.signInWithApple();
+      await fb.signInWithCredential(fbAuth, new fb.OAuthProvider('apple.com').credential({ idToken: r.credential.idToken, rawNonce: r.credential.nonce }));
+    } else {
+      const r = await A.signInWithGoogle({ scopes: [] });
+      await fb.signInWithCredential(fbAuth, fb.GoogleAuthProvider.credential(r.credential.idToken, r.credential.accessToken));
+    }
+  } catch (err) {
+    if (!/cancel/i.test(String(err?.message || err))) toast(`로그인하지 못했어요. (${errText(err)})`);
+  }
+}
+/** 로그인 버튼들: 앱에서는 Apple 로그인도 (같은 크기로 먼저) */
+const loginButtonsHTML = (primary = true) => `${NATIVE ? `<button class="btn ${primary ? 'apple-login ' : ''}wide" data-act="login" data-provider="apple"> Apple로 로그인</button>` : ''}<button class="btn ${primary ? 'primary ' : ''}wide" data-act="login">Google로 로그인</button>`;
 /** 로그인하고 돌아왔으면 주소의 #access_token으로 Firebase 로그인. 반환: 'ok' | { error } | null */
 async function handleOAuthReturn() {
   if (!/[#&]state=/.test(location.hash)) return null;
@@ -3726,6 +3754,10 @@ async function deleteAccount() {
     const res = await fetch(talkURL('/account/delete'), { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
     if (!res.ok) throw new Error(`server ${res.status}`);
     try { await (await pushSubscription(false))?.unsubscribe(); } catch {}
+    // Apple로 로그인한 계정: Apple 쪽 연결도 끊음 (App Store 가이드라인 5.1.1(v))
+    if (NATIVE && user.providerData.some((p) => p.providerId === 'apple.com')) {
+      try { const r = await NP.FirebaseAuthentication.signInWithApple(); if (r.credential?.authorizationCode) await fb.revokeAccessToken(fbAuth, r.credential.authorizationCode); } catch (err) { console.warn('apple revoke', err); }
+    }
     Object.assign(syncMeta, { uid: null, pulledAt: 0, pushedAt: 0 });
     await saveSyncMeta();
     await fb.deleteUser(user);
@@ -4180,7 +4212,7 @@ function renderSettingsPage(page) {
     </div>`;
   } else if (page === 'topics') {
     box.innerHTML = `<div class="field">
-      ${swRow('구글 캘린더로 일상 대화', !!prefs.calendar, 'cal-switch')}
+      ${NATIVE ? '<span class="sub">구글 캘린더로 일상 대화</span><p class="sync-line">앱에서는 곧 지원할게요.</p>' : swRow('구글 캘린더로 일상 대화', !!prefs.calendar, 'cal-switch')}
       ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>'
         : prefs.calendar ? `<p class="sync-line">그저께부터 내일까지 일정으로 "치과 어땠어?"처럼 말을 걸어요.${cal.events ? ` 지금 읽은 일정 ${cal.events.length}개.` : ''}</p>
           ${cal.needReconnect ? `<p class="sync-line warn">지금은 기본 캘린더만 읽고 있어요. 직접 만든 캘린더(미팅, 마감 등)의 일정도 읽으려면 한 번 다시 연결해 주세요.</p>
@@ -4207,9 +4239,9 @@ function renderSettingsPage(page) {
       <p class="sync-line">대화를 정리할 때 내가 말한 좋아하는 것, 일상, 계획을 짧게 기억해 두었다가 다음 대화에서 친구처럼 자연스럽게 꺼내요. 기억은 이 기기에만 저장하고, 대화할 때만 대화 AI(OpenAI)에 전해요.</p>
     </div>`;
   } else if (page === 'alarm') {
-    const can = 'PushManager' in window && 'serviceWorker' in navigator && 'Notification' in window;
-    const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-    const blocked = can && Notification.permission === 'denied';
+    const can = canPush();
+    const standalone = NATIVE || matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    const blocked = can && pushBlocked();
     const alarms = prefs.alarms || [];
     box.innerHTML = `<div class="field">
       ${swRow('알림 받기', !!prefs.push && can && !blocked, 'push-switch')}
@@ -4425,7 +4457,7 @@ function renderSyncStatus() {
     box.innerHTML = `<div class="field">
       <h3>동기화</h3>
       <p class="sync-line">로그인하면 카드와 복습 기록이 자동으로 저장돼요. 같은 계정으로 로그인한 다른 기기와도 맞춰져요. (사진은 이 기기에만 있어요)</p>
-      <button class="btn primary wide" data-act="login">Google로 로그인</button>
+      ${loginButtonsHTML()}
     </div>`;
     return;
   }
@@ -5135,7 +5167,7 @@ document.addEventListener('click', (ev) => {
       renderEditor();
       break;
     }
-    case 'login': startLogin(); break;
+    case 'login': startLogin(el.dataset.provider); break;
     case 'sync-now': syncNow({ quiet: false }); break;
     case 'logout': logout(); break;
     case 'delete-account': deleteAccount(); break;
@@ -5301,7 +5333,9 @@ async function init() {
       if (u && changed && prefs.push) savePush().catch(() => {});   // 구독이 바뀌었을 수 있어서 열 때마다 한 번
     });
   }
-  if ('serviceWorker' in navigator) {
+  // 앱: 알림을 누르면 그 화면으로
+  if (NATIVE) NP.FirebaseMessaging?.addListener('notificationActionPerformed', (e) => { const go = e.notification?.data?.go; if (go) handleGo(go); });
+  if ('serviceWorker' in navigator && !NATIVE) {
     // 처음 설치될 때는 이미 최신이므로 새로고침하지 않음
     const hadController = !!navigator.serviceWorker.controller;
     let reloading = false;

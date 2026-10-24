@@ -229,6 +229,42 @@ async function sendPush(env, sub, msg) {
   if (!res.ok) console.error('push failed', res.status, (await res.text().catch(() => '')).slice(0, 200));
   return res.status;
 }
+/** 앱(iOS·안드로이드) 알림: Firebase Cloud Messaging v1로 보냄 (iOS는 Firebase가 APNs로 전달).
+ * Worker 비밀값 FCM_SA = Firebase 서비스 계정 JSON (Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키) */
+let fcmAuth = { token: null, until: 0 };
+async function fcmAccessToken(env) {
+  if (fcmAuth.token && Date.now() < fcmAuth.until) return fcmAuth.token;
+  const sa = JSON.parse(env.FCM_SA);
+  const pem = sa.private_key.replace(/-----[^-]+-----|\s/g, '');
+  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const now = Math.floor(Date.now() / 1000);
+  const part = (o) => b64u(te.encode(JSON.stringify(o)));
+  const unsigned = `${part({ alg: 'RS256', typ: 'JWT' })}.${part({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 })}`;
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, te.encode(unsigned));
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${b64u(sig)}` }),
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error(`fcm auth ${res.status}`);
+  fcmAuth = { token: data.access_token, until: Date.now() + (data.expires_in - 300) * 1000, project: sa.project_id };
+  return fcmAuth.token;
+}
+/** 반환: 응답 상태 (404면 앱을 지웠거나 토큰이 바뀐 것 → 410으로 바꿔 구독 삭제) */
+async function sendFcm(env, token, msg) {
+  if (!env.FCM_SA) return 0;
+  const access = await fcmAccessToken(env);
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${fcmAuth.project}/messages:send`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${access}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: { token, notification: { title: msg.title, body: msg.body }, data: { go: new URL(msg.url).searchParams.get('go') || '' }, apns: { payload: { aps: { sound: 'default', 'thread-id': msg.tag || 'mooni' } } } } }),
+  });
+  if (!res.ok) console.error('fcm failed', res.status, (await res.text().catch(() => '')).slice(0, 200));
+  return res.status === 404 ? 410 : res.status;
+}
+/** 웹 푸시 또는 앱 알림 */
+const deliver = (env, rec, msg) => (rec.fcm ? sendFcm(env, rec.fcm, msg) : sendPush(env, rec.sub, msg));
+
 /** 알림 문구 정하기. 이미 다 했으면 null (건너뜀) */
 function alarmMessage(rec, kind, localDay) {
   const st = rec.status || {};
@@ -246,14 +282,14 @@ function alarmMessage(rec, kind, localDay) {
   return { title: '대화할 시간이에요 💬', body: `${bot}: Hey! How was your day? 오늘 있었던 일 들려줘요.`, url, tag: 'talk' };
 }
 async function sendAlarms(env) {
-  if (!env.VAPID_JWK) return;
+  if (!env.VAPID_JWK && !env.FCM_SA) return;
   const now = Date.now();
   let cursor, sent = 0;
   do {
     const page = await env.USAGE.list({ prefix: 'push:', cursor });
     for (const k of page.keys) {
       const rec = JSON.parse(await env.USAGE.get(k.name) || 'null');
-      if (!rec?.sub || !rec.alarms?.length) continue;
+      if ((!rec?.sub && !rec?.fcm) || !rec.alarms?.length) continue;
       const local = new Date(now - (rec.tz || 0) * 60000);   // tz: 앱의 getTimezoneOffset (분)
       const localDay = local.toISOString().slice(0, 10);
       const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
@@ -267,7 +303,7 @@ async function sendAlarms(env) {
         changed = true;
         const msg = alarmMessage(rec, a.kind, localDay);
         if (!msg) continue;
-        const status = await sendPush(env, rec.sub, msg).catch((err) => { console.error('push error', err); return 0; });
+        const status = await deliver(env, rec, msg).catch((err) => { console.error('push error', err); return 0; });
         if (status === 404 || status === 410) { gone = true; break; }
         sent += 1;
       }
@@ -321,16 +357,17 @@ async function handlePush(path, request, env, reply, user) {
     return reply(200, { ok: true });
   }
   if (path === '/push/test') {
-    if (!rec?.sub || !env.VAPID_JWK) return reply(400, { error: 'not_subscribed' });
-    const status = await sendPush(env, rec.sub, { title: '알림이 잘 와요 🔔', body: '정해 둔 시간에 이렇게 알려 줄게요.', url: `${rec.app}?go=review`, tag: 'test' });
+    if (!rec?.sub && !rec?.fcm) return reply(400, { error: 'not_subscribed' });
+    const status = await deliver(env, rec, { title: '알림이 잘 와요 🔔', body: '정해 둔 시간에 이렇게 알려 줄게요.', url: `${rec.app}?go=review`, tag: 'test' });
     if (status === 404 || status === 410) { await env.USAGE.delete(key); return reply(410, { error: 'gone' }); }
     return reply(status >= 200 && status < 300 ? 200 : 502, { status });
   }
   // /push/save
   const sub = body?.subscription;
+  const fcm = typeof body?.fcm === 'string' && /^[\w:.-]{20,400}$/.test(body.fcm) ? body.fcm : null;
   const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
   const app = typeof body?.app === 'string' ? body.app.slice(0, 300) : '';
-  if (!/^https:\/\/[^\s]+$/.test(sub?.endpoint || '') || typeof sub?.keys?.p256dh !== 'string' || typeof sub?.keys?.auth !== 'string') return reply(400, { error: 'subscription' });
+  if (!fcm && (!/^https:\/\/[^\s]+$/.test(sub?.endpoint || '') || typeof sub?.keys?.p256dh !== 'string' || typeof sub?.keys?.auth !== 'string')) return reply(400, { error: 'subscription' });
   if (!allowed.some((o) => app.startsWith(o))) return reply(400, { error: 'app' });
   const alarms = (Array.isArray(body.alarms) ? body.alarms : []).slice(0, PUSH_MAX_ALARMS)
     .filter((a) => /^([01]\d|2[0-3]):[0-5]\d$/.test(a?.time) && ['review', 'talk'].includes(a?.kind))
@@ -339,7 +376,7 @@ async function handlePush(path, request, env, reply, user) {
   const sent = {};
   for (const [i, a] of alarms.entries()) if (rec?.alarms?.[i]?.time === a.time && rec?.sent?.[i]) sent[i] = rec.sent[i];
   const next = {
-    sub: { endpoint: sub.endpoint.slice(0, 1000), keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 100) } },
+    ...(fcm ? { fcm } : { sub: { endpoint: sub.endpoint.slice(0, 1000), keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 100) } } }),
     alarms, sent, app,
     tz: Number.isFinite(body.tz) ? Math.max(-840, Math.min(840, Math.round(body.tz))) : -540,
     botName: clean(body.botName, 20).replace(/["\\]/g, '') || 'Marin',

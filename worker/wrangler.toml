@@ -10,7 +10,8 @@ region = "aws:us-east-1"
 
 [vars]
 FIREBASE_PROJECT_ID = "mooni-wordbook-66dd9"
-ALLOWED_ORIGINS = "https://jeongmoonwon.github.io,http://localhost:8000"
+# capacitor://localhost: iOS 앱, https://localhost: 안드로이드 앱
+ALLOWED_ORIGINS = "https://jeongmoonwon.github.io,http://localhost:8000,capacitor://localhost,https://localhost"
 # 구글 캘린더 연결 (OAuth 웹 클라이언트 ID). 비밀번호는 `npx wrangler secret put GOOGLE_CLIENT_SECRET`
 GOOGLE_CLIENT_ID = "380302763226-0d20kn99tt1u53s8jqbn6t1u27fmi5no.apps.googleusercontent.com"
 

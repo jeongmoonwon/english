@@ -74,6 +74,8 @@ const SCHEMA = {
 
 export default {
   fetch: (request, env) => handle(request, env),
+  // 5분마다: 정해 둔 시간이 된 알림 보내기
+  scheduled: (event, env, ctx) => ctx.waitUntil(sendAlarms(env)),
 };
 
 export async function handle(request, env, deps = {}) {
@@ -94,7 +96,8 @@ export async function handle(request, env, deps = {}) {
   const isInterest = request.method === 'POST' && ['/interest/get', '/interest/save', '/interest/topics'].includes(path);
   const isFeedback = request.method === 'POST' && path === '/feedback';
   const isStory = request.method === 'POST' && path === '/story';
-  if (!isUsage && !isVoice && !isVoiceToken && !isStory && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  const isPush = request.method === 'POST' && ['/push/save', '/push/status', '/push/off', '/push/test'].includes(path);
+  if (!isUsage && !isVoice && !isVoiceToken && !isStory && !isPush && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
   if (isFeedback) return handleFeedback(request, env, reply, deps);
 
@@ -132,6 +135,7 @@ export async function handle(request, env, deps = {}) {
   if (path === '/talk/end') return handleTalkEnd(request, env, reply, talkKey, user);
   if (path === '/calendar/start') return handleCalendarStart(request, env, reply, user);
   if (isInterest) return handleInterest(path, request, env, reply, user);
+  if (isPush) return handlePush(path, request, env, reply, user);
   if (isStory) return handleStory(request, env, reply, `story:${user.sub}:${day}`);
   if (path === '/calendar/events') return handleCalendarEvents(request, env, reply, user);
   if (path === '/calendar/disconnect') return handleCalendarDisconnect(env, reply, user);
@@ -170,6 +174,153 @@ export async function handle(request, env, deps = {}) {
 
 class Refusal extends Error {}
 class Busy extends Error {}
+
+// ----- 푸시 알림: 정해 둔 시간에 복습·대화하라고 알려 줌 -----
+// 앱이 구독(브라우저가 준 주소·키)과 알림 시간을 보내면 KV에 두고, 5분마다 시간이 된 알림을 보냄.
+// 앱은 오늘 남은 복습·대화도 알려 줘서, 이미 다 했으면 그 알림은 건너뜀
+const PUSH_MAX_ALARMS = 3;
+const te = new TextEncoder();
+const concatBytes = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let i = 0; for (const p of parts) { out.set(p, i); i += p.length; } return out; };
+async function hkdf(salt, ikm, info, len) {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, len * 8));
+}
+/** 알림 내용 암호화 (RFC 8291, aes128gcm): 받는 기기만 풀 수 있게 */
+export async function encryptPush(keys, payload) {
+  const uaPub = b64urlBytes(keys.p256dh), auth = b64urlBytes(keys.auth);
+  const eph = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', eph.publicKey));
+  const uaKey = await crypto.subtle.importKey('raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, eph.privateKey, 256));
+  const ikm = await hkdf(auth, shared, concatBytes(te.encode('WebPush: info\0'), uaPub, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, te.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, te.encode('Content-Encoding: nonce\0'), 12);
+  const key = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const body = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, concatBytes(te.encode(payload), new Uint8Array([2]))));
+  const head = new Uint8Array(21);
+  head.set(salt, 0);
+  new DataView(head.buffer).setUint32(16, 4096);
+  head[20] = asPub.length;
+  return concatBytes(head, asPub, body);
+}
+/** 보내는 쪽 확인 (VAPID, RFC 8292) */
+export async function vapidAuth(jwkText, endpoint, subject) {
+  const { d, x, y } = JSON.parse(jwkText);
+  const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', d, x, y }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const part = (o) => b64u(te.encode(JSON.stringify(o)));
+  const unsigned = `${part({ typ: 'JWT', alg: 'ES256' })}.${part({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: subject })}`;
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, te.encode(unsigned));
+  return `vapid t=${unsigned}.${b64u(sig)}, k=${b64u(concatBytes(new Uint8Array([4]), b64urlBytes(x), b64urlBytes(y)))}`;
+}
+/** 알림 하나 보내기. 반환: 응답 상태 (404·410이면 구독이 없어진 것) */
+async function sendPush(env, sub, msg) {
+  const res = await fetch(sub.endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: await vapidAuth(env.VAPID_JWK, sub.endpoint, `mailto:${env.FEEDBACK_TO || 'noreply@example.com'}`),
+      'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '3600', Urgency: 'normal',
+    },
+    body: await encryptPush(sub.keys, JSON.stringify(msg)),
+  });
+  if (!res.ok) console.error('push failed', res.status, (await res.text().catch(() => '')).slice(0, 200));
+  return res.status;
+}
+/** 알림 문구 정하기. 이미 다 했으면 null (건너뜀) */
+function alarmMessage(rec, kind, localDay) {
+  const st = rec.status || {};
+  const today = st.day === localDay;
+  const yesterday = st.day && new Date(`${st.day}T00:00:00Z`).getTime() + 86400000 === new Date(`${localDay}T00:00:00Z`).getTime();
+  const url = `${rec.app}?go=${kind}`;
+  if (kind === 'review') {
+    const due = today ? st.due : yesterday ? st.dueTomorrow : null;
+    if (today && (st.reviewLeft <= 0 || st.due <= 0)) return null;
+    if (!today && due === 0) return null;
+    return { title: '복습할 시간이에요 📚', body: due ? `복습할 카드 ${due}장이 기다려요.` : '오늘 복습할 카드를 확인해 볼까요?', url, tag: 'review' };
+  }
+  if (today && st.talkLeft <= 0) return null;
+  const bot = rec.botName || 'Marin';
+  return { title: '대화할 시간이에요 💬', body: `${bot}: Hey! How was your day? 오늘 있었던 일 들려줘요.`, url, tag: 'talk' };
+}
+async function sendAlarms(env) {
+  if (!env.VAPID_JWK) return;
+  const now = Date.now();
+  let cursor, sent = 0;
+  do {
+    const page = await env.USAGE.list({ prefix: 'push:', cursor });
+    for (const k of page.keys) {
+      const rec = JSON.parse(await env.USAGE.get(k.name) || 'null');
+      if (!rec?.sub || !rec.alarms?.length) continue;
+      const local = new Date(now - (rec.tz || 0) * 60000);   // tz: 앱의 getTimezoneOffset (분)
+      const localDay = local.toISOString().slice(0, 10);
+      const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
+      let changed = false, gone = false;
+      for (const [i, a] of rec.alarms.entries()) {
+        const [h, m] = a.time.split(':').map(Number);
+        const late = minutes - (h * 60 + m);
+        // 5분마다 돌므로 정한 시각부터 10분 안에 한 번만
+        if (!a.on || late < 0 || late >= 10 || rec.sent?.[i] === localDay) continue;
+        rec.sent = { ...rec.sent, [i]: localDay };
+        changed = true;
+        const msg = alarmMessage(rec, a.kind, localDay);
+        if (!msg) continue;
+        const status = await sendPush(env, rec.sub, msg).catch((err) => { console.error('push error', err); return 0; });
+        if (status === 404 || status === 410) { gone = true; break; }
+        sent += 1;
+      }
+      if (gone) await env.USAGE.delete(k.name);
+      else if (changed) await env.USAGE.put(k.name, JSON.stringify(rec));
+    }
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  if (sent) console.log('alarms sent', sent);
+}
+const cleanStatus = (s) => (s && typeof s === 'object' ? {
+  day: /^\d{4}-\d{2}-\d{2}$/.test(s.day) ? s.day : '',
+  due: Math.max(0, Math.floor(Number(s.due) || 0)), dueTomorrow: Math.max(0, Math.floor(Number(s.dueTomorrow) || 0)),
+  reviewLeft: Math.max(0, Math.floor(Number(s.reviewLeft) || 0)), talkLeft: Math.max(0, Math.floor(Number(s.talkLeft) || 0)),
+} : null);
+async function handlePush(path, request, env, reply, user) {
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const key = `push:${user.sub}`;
+  if (path === '/push/off') { await env.USAGE.delete(key); return reply(200, { ok: true }); }
+  const rec = JSON.parse(await env.USAGE.get(key) || 'null');
+  if (path === '/push/status') {
+    if (!rec) return reply(200, { ok: false });
+    rec.status = cleanStatus(body?.status);
+    if (Number.isFinite(body?.tz)) rec.tz = Math.max(-840, Math.min(840, Math.round(body.tz)));
+    await env.USAGE.put(key, JSON.stringify(rec));
+    return reply(200, { ok: true });
+  }
+  if (path === '/push/test') {
+    if (!rec?.sub || !env.VAPID_JWK) return reply(400, { error: 'not_subscribed' });
+    const status = await sendPush(env, rec.sub, { title: '알림이 잘 와요 🔔', body: '정해 둔 시간에 이렇게 알려 줄게요.', url: `${rec.app}?go=review`, tag: 'test' });
+    if (status === 404 || status === 410) { await env.USAGE.delete(key); return reply(410, { error: 'gone' }); }
+    return reply(status >= 200 && status < 300 ? 200 : 502, { status });
+  }
+  // /push/save
+  const sub = body?.subscription;
+  const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const app = typeof body?.app === 'string' ? body.app.slice(0, 300) : '';
+  if (!/^https:\/\/[^\s]+$/.test(sub?.endpoint || '') || typeof sub?.keys?.p256dh !== 'string' || typeof sub?.keys?.auth !== 'string') return reply(400, { error: 'subscription' });
+  if (!allowed.some((o) => app.startsWith(o))) return reply(400, { error: 'app' });
+  const alarms = (Array.isArray(body.alarms) ? body.alarms : []).slice(0, PUSH_MAX_ALARMS)
+    .filter((a) => /^([01]\d|2[0-3]):[0-5]\d$/.test(a?.time) && ['review', 'talk'].includes(a?.kind))
+    .map((a) => ({ time: a.time, kind: a.kind, on: a.on !== false }));
+  // 시간을 바꾼 알림은 오늘 다시 보낼 수 있게
+  const sent = {};
+  for (const [i, a] of alarms.entries()) if (rec?.alarms?.[i]?.time === a.time && rec?.sent?.[i]) sent[i] = rec.sent[i];
+  const next = {
+    sub: { endpoint: sub.endpoint.slice(0, 1000), keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 100) } },
+    alarms, sent, app,
+    tz: Number.isFinite(body.tz) ? Math.max(-840, Math.min(840, Math.round(body.tz))) : -540,
+    botName: clean(body.botName, 20).replace(/["\\]/g, '') || 'Marin',
+    status: cleanStatus(body.status) || rec?.status || null,
+  };
+  await env.USAGE.put(key, JSON.stringify(next));
+  return reply(200, { ok: true });
+}
 
 /** OpenAI Responses API 한 번 부르기. schema를 주면 그 모양의 JSON으로 받음. 반환: { text, data } */
 async function askOpenAI(env, { model = MODEL, instructions, input, schema, effort = 'low', tools, include, maxTokens = 8000 }) {

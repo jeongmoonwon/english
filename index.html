@@ -404,8 +404,15 @@ textarea.eng { font-family: var(--serif); }
 .talk-hero.speaking .mascot { animation: talk-bob .45s ease-in-out infinite; }
 @keyframes talk-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .talk-hero b { font-size: 19px; }
-.talk-hero .talk-hint { margin: -4px 0 0; font-size: 12px; color: var(--muted); }
-.talk-hero[data-act] { cursor: pointer; }
+/* 대화 중 가운데 동그라미: 듣는 중이면 숨 쉬는 마이크, 대화 상대가 말하는 중이면 누르는 정지 버튼 */
+.talk-mic { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; margin: 2px 0; border: 0; padding: 0; }
+.talk-mic.on { background: var(--g2, var(--accent)); color: #fff; animation: mic-breathe 1.6s ease-out infinite; }
+.talk-mic.on .ico { width: 26px; height: 26px; }
+.talk-mic.stop { background: var(--surface); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent) inset, 0 6px 18px rgba(30, 20, 60, .12); cursor: pointer; }
+.talk-mic.stop span { width: 20px; height: 20px; border-radius: 5px; background: var(--g2, var(--accent)); }
+.talk-mic.stop:active { transform: scale(.94); }
+@keyframes mic-breathe { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent); } 100% { box-shadow: 0 0 0 16px transparent; } }
+@media (prefers-reduced-motion: reduce) { .talk-mic.on { animation: none; } }
 .talk-hero p { margin: 0; color: var(--muted); }
 .talk-log { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .bubble { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 16px; line-height: 1.4; }
@@ -979,7 +986,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v114';
+const APP_VERSION = 'v115';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2363,8 +2370,9 @@ function renderTalk() {
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
-    body = `${t.topic ? `<span class="talk-topic-chip">${t.topic.kind === 'interest' ? '✨' : '📅'} ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}" ${t.speaking ? 'role="button" tabindex="0" data-act="talk-interrupt"' : ''}>${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
-      ${t.speaking ? '<p class="talk-hint">끝나면 말해 주세요 · 눌러서 끊기</p>' : ''}
+    body = `${t.topic ? `<span class="talk-topic-chip">${t.topic.kind === 'interest' ? '✨' : '📅'} ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
+      ${t.speaking ? `<button class="talk-mic stop" data-act="talk-interrupt" aria-label="${esc(botName())}의 말 끊기"><span></span></button>`
+        : `<span class="talk-mic on" aria-hidden="true">${icon('mic')}</span>`}
       <p><span id="talk-left">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span> 남음</p></div>${log}`;
     actions = '<button class="btn primary wide" data-act="talk-end">대화 끝내고 정리하기</button>';
   } else if (t.status === 'reviewing') {
@@ -2436,7 +2444,7 @@ function talkMicLater(t, ms) {
   clearTimeout(t.micTimer);
   t.micTimer = setTimeout(() => { if (talk === t && t.status === 'live') { talkMic(t, true); renderTalk(); } }, Math.max(0, ms));
 }
-/** 화면을 눌러 대화 상대의 말 끊기: 남은 소리를 버리고 바로 마이크를 켬 */
+/** 정지 버튼으로 대화 상대의 말 끊기: 남은 소리를 버리고 바로 마이크를 켬 */
 function interruptTalk(t = talk) {
   if (t.status !== 'live' || !t.speaking) return;
   const send = (o) => { try { t.dc?.send(JSON.stringify(o)); } catch {} };

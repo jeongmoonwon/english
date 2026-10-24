@@ -980,7 +980,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v105';
+const APP_VERSION = 'v106';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1847,7 +1847,8 @@ function entryHTML(e, en, i) {
   const many = e.entries.length > 1;
   return `<div class="field entry">
     <h3>${many ? `카드 ${i + 1}` : '카드'}
-      ${many ? `<button class="x-mini" data-act="remove-entry" data-index="${i}" aria-label="카드 ${i + 1} 빼기">빼기 ✕</button>` : ''}</h3>
+      ${many ? `<button class="x-mini" data-act="remove-entry" data-index="${i}" aria-label="카드 ${i + 1} 빼기">빼기 ✕</button>`
+        : e.cardId ? '' : `<button class="x-mini" data-act="remove-entry" data-index="${i}" aria-label="카드 내용 비우기">비우기 ✕</button>`}</h3>
     <label for="kor-${i}">뜻 · ${nativeLang(e.mode).flag} ${nativeLang(e.mode).name}</label>
     <textarea class="kor" id="kor-${i}" data-side="kor" data-index="${i}" rows="2" placeholder="${nativeLang(e.mode).name} 뜻">${esc(en.korText)}</textarea>
     ${e.cardId ? thumbsHTML('kor', e.korImages) : ''}
@@ -4319,7 +4320,9 @@ document.addEventListener('click', (ev) => {
       $(`#kor-${editor.entries.length - 1}`)?.focus();
       break;
     case 'remove-entry':
-      editor.entries.splice(Number(el.dataset.index), 1);
+      // 마지막 한 장은 빼지 않고 내용만 비움 (분류는 그대로)
+      if (editor.entries.length > 1) editor.entries.splice(Number(el.dataset.index), 1);
+      else Object.assign(editor.entries[0], { korText: '', engText: '', note: '' });
       renderEditor();
       break;
     case 'remove-photo': {

@@ -462,6 +462,24 @@ textarea.eng { font-family: var(--serif); }
 
 .topic-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* 옆으로 넘기는 카드들은 높이가 같음 → 맨 아래 줄(👍👎, 이 얘기 하기)을 카드 바닥에 붙여 카드마다 같은 자리에 */
+.topic-rows { display: flex; flex-direction: column; gap: 6px; }
+.topic-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 9px 12px; background: color-mix(in srgb, var(--muted) 9%, transparent); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); }
+.topic-row span { flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.topic-row i { font-style: normal; color: var(--accent); font-weight: 800; }
+.topic-row.done { color: var(--muted); }
+.story-add { width: 100%; }
+.story-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 16px; padding: 14px; font: inherit; font-size: 16px; background: var(--surface); color: var(--ink); resize: vertical; }
+.brief-body { display: flex; flex-direction: column; gap: 12px; }
+.brief-img { width: 100%; aspect-ratio: 2 / 1; max-height: 180px; object-fit: cover; border-radius: 18px; background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.brief-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.3; }
+.brief-list { margin: 0; padding: 14px 16px 14px 32px; border-radius: 18px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.5; }
+.brief-sub { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.topic-exprs { display: flex; flex-direction: column; gap: 6px; }
+.topic-expr { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; row-gap: 2px; align-items: center; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 10px 14px; background: var(--surface); font: inherit; color: var(--ink); }
+.topic-expr b { font-family: var(--serif); font-size: 15px; }
+.topic-expr span { grid-column: 1; color: var(--muted); font-size: 13px; }
+.topic-expr i { grid-column: 2; grid-row: 1 / span 2; font-style: normal; color: var(--accent); font-weight: 800; font-size: 18px; }
+.topic-expr.saved i { color: var(--good); }
 .talk-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
 .talk-card > .talk-go { margin-top: auto; }
 .topic-src { color: var(--muted); font-size: 12px; text-decoration: none; }
@@ -950,6 +968,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
 <div class="pop" id="mode-sheet" hidden></div>
 <div class="sheet" id="editor" hidden></div>
 <div class="sheet" id="practice" hidden></div>
+<div class="sheet" id="brief" hidden></div>
 <input type="file" id="scan-input" accept="image/*" multiple hidden>
 <input type="file" id="backup-input" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -986,7 +1005,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v116';
+const APP_VERSION = 'v117';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2370,7 +2389,7 @@ function renderTalk() {
   } else if (t.status === 'connecting') {
     body = `<div class="talk-hero live">${MASCOT}<b>${josa(botName(), '을', '를')} 부르고 있어요…</b></div>`;
   } else if (t.status === 'live') {
-    body = `${t.topic ? `<span class="talk-topic-chip">${t.topic.kind === 'interest' ? '✨' : '📅'} ${esc(t.topic.title)} · ${esc(t.topic.when)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
+    body = `${t.topic ? `<span class="talk-topic-chip">${{ interest: '✨', story: '📎' }[t.topic.kind] || '📅'} ${esc(t.topic.title)}</span>` : ''}<div class="talk-hero ${t.speaking ? 'speaking' : 'live'}">${MASCOT}<b>${t.speaking ? `${josa(botName(), '이', '가')} 말하고 있어요` : '듣고 있어요. 편하게 말해 보세요'}</b>
       ${t.speaking ? `<button class="talk-mic stop" data-act="talk-interrupt" aria-label="${esc(botName())}의 말 끊기"><span></span></button>`
         : `<span class="talk-mic on" aria-hidden="true">${icon('mic')}</span>`}
       <p><span id="talk-left">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span> 남음</p></div>${log}`;
@@ -2627,8 +2646,8 @@ async function endTalk() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ScanError(TALK_ERRORS[res.status] || '대화를 정리하지 못했어요.');
     t.items = Array.isArray(data.items) ? data.items : [];
-    // 관심사 화제로 한 대화면 화제 카드의 표현도 함께
-    if (t.topic?.kind === 'interest') for (const e of t.topic.expressions || []) {
+    // 관심사 화제·가져온 이야기로 한 대화면 브리핑의 표현도 함께
+    if (t.topic?.kind === 'interest' || t.topic?.kind === 'story') for (const e of t.topic.expressions || []) {
       if (!t.items.some((x) => x.expression.toLowerCase() === e.expression.toLowerCase())) t.items.push({ kind: 'topic', said: '', expression: e.expression, meaning: e.meaning, note: '' });
     }
     t.checked = new Set(t.items.map((_, i) => i));
@@ -2734,20 +2753,6 @@ function calTopics() {
 /** 오늘의 대화 카드 한 장. topic이 없으면 그냥 수다 */
 function talkCardHTML(topic, i, where) {
   const bot = botName();
-  if (topic?.kind === 'interest') {
-    const vote = intVotes()[topic.key];
-    return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go-topic" data-index="${i}">
-      <span class="talk-tag">✨ 관심사 · ${esc(topic.interest)}${topic.fact ? ' · 재미있는 사실' : ''}</span>
-      <h3>${esc(topic.title)}</h3><p>${esc(topic.summary)}</p>
-      <div class="talk-bottom">
-        <div class="topic-foot">
-          ${topic.url ? `<a class="topic-src" href="${esc(topic.url)}" target="_blank" rel="noopener" data-act="ext-link">${esc(topic.source || '출처')} ↗</a>` : '<span></span>'}
-          <span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" data-index="${i}" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" data-index="${i}" aria-label="이 화제 그만">👎</button></span>
-        </div>
-        <span class="talk-go">${icon('chat')} ${josa(bot, '이랑', '랑')} 이 얘기 하기 ›</span>
-      </div>
-    </section>`;
-  }
   if (topic) {
     const day = topic.when.split(' ')[0];
     const q = topic.kind === 'plan-after' ? `${day === '오늘' ? '' : `${day} `}${josa(topic.title, '은', '는')} 어땠어?` : `${day} ${josa(topic.title, '이', '가')} 있지?`;
@@ -2766,19 +2771,122 @@ function talkCardHTML(topic, i, where) {
   </section>`;
 }
 /** 오늘의 대화 카드들: 일정 후보가 있으면 옆으로 넘겨 보고, 맨 끝은 그냥 수다 */
+/** 관심사 카드: 관심사마다 오늘의 헤드라인 몇 개 (누르면 브리핑) */
+function interestCardHTML(g) {
+  const talked = talkedTopics();
+  const rows = g.items.map((it) => `<button class="topic-row${talked[it.key] ? ' done' : ''}" data-act="topic-open" data-key="${esc(it.key)}">
+      <span>${esc(it.title)}</span><i>${talked[it.key] ? '✓' : '›'}</i></button>`).join('');
+  return `<section class="talk-card">
+    <span class="talk-tag">✨ 관심사 · ${esc(g.interest)}</span>
+    <h3>오늘의 화제</h3>
+    <div class="topic-rows">${rows}</div>
+  </section>`;
+}
+/** 내가 가져온 이야기 카드: 최근에 넣은 이야기 + 새로 넣기 */
+function storyCardHTML() {
+  const list = recentStories().slice(0, 2);
+  const talked = talkedTopics();
+  return `<section class="talk-card">
+    <span class="talk-tag">📎 내가 가져온 이야기</span>
+    <h3>오늘 본 거 얘기하기</h3>
+    ${list.length ? `<div class="topic-rows">${list.map((it) => `<button class="topic-row${talked[it.key] ? ' done' : ''}" data-act="topic-open" data-key="${esc(it.key)}"><span>${esc(it.title)}</span><i>${talked[it.key] ? '✓' : '›'}</i></button>`).join('')}</div>`
+      : '<p>본 영상·기사 링크나 본 내용을 넣으면 정리해서 같이 얘기해요.</p>'}
+    <div class="talk-bottom"><button class="btn story-add" data-act="story-new">＋ 링크나 본 내용 넣기</button></div>
+  </section>`;
+}
+/** 대화 탭의 카드들 (옆으로 넘김): 일정 → 관심사 헤드라인 → 내가 가져온 이야기 → 그냥 수다 */
 function talkCardsHTML(where) {
   loadInterestTopics();
-  const topics = [...calTopics(), ...interestTopics()];
-  ui.talkTopics = topics;
-  const waiting = intState.loading && !interestTopics().length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
-  if (!topics.length && !waiting.length) return talkCardHTML(null, -1, where);
-  const cards = [...topics.map((t, i) => talkCardHTML(t, i, where)), ...waiting, talkCardHTML(null, -1, where)];
+  const cal = calTopics();
+  ui.talkTopics = cal;
+  const groups = interestGroups();
+  const waiting = intState.loading && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
+  const cards = [...cal.map((t, i) => talkCardHTML(t, i, where)), ...groups.map(interestCardHTML), ...waiting, ...(user && SCAN_URL ? [storyCardHTML()] : []), talkCardHTML(null, -1, where)];
+  if (cards.length === 1) return cards[0];
   return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
     <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
 }
+// ---------- 화제 브리핑 (대화 전에 무슨 이야기인지 먼저 읽기) · 내가 가져온 이야기 넣기 ----------
+const brief = { topic: null, story: false, loading: false, text: '' };
+const intSaved = new Set();   // 이번에 ＋로 카드로 저장한 표현
+function openBrief(topic) { Object.assign(brief, { topic, story: false, loading: false }); renderBrief(); }
+function openStoryNew() { Object.assign(brief, { topic: null, story: true, loading: false, text: '' }); renderBrief(); setTimeout(() => $('#story-input')?.focus(), 50); }
+function closeBrief() { Object.assign(brief, { topic: null, story: false, loading: false }); $('#brief').hidden = true; $('#brief').innerHTML = ''; }
+function renderBrief() {
+  const el = $('#brief');
+  const tp = brief.topic;
+  if (!tp && !brief.story) { closeBrief(); return; }
+  let body, actions = '';
+  if (brief.story && !tp) {
+    body = brief.loading
+      ? `<div class="scan-wait" role="status"><div class="spinner">${MASCOT}</div><b>정리하고 있어요<span class="dots"><i>.</i><i>.</i><i>.</i></span></b></div>`
+      : `<textarea id="story-input" class="story-input" rows="4" maxlength="500" placeholder="유튜브·기사 링크를 붙여 넣거나, 오늘 본 걸 적어 주세요">${esc(brief.text)}</textarea>`;
+    actions = brief.loading ? '' : '<button class="btn primary wide" data-act="story-make">정리하기</button>';
+  } else {
+    const vote = intVotes()[tp.key];
+    const lines = tp.brief?.length ? tp.brief : [tp.summary];
+    body = `${tp.image ? `<img class="brief-img" src="${esc(tp.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+      <span class="talk-tag">${tp.kind === 'story' ? '📎 내가 가져온 이야기' : `✨ 관심사 · ${esc(tp.interest)}${tp.fact ? ' · 재미있는 사실' : ''}`}</span>
+      <h1 class="brief-title">${esc(tp.title)}</h1>
+      <ul class="brief-list">${lines.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
+      ${tp.expressions.length ? `<h3 class="brief-sub">대화에 쓸 표현</h3><div class="topic-exprs">${tp.expressions.map((e, k) => `<button class="topic-expr${intSaved.has(e.expression) ? ' saved' : ''}" data-act="topic-expr" data-k="${k}"><b>${esc(e.expression)}</b><span>${esc(e.meaning)}</span><i>${intSaved.has(e.expression) ? '✓' : '＋'}</i></button>`).join('')}</div>` : ''}
+      <div class="topic-foot">
+        ${tp.url ? `<a class="topic-src" href="${esc(tp.url)}" target="_blank" rel="noopener">${esc(tp.source || '출처')} ↗</a>` : `<span class="topic-src">${esc(tp.source || '')}</span>`}
+        ${tp.kind === 'interest' ? `<span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" aria-label="이 화제 그만">👎</button></span>` : ''}
+      </div>`;
+    actions = `<button class="btn primary wide" data-act="brief-go">${icon('chat')} ${josa(botName(), '이랑', '랑')} 이 얘기 하기</button>`;
+  }
+  el.innerHTML = `<header class="sheet-head">
+      <button class="link start" data-act="brief-close">닫기</button>
+      <h2>${brief.story || tp?.kind === 'story' ? '내가 가져온 이야기' : '오늘의 화제'}</h2>
+      <span class="head-note"></span>
+    </header>
+    <div class="sheet-body brief-body">${body}</div>
+    <div class="actions">${actions}</div>`;
+  el.hidden = false;
+}
+const STORY_ERRORS = { 413: '조금 짧게 적어 주세요. (500자까지)', 422: '이 내용으로는 얘기를 만들 수 없어요.', 429: '오늘 넣을 수 있는 이야기 10개를 모두 썼어요. 내일 다시 넣을 수 있어요.', 503: '지금 요청이 많아요. 잠시 뒤 다시 시도해 주세요.' };
+async function makeStory() {
+  const text = ($('#story-input')?.value || '').trim();
+  if (!text) { toast('링크나 본 내용을 넣어 주세요.'); return; }
+  if (!user) return;
+  Object.assign(brief, { text, loading: true });
+  renderBrief();
+  try {
+    const { target, native } = modeParts(prefs.mode);
+    const res = await fetch(talkURL('/story'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ text, target, native }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.item) throw new ScanError(STORY_ERRORS[res.status] || '정리하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    if (!brief.story) return;   // 기다리는 동안 닫음
+    const s = addStory(data.item);
+    renderTalk();
+    openBrief(s);
+  } catch (err) {
+    if (!brief.story) return;
+    brief.loading = false;
+    renderBrief();
+    toast(err instanceof ScanError ? err.message : `정리하지 못했어요. (${errText(err)})`);
+  }
+}
+async function saveTopicExpression(e) {
+  if (intSaved.has(e.expression)) return;
+  const card = newCard({ korText: e.meaning, engText: e.expression, korImages: [], engImages: [], category: await keyForName(DEFAULT_CATEGORY), source: 'talk' });
+  await putCard(card);
+  await recordActivity([addActivity(card)]);
+  intSaved.add(e.expression);
+  markChanged();
+  renderAll();
+  if (brief.topic) renderBrief();
+  toast(`'${e.expression}' 카드로 저장했어요.`);
+}
+
 // ---------- 관심사 화제 (설정에서 관심사를 넣은 사람만) ----------
 // 오늘 화제를 서버에서 받아 옴 (그날 처음 열면 서버가 찾음). 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
-const INT_CACHE_KEY = 'freedom-int-topics', INT_VOTE_KEY = 'freedom-int-votes';
+const INT_CACHE_KEY = 'freedom-int-topics2', INT_VOTE_KEY = 'freedom-int-votes';
 const intState = { data: null, loading: false, failedAt: 0 };
 function intVotes() { try { return JSON.parse(localStorage.getItem(INT_VOTE_KEY)) || {}; } catch { return {}; } }
 function setIntVote(key, v) {
@@ -2805,7 +2913,7 @@ async function loadInterestTopics(force = false) {
     const res = await fetch(talkURL('/interest/topics'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native }),
+      body: JSON.stringify({ target, native, ...topicTaste() }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(res.status);
@@ -2819,15 +2927,44 @@ async function loadInterestTopics(force = false) {
   if (!ui.reviewStarted) renderReview();
   renderTalk();
 }
-/** 오늘 보여 줄 관심사 화제 (관심사마다 하나, 👎했거나 이미 얘기한 건 다음 후보로) */
-function interestTopics() {
+/** 화제 하나를 앱에서 쓰는 모양으로 */
+const interestTopic = (g, it) => ({ kind: 'interest', interest: g.interest, title: it.title, summary: it.summary, brief: it.brief || [], fact: it.kind === 'fact', expressions: it.expressions || [],
+  url: it.url, source: it.source, image: it.image || '', key: `int|${it.title}`, when: `관심사 · ${g.interest}` });
+/** 오늘 보여 줄 관심사 헤드라인 (관심사마다 최대 3개, 👎한 건 뺌, 얘기한 건 ✓) */
+function interestGroups() {
   if (!(prefs.interests || []).length || !intState.data?.topics) return [];
-  const talked = talkedTopics(), votes = intVotes();
-  return intState.data.topics.map((g) => {
-    const it = (g.items || []).find((x) => !talked[`int|${x.title}`] && votes[`int|${x.title}`] !== 'down');
-    return it && { kind: 'interest', interest: g.interest, title: it.title, summary: it.summary, fact: it.kind === 'fact', expressions: it.expressions || [], url: it.url, source: it.source,
-      key: `int|${it.title}`, when: `관심사 · ${g.interest}` };
-  }).filter(Boolean).slice(0, 2);
+  const votes = intVotes();
+  return intState.data.topics.map((g) => ({ interest: g.interest, items: (g.items || []).map((it) => interestTopic(g, it)).filter((x) => votes[x.key] !== 'down').slice(0, 3) }))
+    .filter((g) => g.items.length);
+}
+// ---------- 내가 가져온 이야기 (이 기기에만, 3일 보관) ----------
+const STORY_KEY = 'freedom-stories';
+function recentStories() {
+  try {
+    const cut = Date.now() - 3 * 86400000;
+    return (JSON.parse(localStorage.getItem(STORY_KEY)) || []).filter((s) => s.at > cut);
+  } catch { return []; }
+}
+function addStory(item) {
+  const at = Date.now();
+  const s = { kind: 'story', title: item.title, summary: item.summary, brief: item.brief || [], fact: item.kind === 'fact', expressions: item.expressions || [], url: item.url, source: item.source, image: item.image || '',
+    key: `story|${at}`, when: '내가 가져온 이야기', at };
+  try { localStorage.setItem(STORY_KEY, JSON.stringify([s, ...recentStories()].slice(0, 10))); } catch {}
+  return s;
+}
+/** 키로 화제 찾기 (관심사 헤드라인, 내가 가져온 이야기) */
+function topicByKey(key) {
+  for (const g of interestGroups()) for (const it of g.items) if (it.key === key) return it;
+  return recentStories().find((s) => s.key === key) || null;
+}
+/** 다음 화제를 찾을 때 참고할 취향: 👍·대화한 화제·가져온 이야기는 좋아함, 👎는 싫어함 */
+function topicTaste() {
+  const votes = intVotes(), talked = talkedTopics();
+  const title = (k) => k.slice(4);
+  const likes = [...Object.keys(votes).filter((k) => votes[k] === 'up' && k.startsWith('int|')).map(title),
+    ...Object.keys(talked).filter((k) => k.startsWith('int|')).map(title), ...recentStories().map((s) => s.title)];
+  const dislikes = Object.keys(votes).filter((k) => votes[k] === 'down' && k.startsWith('int|')).map(title);
+  return { likes: [...new Set(likes)].slice(0, 10), dislikes: dislikes.slice(-10) };
 }
 async function saveInterests(list) {
   setPref('interests', list);
@@ -4242,14 +4379,19 @@ document.addEventListener('click', (ev) => {
     case 'talk-go-current': startTalk(null); break;   // 대화 탭 아래 버튼: 화제 없이 그냥 수다 (화제 대화는 카드를 눌러서)
     case 'ext-link': break;   // 출처 링크는 그대로 열림 (카드 누름으로 안 넘어감)
     case 'int-vote': {
-      const topic = ui.talkTopics?.[Number(el.dataset.index)];
+      const topic = brief.topic;
       if (!topic) break;
       setIntVote(topic.key, el.dataset.v);
-      if (el.dataset.v === 'down') toast('이 화제는 숨겼어요.');
-      if (!ui.reviewStarted) renderReview();
+      if (el.dataset.v === 'down') { toast('이 화제는 숨겼어요. 다음 화제를 찾을 때도 참고해요.'); closeBrief(); } else renderBrief();
       renderTalk();
       break;
     }
+    case 'topic-open': { const topic = topicByKey(el.dataset.key); if (topic) openBrief(topic); break; }
+    case 'story-new': openStoryNew(); break;
+    case 'story-make': makeStory(); break;
+    case 'brief-close': closeBrief(); break;
+    case 'brief-go': { const topic = brief.topic; closeBrief(); setTab('talk'); startTalk(topic); break; }
+    case 'topic-expr': { const e = brief.topic?.expressions?.[Number(el.dataset.k)]; if (e) saveTopicExpression(e); break; }
     case 'int-add': addInterest($('#int-input')?.value); break;
     case 'int-suggest': addInterest(el.dataset.v); break;
     case 'int-remove': saveInterests((prefs.interests || []).filter((x) => x !== el.dataset.v)); break;

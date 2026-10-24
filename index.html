@@ -495,6 +495,14 @@ textarea.eng { font-family: var(--serif); }
 .ob-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 4px; }
 .ob-dots i { width: 6px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 30%, transparent); }
 .ob-dots i.on { width: 18px; background: var(--g2, var(--accent)); }
+#consent:not([hidden]) { display: flex; align-items: flex-end; justify-content: center; background: rgba(40, 25, 20, .35); z-index: 70; }
+.consent-card { width: min(520px, 100%); max-height: 90vh; overflow-y: auto; background: var(--surface); border-radius: 26px 26px 0 0; padding: 22px 20px calc(env(safe-area-inset-bottom, 0px) + 18px); display: flex; flex-direction: column; gap: 10px; animation: slideup .24s ease-out; }
+.consent-card h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.consent-card p, .consent-card li { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink); }
+.consent-card ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.consent-card .small-note { color: var(--muted); font-size: 12.5px; }
+.report-btn { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 6px; }
+.report-btn.wide { display: block; margin: 16px auto 0; }
 .set-group { margin: 20px 6px 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .set-group:first-child { margin-top: 4px; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1014,6 +1022,7 @@ textarea:is(.kor, .eng)::placeholder { font-size: 14px; }
 <div class="sheet" id="practice" hidden></div>
 <div class="sheet" id="brief" hidden></div>
 <div class="sheet" id="onboard" hidden></div>
+<div class="pop" id="consent" hidden></div>
 <input type="file" id="scan-input" accept="image/*" multiple hidden>
 <input type="file" id="backup-input" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -1050,7 +1059,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v132';
+const APP_VERSION = 'v133';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1489,7 +1498,7 @@ const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
   // design: 3 = 기본 글씨체를 나눔스퀘어라운드로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값으로)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {}, talkInterest: true, talkStory: true, push: false, alarms: [], onboarded: false };
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {}, talkInterest: true, talkStory: true, push: false, alarms: [], onboarded: false, aiConsent: false };
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
   if (saved && saved.design !== 3) { saved.font = base.font; saved.design = 3; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
@@ -2642,6 +2651,7 @@ function renderTalk() {
       ? `<button class="btn primary wide" data-act="talk-cards" ${n ? '' : 'disabled'}>${n ? `고른 ${n}개 카드로 만들기` : '만들 표현을 골라 주세요'}</button>`
       : '<button class="btn primary wide" data-act="talk-reset">새 대화</button>';
     if (t.items.length) actions += '<button class="btn wide" data-act="talk-reset">카드 안 만들고 새 대화</button>';
+    body += '<button class="report-btn wide" data-act="report-talk">🚩 대화에서 부적절한 말이 있었나요? 신고하기</button>';
   }
   if (t.status === 'live') actions += '<button class="btn wide" data-act="talk-reset">그만하기 (정리 안 함)</button>';
   $('#talk-main').innerHTML = body;
@@ -2992,6 +3002,30 @@ async function disablePush() {
   renderSettingsPage('alarm');
   try { await (await pushSubscription(false))?.unsubscribe(); await pushPost('/push/off', {}); } catch {}
 }
+// ---------- 외부 AI 사용 동의: AI 기능을 처음 쓸 때 무엇을 어디로 보내는지 알리고 허락받음 (설정에서 철회) ----------
+let consentPending = null;
+/** 동의했으면 true. 아니면 동의 창을 띄우고, '동의'를 누르면 action을 그 누름 안에서 실행 (아이폰 마이크·소리 준비 때문) */
+function aiOk(action) {
+  if (prefs.aiConsent) return true;
+  consentPending = action;
+  const el = $('#consent');
+  el.innerHTML = `<div class="consent-card" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+    <h2 id="consent-title">AI 기능을 쓰려면 동의가 필요해요</h2>
+    <p>사진 읽기, 말하기·글로 물어보기, 대화, 화제 찾기, 브리핑은 <b>OpenAI</b>(미국)의 AI로 처리해요. 그 기능을 쓸 때 이런 내용이 OpenAI로 전달돼요.</p>
+    <ul>
+      <li>고른 사진, 녹음한 목소리와 받아쓴 글자, 적은 글</li>
+      <li>대화하는 목소리와 대화 내용, ${esc(botName())}이 기억하는 나(짧은 메모)</li>
+      <li>켜 둔 경우: 고른 캘린더 일정 제목, 관심사, 넣은 링크</li>
+    </ul>
+    <p class="small-note">계정 이름·이메일은 보내지 않아요. OpenAI는 API로 받은 데이터를 학습에 쓰지 않아요. 설정 → AI 사용 동의에서 언제든 철회할 수 있어요. <a href="privacy.html" target="_blank" rel="noopener">개인정보처리방침</a></p>
+    <button class="btn primary wide" data-act="consent-yes">동의하고 계속</button>
+    <button class="btn wide" data-act="consent-no">동의 안 함</button>
+  </div>`;
+  el.hidden = false;
+  return false;
+}
+function closeConsent() { $('#consent').hidden = true; $('#consent').innerHTML = ''; consentPending = null; }
+
 // ---------- 처음 한 번 안내 (3단계): 공부할 언어·수준 → 하루 목표 → 부를 이름·알림. 언제든 건너뛸 수 있음 ----------
 const ob = { step: 0, target: 'en', native: 'ko', level: 'B1' };
 function openOnboard() {
@@ -3167,7 +3201,7 @@ function talkCardsHTML(where) {
   const cal = calTopics();
   ui.talkTopics = cal;
   const groups = interestGroups();
-  const intOn = prefs.talkInterest !== false && (prefs.interests || []).length;
+  const intOn = prefs.talkInterest !== false && (prefs.interests || []).length && prefs.aiConsent;
   const waiting = intState.loading && intOn && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`]
     // 화제를 못 받은 경우도 말없이 사라지지 않게
     : !intState.loading && intOn && !groups.length && (intState.data || intState.failedAt) ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>${intState.data?.limited ? '오늘은 화제를 더 찾을 수 없어요' : '오늘의 화제를 가져오지 못했어요'}</h3><p>${intState.data?.limited ? '하루에 찾을 수 있는 횟수를 다 썼어요. 내일 새 화제를 찾아 줄게요.' : '잠시 뒤 대화 탭에 다시 들어오면 다시 찾아요.'}</p></section>`] : [];
@@ -3177,6 +3211,19 @@ function talkCardsHTML(where) {
     <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
 }
 // ---------- 화제 브리핑 (대화 전에 무슨 이야기인지 먼저 읽기) · 내가 가져온 이야기 넣기 ----------
+/** AI가 만든 내용 신고: 만든 사람에게 의견(신고)으로 전달 */
+async function reportAI(what, content) {
+  const why = prompt('어떤 점이 문제였나요? (예: 사실과 다름, 부적절한 말)', '');
+  if (why === null) return;
+  try {
+    const res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(user ? { Authorization: `Bearer ${await user.getIdToken()}` } : {}) },
+      body: JSON.stringify({ kind: 'report', text: `[${what}] ${why.trim() || '(이유 없음)'}\n\n--- 신고한 내용 ---\n${String(content).slice(0, 2500)}`, app: APP_VERSION, mode: prefs.mode, ua: navigator.userAgent.slice(0, 300) }),
+    });
+    toast(res.ok ? '신고했어요. 확인하고 고칠게요. 고마워요!' : '신고를 보내지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  } catch { toast('신고를 보내지 못했어요. 인터넷 연결을 확인해 주세요.'); }
+}
 const brief = { topic: null, story: false, loading: false, text: '', meaning: false };
 const intSaved = new Set();   // 이번에 ＋로 카드로 저장한 표현
 function openBrief(topic) { Object.assign(brief, { topic, story: false, loading: false, meaning: false }); renderBrief(); }
@@ -3197,14 +3244,14 @@ function renderBrief() {
     // 브리핑은 배우는 언어로, 뜻은 눌러서 보기 (예전에 저장한 화제는 한국어 문장 그대로)
     const lines = (tp.brief?.length ? tp.brief : [tp.summary]).map((s) => (typeof s === 'string' ? { text: s, meaning: '' } : s));
     const hasMeaning = lines.some((s) => s.meaning);
-    body = `${tp.image ? `<img class="brief-img" src="${esc(tp.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
-      <span class="talk-tag">${tp.kind === 'story' ? '📎 내가 가져온 이야기' : `✨ 관심사 · ${esc(tp.interest)}${tp.fact ? ' · 재미있는 사실' : ''}`}</span>
+    body = `<span class="talk-tag">${tp.kind === 'story' ? '📎 내가 가져온 이야기' : `✨ 관심사 · ${esc(tp.interest)}${tp.fact ? ' · 재미있는 사실' : ''}`}</span>
       <h1 class="brief-title">${esc(tp.title)}</h1>
       <div class="brief-box"><ul class="brief-list">${lines.map((s) => `<li><span class="brief-text">${esc(s.text)}</span>${brief.meaning && s.meaning ? `<small>${esc(s.meaning)}</small>` : ''}</li>`).join('')}</ul>
         ${hasMeaning ? `<button class="brief-toggle" data-act="brief-meaning" aria-pressed="${brief.meaning}">${nativeLang(prefs.mode).flag} ${brief.meaning ? '뜻 숨기기' : '뜻 보기'}</button>` : ''}</div>
       ${tp.expressions.length ? `<h3 class="brief-sub">대화에 쓸 표현</h3><div class="topic-exprs">${tp.expressions.map((e, k) => `<button class="topic-expr${intSaved.has(e.expression) ? ' saved' : ''}" data-act="topic-expr" data-k="${k}"><b>${esc(e.expression)}</b><span>${esc(e.meaning)}</span><i>${intSaved.has(e.expression) ? '✓' : '＋'}</i></button>`).join('')}</div>` : ''}
       <div class="topic-foot">
         ${tp.url ? `<a class="topic-src" href="${esc(tp.url)}" target="_blank" rel="noopener">${esc(tp.source || '출처')} ↗</a>` : `<span class="topic-src">${esc(tp.source || '')}</span>`}
+        <button class="report-btn" data-act="report-brief" aria-label="이 화제 신고">🚩</button>
         ${tp.kind === 'interest' ? `<span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" aria-label="이 화제 그만">👎</button></span>` : ''}
       </div>`;
     actions = `<button class="btn primary wide" data-act="brief-go">${icon('chat')} ${josa(botName(), '이랑', '랑')} 이 얘기 하기</button>`;
@@ -3270,7 +3317,7 @@ function setIntVote(key, v) {
   try { localStorage.setItem(INT_VOTE_KEY, JSON.stringify(all)); } catch {}
 }
 async function loadInterestTopics(force = false) {
-  if (!user || !SCAN_URL || prefs.talkInterest === false || !(prefs.interests || []).length || intState.loading) return;
+  if (!user || !SCAN_URL || !prefs.aiConsent || prefs.talkInterest === false || !(prefs.interests || []).length || intState.loading) return;
   const day = dayKey(new Date());
   if (!force) {
     if (intState.data?.day === day && intState.data.mode === prefs.mode && intState.data.sig === `${prefs.interests.join('|')}#${learnLevel()}`) return;
@@ -3662,7 +3709,7 @@ async function logout() {
 /** 서버에 저장된 이 계정의 데이터와 계정을 모두 지움. 이 기기의 카드는 남김 */
 async function deleteAccount() {
   if (!user || sync.running) return;
-  if (!confirm('계정을 삭제할까요? 서버에 저장된 카드와 기록이 모두 지워지고 되돌릴 수 없어요. 이 기기의 카드는 그대로 남아요.')) return;
+  if (!confirm('계정을 삭제할까요? 서버에 저장된 카드·기록·관심사·알림·캘린더 연결이 모두 지워지고 되돌릴 수 없어요. 이 기기의 카드는 그대로 남아요.')) return;
   clearTimeout(sync.timer);
   sync.running = true;
   renderSyncStatus();
@@ -3675,9 +3722,16 @@ async function deleteAccount() {
         await batch.commit();
       }
     }
+    // 서버(Worker)에 남은 데이터도: 캘린더 권한, 관심사, 알림, 사용량, 그 사람만의 화제
+    const res = await fetch(talkURL('/account/delete'), { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+    if (!res.ok) throw new Error(`server ${res.status}`);
+    try { await (await pushSubscription(false))?.unsubscribe(); } catch {}
     Object.assign(syncMeta, { uid: null, pulledAt: 0, pushedAt: 0 });
     await saveSyncMeta();
     await fb.deleteUser(user);
+    // 이 기기의 개인 설정도 정리 (카드는 남김)
+    setTalkMemory([]);
+    for (const [k, v] of [['calendar', false], ['push', false], ['interests', []], ['talkName', '']]) setPref(k, v);
     toast('계정과 서버의 데이터를 삭제했어요.');
   } catch (err) {
     if (err.code === 'auth/requires-recent-login') {
@@ -3988,6 +4042,7 @@ const SETTINGS = [
   ['sync', icon('cloud'), '동기화', () => (!fbReady ? '준비 중' : !user ? '로그인하지 않았어요' : sync.error ? '확인이 필요해요' : user.email || '로그인됨'), '계정 · 데이터'],
   ['usage', icon('gauge'), '오늘 AI 사용량', () => (!user ? '로그인하면 볼 수 있어요' : usageState?.limit ? `오늘 사진 ${usageState.remaining}장 · 말하기 ${usageState.voice?.remaining ?? 10}번 · 글 ${usageState.ask?.remaining ?? ASK_LIMIT}번 · 대화 ${usageState.talk?.remaining ?? TALK_DAY_MIN}분 남음` : `사진 하루 10장 · 말하기 하루 10번 · 글 하루 ${ASK_LIMIT}번 · 대화 하루 ${TALK_DAY_MIN}분`), '계정 · 데이터'],
   ['backup', icon('archive'), '백업', () => '파일로 저장 · 복원', '계정 · 데이터'],
+  ['ai', icon('spark'), 'AI 사용 동의', () => (prefs.aiConsent ? '동의함 · OpenAI' : '동의하지 않음'), '계정 · 데이터'],
   ['feedback', icon('mail'), '의견 보내기', () => '버그 · 제안 · 문의', '도움'],
 ];
 const SETTING_GROUPS = ['학습', '대화', '화면 · 소리', '계정 · 데이터', '도움'];
@@ -4179,6 +4234,12 @@ function renderSettingsPage(page) {
       <button class="btn wide" data-act="push-test">시험 알림 보내기</button>
     </div>` : ''}`;
     initWheels();
+  } else if (page === 'ai') {
+    box.innerHTML = `<div class="field">
+      ${swRow('외부 AI(OpenAI) 사용', !!prefs.aiConsent, 'ai-consent-switch').replace(' disabled', '')}
+      <p class="sync-line">사진 읽기, 말하기·글로 물어보기, 대화, 화제 찾기, 브리핑은 OpenAI(미국)의 AI로 처리해요. 그 기능을 쓸 때만 고른 사진·목소리·글·대화 내용·기억 메모, 켜 둔 경우 캘린더 일정 제목·관심사·넣은 링크가 전달돼요. 계정 이름·이메일은 보내지 않고, OpenAI는 API로 받은 데이터를 학습에 쓰지 않아요.</p>
+      <p class="sync-line">끄면 AI 기능을 쓸 수 없고, 카드 만들기·복습·자유 연습은 그대로 쓸 수 있어요. <a href="privacy.html">개인정보처리방침</a></p>
+    </div>`;
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
       <p class="sync-line">동기화와 별개로, 지금 데이터(모든 언어 모드)를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
@@ -4835,8 +4896,8 @@ document.addEventListener('click', (ev) => {
     case 'practice': if (modeCards().length) openPractice(); break;
     case 'practice-close': closePractice(); break;
     case 'talk-reset': resetTalk(); break;
-    case 'talk-go': setTab('talk'); startTalk(null); break;
-    case 'talk-go-current': startTalk(null); break;   // 대화 탭 아래 버튼: 화제 없이 그냥 수다 (화제 대화는 카드를 눌러서)
+    case 'talk-go': setTab('talk'); if (aiOk(() => startTalk(null))) startTalk(null); break;
+    case 'talk-go-current': if (aiOk(() => startTalk(null))) startTalk(null); break;   // 대화 탭 아래 버튼: 화제 없이 그냥 수다 (화제 대화는 카드를 눌러서)
     case 'ext-link': break;   // 출처 링크는 그대로 열림 (카드 누름으로 안 넘어감)
     case 'int-vote': {
       const topic = brief.topic;
@@ -4848,19 +4909,27 @@ document.addEventListener('click', (ev) => {
     }
     case 'topic-open': { const topic = topicByKey(el.dataset.key); if (topic) openBrief(topic); break; }
     case 'story-new': openStoryNew(); break;
-    case 'story-make': makeStory(); break;
+    case 'story-make': if (aiOk(makeStory)) makeStory(); break;
     case 'brief-close': closeBrief(); break;
     case 'brief-meaning': brief.meaning = !brief.meaning; renderBrief(); break;
     case 'level': setPref('levels', { ...(prefs.levels || {}), [prefs.mode]: el.dataset.value }); intState.data = null; refreshSettings(); break;
     case 'mem-remove': setTalkMemory(talkMemory().filter((_, i) => i !== Number(el.dataset.index))); break;
     case 'mem-clear': if (confirm(`${josa(botName(), '이', '가')} 기억하는 것을 모두 지울까요?`)) setTalkMemory([]); break;
-    case 'brief-go': { const topic = brief.topic; closeBrief(); setTab('talk'); startTalk(topic); break; }
+    case 'brief-go': { const topic = brief.topic; closeBrief(); setTab('talk'); if (aiOk(() => startTalk(topic))) startTalk(topic); break; }
     case 'topic-expr': { const e = brief.topic?.expressions?.[Number(el.dataset.k)]; if (e) saveTopicExpression(e); break; }
     case 'int-add': addInterest($('#int-input')?.value); break;
     case 'int-suggest': addInterest(el.dataset.v); break;
     case 'int-remove': saveInterests((prefs.interests || []).filter((x) => x !== el.dataset.v)); break;
-    case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
-    case 'cal-connect': connectCalendar(); break;
+    case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); if (aiOk(() => startTalk(topic || null))) startTalk(topic || null); break; }
+    case 'cal-connect': if (aiOk(connectCalendar)) connectCalendar(); break;
+    case 'report-brief': { const tp = brief.topic; if (tp) reportAI('화제 브리핑', [tp.title, tp.summary, ...(tp.brief || []).map((s) => s.text || s), tp.url].join('\n')); break; }
+    case 'report-talk': reportAI('대화', talk.turns.filter((x) => x.text).map((x) => `${x.role === 'user' ? '나' : botName()}: ${x.text}`).join('\n')); break;
+    case 'consent-yes': { const go = consentPending; setPref('aiConsent', true); closeConsent(); go?.(); renderAll(); break; }
+    case 'consent-no': closeConsent(); toast('동의하지 않으면 AI 기능은 쓸 수 없어요. 카드 복습은 그대로 쓸 수 있어요.'); break;
+    case 'ai-consent-switch':
+      if (prefs.aiConsent) { if (confirm('AI 사용 동의를 철회할까요? 사진 읽기, 말하기, 대화, 화제 찾기 같은 AI 기능을 쓸 수 없게 돼요.')) { setPref('aiConsent', false); intState.data = null; } }
+      else setPref('aiConsent', true);
+      refreshSettings(); renderAll(); break;
     case 'ob-target': ob.target = el.dataset.v; renderOnboard(); break;
     case 'ob-level': ob.level = el.dataset.v; renderOnboard(); break;
     case 'ob-back': ob.step = Math.max(0, ob.step - 1); renderOnboard(); break;
@@ -4892,7 +4961,7 @@ document.addEventListener('click', (ev) => {
     case 'alarm-del': ui.alarmEdit = null; setAlarms((prefs.alarms || []).filter((_, i) => i !== Number(el.dataset.index))); break;
     case 'alarm-on': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, on: !a.on } : a))); break;
     case 'alarm-kind': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, kind: el.dataset.kind } : a))); break;
-    case 'cal-switch': prefs.calendar ? disconnectCalendar() : connectCalendar(); break;
+    case 'cal-switch': if (prefs.calendar) disconnectCalendar(); else if (aiOk(connectCalendar)) connectCalendar(); break;
     case 'talk-interest': setPref('talkInterest', prefs.talkInterest === false); refreshSettings(); renderTalk(); break;
     case 'talk-story': setPref('talkStory', prefs.talkStory === false); refreshSettings(); renderTalk(); break;
     case 'cal-disconnect': disconnectCalendar(); break;
@@ -4908,6 +4977,7 @@ document.addEventListener('click', (ev) => {
     case 'review-start': {
       // 말로 답하기: 아이폰은 소리 처리를 누른 그 순간에 만들어야 함
       let ctx = null;
+      if (study.answer === 'speak' && !prefs.aiConsent) { aiOk(() => $('[data-act="review-start"]')?.click()); break; }
       if (study.answer === 'speak') {
         if (!user || !canLive) { toast(!user ? '말로 답하기는 로그인하면 쓸 수 있어요. 보고 떠올리기로 복습해요.' : '이 기기에서는 말로 답하기를 쓸 수 없어요.'); study.answer = 'look'; saveStudy(); }
         else try { ctx = new AudioContext(); } catch {}
@@ -4917,7 +4987,7 @@ document.addEventListener('click', (ev) => {
       break;
     }
     case 'set-answer': study.answer = el.dataset.answer === 'speak' ? 'speak' : 'look'; saveStudy(); renderReview(); break;
-    case 'speak-open': if (user && canLive) { try { openSpeakReview(new AudioContext()); } catch {} } break;
+    case 'speak-open': if (user && canLive && aiOk(() => openSpeakReview(new AudioContext()))) { try { openSpeakReview(new AudioContext()); } catch {} } break;
     case 'speak-retry': ui.reviewShow = false; ui.speakRes = null; rv.cardId = null; renderReview(); break;
     case 'review-quit': {
       const left = dueCards(new Date()).length;
@@ -4980,9 +5050,9 @@ document.addEventListener('click', (ev) => {
     case 'editor-cancel': closeEditor(); break;
     case 'editor-save': saveEditor().catch((err) => toast(`저장하지 못했어요. (${errText(err)})`)); break;
     case 'editor-delete': deleteFromEditor(); break;
-    case 'scan': $('#scan-input').click(); break;
-    case 'voice-start': startVoice(); break;
-    case 'ask': sendAsk(); break;
+    case 'scan': if (aiOk(() => $('#scan-input').click())) $('#scan-input').click(); break;
+    case 'voice-start': if (aiOk(startVoice)) startVoice(); break;
+    case 'ask': if (aiOk(sendAsk)) sendAsk(); break;
     case 'ask-toggle': editor.typing = !editor.typing; renderEditor(); if (editor.typing) $('#ask-input')?.focus(); break;
     case 'voice-stop': stopVoice(); break;
     case 'voice-cancel': stopVoice(true); break;

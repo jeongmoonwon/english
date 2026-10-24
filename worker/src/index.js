@@ -98,7 +98,8 @@ export async function handle(request, env, deps = {}) {
   const isFeedback = request.method === 'POST' && path === '/feedback';
   const isStory = request.method === 'POST' && path === '/story';
   const isPush = request.method === 'POST' && ['/push/save', '/push/status', '/push/off', '/push/test'].includes(path);
-  if (!isUsage && !isVoice && !isVoiceToken && !isStory && !isPush && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  const isAccountDelete = request.method === 'POST' && path === '/account/delete';
+  if (!isUsage && !isVoice && !isVoiceToken && !isStory && !isPush && !isAccountDelete && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
   if (isFeedback) return handleFeedback(request, env, reply, deps);
 
@@ -137,6 +138,7 @@ export async function handle(request, env, deps = {}) {
   if (path === '/calendar/start') return handleCalendarStart(request, env, reply, user);
   if (isInterest) return handleInterest(path, request, env, reply, user);
   if (isPush) return handlePush(path, request, env, reply, user);
+  if (isAccountDelete) return handleAccountDelete(env, reply, user);
   if (isStory) return handleStory(request, env, reply, `story:${user.sub}:${day}`);
   if (path === '/calendar/events') return handleCalendarEvents(request, env, reply, user);
   if (path === '/calendar/disconnect') return handleCalendarDisconnect(env, reply, user);
@@ -281,6 +283,30 @@ const cleanStatus = (s) => (s && typeof s === 'object' ? {
   due: Math.max(0, Math.floor(Number(s.due) || 0)), dueTomorrow: Math.max(0, Math.floor(Number(s.dueTomorrow) || 0)),
   reviewLeft: Math.max(0, Math.floor(Number(s.reviewLeft) || 0)), talkLeft: Math.max(0, Math.floor(Number(s.talkLeft) || 0)),
 } : null);
+/** 계정 삭제: 이 서버에 남은 그 사람의 데이터를 모두 지움 (캘린더 권한 해제, 관심사, 알림, 사용량, 그 사람만의 화제) */
+async function handleAccountDelete(env, reply, user) {
+  await handleCalendarDisconnect(env, () => null, user);
+  const who = (await interestKey(user.sub, '', '')).slice(0, 12);
+  const keys = [`int:${user.sub}`, `push:${user.sub}`, `cal:${user.sub}`];
+  for (const prefix of ['use', 'voice', 'ask', 'talksec', 'voicetok', 'revtok', 'story', 'intgen', `talkres:${user.sub}`]) {
+    let cursor;
+    do {
+      const page = await env.USAGE.list({ prefix: prefix.includes(':') ? `${prefix}:` : `${prefix}:${user.sub}:`, cursor });
+      keys.push(...page.keys.map((k) => k.name));
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  }
+  for (const prefix of ['topic:', 'topichist:']) {
+    let cursor;
+    do {
+      const page = await env.USAGE.list({ prefix, cursor });
+      keys.push(...page.keys.map((k) => k.name).filter((n) => n.endsWith(`:${who}`)));
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  }
+  await Promise.all([...new Set(keys)].map((k) => env.USAGE.delete(k)));
+  return reply(200, { ok: true, deleted: keys.length });
+}
 async function handlePush(path, request, env, reply, user) {
   let body;
   try { body = await request.json(); } catch { body = null; }
@@ -324,7 +350,16 @@ async function handlePush(path, request, env, reply, user) {
 }
 
 /** OpenAI Responses API 한 번 부르기. schema를 주면 그 모양의 JSON으로 받음. 반환: { text, data } */
+/** 서비스 전체 하루 AI 호출 상한 (비용 폭주 방지). Worker 변수 DAILY_AI_CAP로 바꿈 */
+async function spendGlobal(env, n = 1) {
+  const cap = Number(env.DAILY_AI_CAP) || 3000;
+  const key = `global:${koreaDay(Date.now())}`;
+  const used = Number(await env.USAGE.get(key)) || 0;
+  if (used + n > cap) { console.error('global ai cap reached', used, cap); throw new Busy('global_cap'); }
+  await env.USAGE.put(key, String(used + n), { expirationTtl: 3 * 86400 });
+}
 async function askOpenAI(env, { model = MODEL, instructions, input, schema, effort = 'low', tools, include, maxTokens = 8000 }) {
+  await spendGlobal(env);
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -350,7 +385,7 @@ class NoSpeech extends Error {}
 
 // ----- 의견 보내기: 로그인 없이도 가능, 메일(Resend)로 만든 사람에게 전달 -----
 // 받는 주소(FEEDBACK_TO)와 Resend 키(RESEND_API_KEY)는 Worker 비밀값에만 있음
-const FEEDBACK_KINDS = { bug: '🐛 버그', idea: '💡 제안', question: '❓ 문의', etc: '💬 기타' };
+const FEEDBACK_KINDS = { bug: '🐛 버그', idea: '💡 제안', question: '❓ 문의', etc: '💬 기타', report: '🚩 AI 응답 신고' };
 const FEEDBACK_PER_DAY = 10;   // 같은 곳(IP)에서 하루에 보낼 수 있는 수
 async function handleFeedback(request, env, reply, deps) {
   if (!env.RESEND_API_KEY || !env.FEEDBACK_TO) return reply(503, { error: 'not_configured' });
@@ -447,6 +482,7 @@ async function handleVoiceToken(request, env, reply, voiceKey, voiceTokenKey, re
   if (issued >= (review ? REVIEW_TOKEN_LIMIT : VOICE_TOKEN_LIMIT)) return reply(429, { error: 'token_limit' });
   // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 언어를 알려 줌 (복습은 배우는 언어만. 앱에서 직접 추가한 언어는 코드가 없어서 뺌)
   const languages = (review ? [body?.target] : [body?.target, body?.native]).filter((c) => typeof c === 'string' && LANG_NAMES[c]);
+  try { await spendGlobal(env, 1); } catch { return reply(503, { error: 'busy' }); }
   const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -554,6 +590,7 @@ async function handleTalkToken(request, env, reply, key, user) {
   const allow = Math.min(TALK_SESSION_SEC, left);   // 이번 대화 길이
   // OpenAI에 남길 사용자 구분값 (Firebase 아이디를 그대로 보내지 않고 해시)
   const hashed = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`mooni:${user.sub}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  try { await spendGlobal(env, 5); } catch { return reply(503, { error: 'busy' }); }
   const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json', 'OpenAI-Safety-Identifier': hashed },
@@ -912,7 +949,6 @@ ${topicCardRules(learn, know, level)}
     source: found.has(it.url) ? clean(it.source, 40) : '',
   })).filter((it) => it.title && it.summary).slice(0, 3);
   // 기사 대표 사진 (있으면)
-  await Promise.all(items.map(async (it) => { it.image = it.url ? (await readPage(it.url)).image || '' : ''; }));
   return items;
 }
 /** 오늘 화제를 저장소에서 꺼내고, 없으면 찾아서 저장 (allowGen=false면 꺼내기만) */
@@ -1018,7 +1054,7 @@ ${topicCardRules(learn, know, level)}
       ...(thin ? { tools: [{ type: 'web_search', search_context_size: 'low' }] } : {}),
       maxTokens: 3000,
     });
-    const item = { ...cleanTopic(JSON.parse(text).item), url, source: clean(JSON.parse(text).item.source, 40) || page.site || (url ? new URL(url).hostname.replace(/^www\./, '') : ''), image: page.image || '' };
+    const item = { ...cleanTopic(JSON.parse(text).item), url, source: clean(JSON.parse(text).item.source, 40) || page.site || (url ? new URL(url).hostname.replace(/^www\./, '') : '') };
     if (!item.title) throw new Error('empty');
     return reply(200, { item, remaining: STORY_LIMIT - used - 1, limit: STORY_LIMIT });
   } catch (err) {

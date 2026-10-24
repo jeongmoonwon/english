@@ -980,7 +980,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v106';
+const APP_VERSION = 'v107';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2677,14 +2677,14 @@ function talkCardsHTML(where) {
   loadInterestTopics();
   const topics = [...calTopics(), ...interestTopics()];
   ui.talkTopics = topics;
-  const waiting = intState.loading && !interestTopics().length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 몇 초 걸려요.</p></section>`] : [];
+  const waiting = intState.loading && !interestTopics().length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
   if (!topics.length && !waiting.length) return talkCardHTML(null, -1, where);
   const cards = [...topics.map((t, i) => talkCardHTML(t, i, where)), ...waiting, talkCardHTML(null, -1, where)];
   return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
     <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
 }
 // ---------- 관심사 화제 (설정에서 관심사를 넣은 사람만) ----------
-// 서버가 새벽에 미리 찾아 둔 오늘 화제를 받아 옴. 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
+// 오늘 화제를 서버에서 받아 옴 (그날 처음 열면 서버가 찾음). 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
 const INT_CACHE_KEY = 'freedom-int-topics', INT_VOTE_KEY = 'freedom-int-votes';
 const intState = { data: null, loading: false, failedAt: 0 };
 const intSaved = new Set();   // 이번에 ＋로 카드로 저장한 표현

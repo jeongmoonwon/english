@@ -481,14 +481,8 @@ textarea.eng { font-family: var(--serif); }
 .speak-heard { margin: 0; min-height: 1.5em; font-family: var(--serif); font-size: 18px; color: var(--ink); }
 .speak-heard.dim { font-family: inherit; font-size: 13px; color: var(--muted); }
 .speak-result { margin-top: 14px; padding: 14px 16px; border-radius: 18px; background: var(--surface); display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
-.speak-result b { font-size: 17px; }
-.speak-result.ok b { color: var(--good); }
-.speak-result.near b { color: var(--hard); }
-.speak-result.miss b { color: var(--again); }
-.speak-words { margin: 0; font-family: var(--serif); font-size: 17px; line-height: 1.5; }
-.speak-words .bad { color: var(--again); text-decoration: underline wavy color-mix(in srgb, var(--again) 60%, transparent); text-underline-offset: 4px; }
-.grade.pick { outline: 2.5px solid currentColor; outline-offset: 2px; transform: translateY(-2px); }
-.grade.pick span { font-weight: 800; }
+.speak-label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.speak-words { margin: 0; font-family: var(--serif); font-size: 18px; line-height: 1.5; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sw { flex: none; position: relative; width: 51px; height: 31px; border: 0; border-radius: 999px; padding: 0; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .2s; cursor: pointer; }
 .sw i { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .2); transition: transform .2s; }
@@ -1041,7 +1035,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v125';
+const APP_VERSION = 'v126';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1397,7 +1391,7 @@ function setupHTML(dueByCat) {
       <h3>답하는 방법</h3>
       <div class="seg">
         ${ansBtn('look', '👀 보고 떠올리기', '뒤집어서 확인')}
-        ${ansBtn('speak', `🎙️ 말로 답하기`, `${targetLang().name}로 말하면 바로 채점`)}
+        ${ansBtn('speak', `🎙️ 말로 답하기`, `${targetLang().name}로 말하고 정답과 비교`)}
       </div>
     </div>` : ''}
     ${speaking ? '' : `<div class="field">
@@ -1694,9 +1688,8 @@ function renderReview() {
     bar.innerHTML = speaking ? '<button class="btn wide" data-act="reveal">모르겠어요 · 정답 보기</button>' : '<button class="btn primary wide" data-act="reveal">정답 보기</button>';
     if (speaking) listenFor(card);
   } else {
-    const pick = speaking ? ui.speakRes?.suggest : null;
     bar.innerHTML = `<div class="grades">${GRADES.map((g) => `
-      <button class="grade ${g.cls}${g.r === pick ? ' pick' : ''}" data-act="grade" data-r="${g.r}"><span>${g.label}</span></button>`).join('')}</div>`;
+      <button class="grade ${g.cls}" data-act="grade" data-r="${g.r}"><span>${g.label}</span></button>`).join('')}</div>`;
   }
 }
 
@@ -1720,10 +1713,10 @@ async function gradeCard(rating) {
 
 // ================= 말로 답하는 복습 =================
 // 복습을 시작할 때 실시간 받아쓰기 연결을 하나 열어 두고 카드마다 씀 (카드마다 새로 연결하지 않아 빠름).
-// 카드가 나오면 바로 듣고, 말을 멈추면(조용 0.8초) 또는 들린 말이 정답과 같아지면 바로 앱 안에서 채점 (AI에 묻지 않음)
+// 카드가 나오면 바로 듣고, 말을 멈추면(조용 0.8초) 정답과 들린 말을 나란히 보여 줌. 점수는 사용자가 고름
 const SPEAK = { quietMs: 800, maxMs: 9000, idleMs: 12000, level: 0.012 };
 const rv = { ctx: null, stream: null, node: null, ws: null, connecting: null, queue: [], closed: new Set(),
-  listening: false, checking: false, cardId: null, answer: '', text: '', spoke: false, quiet: 0, startAt: 0, speechAt: 0, awaitItem: null, awaiting: false, final: null, notify: null };
+  listening: false, checking: false, cardId: null, text: '', spoke: false, quiet: 0, startAt: 0, awaitItem: null, awaiting: false, final: null, notify: null };
 const speakOn = () => ui.reviewStarted && study.answer === 'speak';
 /** 복습 시작(버튼 누른 순간): 마이크와 소리 처리 준비 → 받아쓰기 연결 */
 async function openSpeakReview(ctx) {
@@ -1785,7 +1778,7 @@ const wsSend = (o) => { try { rv.ws?.send(JSON.stringify(o)); } catch {} };
 function listenFor(card) {
   if (!rv.ctx || rv.cardId === card.id) return;
   speechSynthesis?.cancel();   // 앞 카드 읽어 주던 소리가 마이크로 들어가지 않게
-  Object.assign(rv, { cardId: card.id, answer: card.engText, text: '', spoke: false, quiet: 0, startAt: Date.now(), speechAt: 0, listening: true, checking: false, awaiting: false, queue: [] });
+  Object.assign(rv, { cardId: card.id, text: '', spoke: false, quiet: 0, startAt: Date.now(), listening: true, checking: false, awaiting: false, queue: [] });
   wsSend({ type: 'input_audio_buffer.clear' });
   if (!rv.ws) connectSpeak().catch(() => { rv.listening = false; renderReview(); toast('받아쓰기에 연결하지 못했어요. 다시 말하기를 눌러 주세요.'); });
 }
@@ -1798,7 +1791,7 @@ function onSpeakAudio(buf) {
   for (const v of pcm) sum += v * v;
   const rms = Math.sqrt(sum / pcm.length) / 32768;
   document.querySelector('#rv-mic')?.style.setProperty('--lvl', Math.min(1, Math.max(0, (20 * Math.log10(rms || 1e-6) + 50) / 35)).toFixed(3));
-  if (rms > SPEAK.level) { if (!rv.spoke) rv.speechAt = Date.now(); rv.spoke = true; rv.quiet = 0; }
+  if (rms > SPEAK.level) { rv.spoke = true; rv.quiet = 0; }
   else if (rv.spoke && (rv.quiet += pcm.length / 24) >= SPEAK.quietMs) { finishSpeak(); return; }
   const took = Date.now() - rv.startAt;
   if (rv.spoke ? took > SPEAK.maxMs : took > SPEAK.idleMs) finishSpeak();
@@ -1814,19 +1807,16 @@ function onSpeakEvent(m) {
     rv.text += ev.delta || '';
     const el = $('#rv-heard');
     if (el) el.textContent = rv.text;
-    // 이미 정답과 똑같이 들렸으면 조용해지기를 기다리지 않고 바로 채점
-    if (rv.listening && scoreSpoken(rv.text, rv.answer).sim >= 0.999) finishSpeak(true);
   } else if (ev.type === 'conversation.item.input_audio_transcription.completed') {
     if (ev.item_id === rv.awaitItem) { rv.final = (ev.transcript || '').trim(); rv.notify?.(); }
   } else if (ev.type === 'conversation.item.input_audio_transcription.failed' && ev.item_id === rv.awaitItem) rv.notify?.();
 }
-/** 말이 끝남: 남은 소리를 받아쓰게 하고 채점 */
-async function finishSpeak(early = false) {
+/** 말이 끝남: 남은 소리를 받아쓰게 하고 정답과 함께 보여 줌 */
+async function finishSpeak() {
   if (!rv.listening) return;
   rv.listening = false;
   const id = rv.cardId;
   if (!rv.spoke && !rv.text) { wsSend({ type: 'input_audio_buffer.clear' }); renderReview(); return; }   // 아무 말도 안 함
-  if (early) { wsSend({ type: 'input_audio_buffer.commit' }); gradeSpoken(id, rv.text); return; }
   Object.assign(rv, { checking: true, awaiting: true, awaitItem: null, final: null });
   renderReview();
   wsSend({ type: 'input_audio_buffer.commit' });
@@ -1834,50 +1824,15 @@ async function finishSpeak(early = false) {
   rv.notify = null;
   rv.awaiting = rv.checking = false;
   if (rv.awaitItem) rv.closed.add(rv.awaitItem);
-  gradeSpoken(id, rv.final ?? rv.text);
+  showSpoken(id, rv.final ?? rv.text);
 }
-/** 들린 말과 정답 비교 → 결과와 추천 점수 */
-function gradeSpoken(id, heard) {
-  const card = cards.find((c) => c.id === id);
-  if (!card || ui.reviewCardId !== id || ui.reviewShow) return;
-  const r = scoreSpoken(heard, card.engText);
-  const fast = rv.speechAt && rv.speechAt - rv.startAt < 2500;
-  const suggest = !heard.trim() ? Rating.Again : r.sim >= 0.999 && fast ? Rating.Easy : r.sim >= 0.9 ? Rating.Good : r.sim >= 0.7 ? Rating.Hard : Rating.Again;
-  ui.speakRes = { heard: heard.trim(), ...r, suggest };
+/** 들린 말을 정답과 함께 보여 줌 (채점은 하지 않음) */
+function showSpoken(id, heard) {
+  if (ui.reviewCardId !== id || ui.reviewShow) return;
+  ui.speakRes = { heard: heard.trim() };
   ui.reviewShow = true;
   ui.flipNow = true;
   renderReview();
-}
-// 줄임말을 풀어서 비교 (I'm = I am). 문장부호·대소문자는 무시
-const CONTRACTIONS = [[/won't/g, 'will not'], [/can't|cannot/g, 'can not'], [/n't\b/g, ' not'], [/'re\b/g, ' are'], [/'m\b/g, ' am'], [/'ll\b/g, ' will'], [/'ve\b/g, ' have'], [/'d\b/g, ' would'], [/'s\b/g, ' is']];
-function speakTokens(s, spaced) {
-  let x = String(s || '').toLowerCase().normalize('NFKC').replace(/[’‘`´]/g, "'").replace(/\([^)]*\)/g, ' ');
-  for (const [re, to] of CONTRACTIONS) x = x.replace(re, to);
-  x = x.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim();
-  return spaced ? x.split(/\s+/).filter(Boolean) : [...x.replace(/\s+/g, '')];
-}
-/** 단어(띄어 쓰지 않는 언어는 글자) 단위 편집 거리로 닮은 정도 0~1. 정답이 "A / B"면 가까운 쪽. ok: 들린 말 중 맞은 단어 표시 */
-function scoreSpoken(heard, answer) {
-  let best = { sim: 0, words: [] };
-  for (const variant of String(answer || '').split(/\s*[/;]\s*|\n/).filter((v) => v.trim())) {
-    const spaced = /\s/.test(variant.trim());
-    const a = speakTokens(variant, spaced), h = speakTokens(heard, spaced);
-    if (!a.length) continue;
-    const d = Array.from({ length: h.length + 1 }, (_, i) => [i, ...Array(a.length).fill(0)]);
-    for (let j = 1; j <= a.length; j++) d[0][j] = j;
-    for (let i = 1; i <= h.length; i++) for (let j = 1; j <= a.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (h[i - 1] === a[j - 1] ? 0 : 1));
-    // 거꾸로 따라가며 들린 단어가 정답과 맞았는지 표시
-    const ok = Array(h.length).fill(false);
-    for (let i = h.length, j = a.length; i > 0 && j > 0;) {
-      if (h[i - 1] === a[j - 1] && d[i][j] === d[i - 1][j - 1]) { ok[i - 1] = true; i--; j--; }
-      else if (d[i][j] === d[i - 1][j - 1] + 1) { i--; j--; }
-      else if (d[i][j] === d[i - 1][j] + 1) i--;
-      else j--;
-    }
-    const sim = Math.max(0, 1 - d[h.length][a.length] / Math.max(a.length, h.length));
-    if (sim >= best.sim) best = { sim, words: h.map((w, i) => ({ w, ok: ok[i] })), spaced };
-  }
-  return best;
 }
 /** 앞면 아래: 듣는 중 / 채점 중 / 다시 듣기 */
 function speakPanelHTML() {
@@ -1886,13 +1841,12 @@ function speakPanelHTML() {
   if (!rv.listening) return `<div class="speak-panel"><button class="talk-mic on" data-act="speak-retry" aria-label="다시 듣기">${icon('mic')}</button><p class="speak-heard dim">눌러서 다시 말하기</p></div>`;
   return `<div class="speak-panel"><span class="talk-mic on" id="rv-mic">${icon('mic')}</span><p class="speak-heard" id="rv-heard">${esc(rv.text)}</p></div>`;
 }
-/** 뒷면 아래: 채점 결과 (들린 말에서 틀린 단어는 빨갛게) */
+/** 뒷면 아래: 내가 말한 문장 (받아쓴 그대로) */
 function speakResultHTML() {
   const r = ui.speakRes;
   if (!r) return '';
-  const [cls, label] = !r.heard ? ['miss', '정답을 확인해 봐요'] : r.sim >= 0.9 ? ['ok', r.sim >= 0.999 ? '정확해요! 🎉' : '거의 정확해요! 👏'] : r.sim >= 0.7 ? ['near', '조금만 더! 거의 맞았어요'] : ['miss', '다시 해 봐요'];
-  return `<div class="speak-result ${cls}"><b>${label}</b>
-    ${r.heard ? `<p class="speak-words">🎙 ${r.words.map((x) => `<span class="${x.ok ? '' : 'bad'}">${esc(x.w)}</span>`).join(r.spaced ? ' ' : '')}</p>` : ''}
+  return `<div class="speak-result">
+    ${r.heard ? `<span class="speak-label">내가 말한 문장</span><p class="speak-words">${esc(r.heard)}</p>` : ''}
     <button class="cat ghost" data-act="speak-retry">${icon('mic')} 다시 말하기</button></div>`;
 }
 
@@ -4754,8 +4708,8 @@ document.addEventListener('click', (ev) => {
   switch (act) {
     case 'reveal':
       if (ui.reviewShow || ui.flipping) break;
-      // 말로 답하기에서 '모르겠어요': 듣기를 멈추고 '다시'를 추천
-      if (speakOn() && rv.ctx) { rv.listening = false; wsSend({ type: 'input_audio_buffer.clear' }); ui.speakRes = { heard: '', sim: 0, words: [], suggest: Rating.Again }; }
+      // 말로 답하기에서 '모르겠어요': 듣기를 멈추고 정답 보기
+      if (speakOn() && rv.ctx) { rv.listening = false; wsSend({ type: 'input_audio_buffer.clear' }); ui.speakRes = { heard: '' }; }
       ui.flipping = true;
       flipOut('#review-main', () => { ui.flipping = false; ui.reviewShow = true; ui.flipNow = true; renderReview(); });
       break;

@@ -468,6 +468,13 @@ textarea.eng { font-family: var(--serif); }
 .topic-row i { font-style: normal; color: var(--accent); font-weight: 800; }
 .topic-row.done { color: var(--muted); }
 .story-add { width: 100%; }
+.sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sw { flex: none; position: relative; width: 51px; height: 31px; border: 0; border-radius: 999px; padding: 0; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .2s; cursor: pointer; }
+.sw i { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .2); transition: transform .2s; }
+.sw[aria-checked="true"] { background: var(--g2, var(--accent)); }
+.sw[aria-checked="true"] i { transform: translateX(20px); }
+.sw:disabled { opacity: .5; }
+@media (prefers-reduced-motion: reduce) { .sw, .sw i { transition: none; } }
 .mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .mem-list li { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 12px; border-radius: 12px; background: var(--bg); font-size: 14px; }
 .mem-list li span { flex: 1; }
@@ -1013,7 +1020,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v119';
+const APP_VERSION = 'v120';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1442,7 +1449,7 @@ const prefs = (() => {
   // mode: 지금 언어 모드, modes: 이 기기에서 만든(아직 카드가 없을 수 있는) 모드
   // talkVoice: 대화 목소리, talkName: 대화 상대가 나를 부를 이름, talkBotName: 대화 상대 이름 (비면 목소리 이름)
   // design: 3 = 기본 글씨체를 나눔스퀘어라운드로 바꾼 뒤 (그 전 사용자는 글씨체를 한 번 새 기본값으로)
-  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {} };
+  const base = { theme: 'system', size: 'normal', speak: false, rate: 0.9, font: 'NanumSquareRound', engFont: 'serif', mode: 'en>ko', modes: [], talkVoice: 'marin', talkName: '', talkBotName: '', design: 3, goalReview: 20, goalAdd: 3, goalTalk: 5, calendar: false, interests: [], levels: {}, talkInterest: true, talkStory: true };
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch {}
   if (saved && saved.design !== 3) { saved.font = base.font; saved.design = 3; try { localStorage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch {} }
@@ -2715,6 +2722,9 @@ async function loadCalendar(force = false) {
 }
 const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.getMinutes() ? { minute: '2-digit' } : {}) });
 // 배우는 언어 수준 (언어 모드마다, CEFR): 대화 상대의 말 난이도, 화제 브리핑·표현, 대화 정리에 반영
+/** 설정의 켜고 끄는 줄: 이름 + 오른쪽 스위치 (로그인 안 했으면 못 누름) */
+const swRow = (label, on, act) => `<div class="sw-row"><span class="sub">${label}</span>
+  <button class="sw" role="switch" aria-checked="${on}" aria-label="${label}" data-act="${act}" ${user ? '' : 'disabled'}><i></i></button></div>`;
 const LEVEL_OPTS = [['A1', '입문'], ['A2', '초급'], ['B1', '중급'], ['B2', '중상급'], ['C1', '고급']];
 const learnLevel = (mode = prefs.mode) => prefs.levels?.[mode] || 'B1';
 // 대화 상대가 기억하는 나 (이 기기에만): 대화를 정리할 때 서버가 고쳐 돌려주고, 대화를 시작할 때 함께 보냄
@@ -2819,8 +2829,8 @@ function talkCardsHTML(where) {
   const cal = calTopics();
   ui.talkTopics = cal;
   const groups = interestGroups();
-  const waiting = intState.loading && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
-  const cards = [...cal.map((t, i) => talkCardHTML(t, i, where)), ...groups.map(interestCardHTML), ...waiting, ...(user && SCAN_URL ? [storyCardHTML()] : []), talkCardHTML(null, -1, where)];
+  const waiting = intState.loading && prefs.talkInterest !== false && !groups.length ? [`<section class="talk-card"><span class="talk-tag">✨ 관심사</span><h3>오늘의 화제를 찾고 있어요…</h3><p>관심사 소식을 찾는 데 조금 걸려요.</p></section>`] : [];
+  const cards = [...cal.map((t, i) => talkCardHTML(t, i, where)), ...groups.map(interestCardHTML), ...waiting, ...(user && SCAN_URL && prefs.talkStory !== false ? [storyCardHTML()] : []), talkCardHTML(null, -1, where)];
   if (cards.length === 1) return cards[0];
   return `<div class="talk-swipe" data-count="${cards.length}">${cards.join('')}</div>
     <div class="talk-dots" aria-hidden="true">${cards.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>`;
@@ -2919,7 +2929,7 @@ function setIntVote(key, v) {
   try { localStorage.setItem(INT_VOTE_KEY, JSON.stringify(all)); } catch {}
 }
 async function loadInterestTopics(force = false) {
-  if (!user || !SCAN_URL || !(prefs.interests || []).length || intState.loading) return;
+  if (!user || !SCAN_URL || prefs.talkInterest === false || !(prefs.interests || []).length || intState.loading) return;
   const day = dayKey(new Date());
   if (!force) {
     if (intState.data?.day === day && intState.data.mode === prefs.mode && intState.data.sig === `${prefs.interests.join('|')}#${learnLevel()}`) return;
@@ -2954,7 +2964,7 @@ const interestTopic = (g, it) => ({ kind: 'interest', interest: g.interest, titl
   url: it.url, source: it.source, image: it.image || '', key: `int|${it.title}`, when: `관심사 · ${g.interest}` });
 /** 오늘 보여 줄 관심사 헤드라인 (관심사마다 최대 3개, 👎한 건 뺌, 얘기한 건 ✓) */
 function interestGroups() {
-  if (!(prefs.interests || []).length || !intState.data?.topics) return [];
+  if (prefs.talkInterest === false || !(prefs.interests || []).length || !intState.data?.topics) return [];
   const votes = intVotes();
   return intState.data.topics.map((g) => ({ interest: g.interest, items: (g.items || []).map((it) => interestTopic(g, it)).filter((x) => votes[x.key] !== 'down').slice(0, 3) }))
     .filter((g) => g.items.length);
@@ -3742,22 +3752,24 @@ function renderSettingsPage(page) {
       <p class="sync-line">비워 두면 이름 없이 불러요. 대화하는 언어에 맞는 이름을 적으면 더 자연스러워요.</p>
     </div>
     <div class="field">
-      <label class="sub">구글 캘린더로 일상 대화 <span class="opt-badge">선택</span></label>
+      ${swRow('구글 캘린더로 일상 대화', !!prefs.calendar, 'cal-switch')}
       ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>'
-        : prefs.calendar ? `<p class="sync-line"><b>연결됨</b> · 그저께부터 내일까지 일정으로 "치과 어땠어?"처럼 말을 걸어요.${cal.events ? ` 지금 읽은 일정 ${cal.events.length}개.` : ''}</p>
+        : prefs.calendar ? `<p class="sync-line">그저께부터 내일까지 일정으로 "치과 어땠어?"처럼 말을 걸어요.${cal.events ? ` 지금 읽은 일정 ${cal.events.length}개.` : ''}</p>
           ${cal.needReconnect ? `<p class="sync-line warn">지금은 기본 캘린더만 읽고 있어요. 직접 만든 캘린더(미팅, 마감 등)의 일정도 읽으려면 한 번 다시 연결해 주세요.</p>
-          <button class="btn primary wide" data-act="cal-connect">다시 연결</button>` : ''}
-          <button class="btn wide" data-act="cal-disconnect">연결 끊기</button>`
-        : `<p class="sync-line">켜면 오늘과 내일 일정의 <b>제목과 시간만</b> 읽어서 일정으로 말을 걸어요. 일정은 저장하지 않고, 대화를 시작할 때 고른 일정 하나의 제목만 대화 AI(OpenAI)에 전해요. 언제든 끌 수 있어요.</p>
-          <button class="btn primary wide" data-act="cal-connect">구글 캘린더 연결</button>`}
+          <button class="btn primary wide" data-act="cal-connect">다시 연결</button>` : ''}`
+        : '<p class="sync-line">켜면 구글 캘린더를 연결해요. 오늘과 내일 일정의 <b>제목과 시간만</b> 읽고, 일정은 저장하지 않아요. 대화를 시작할 때 고른 일정 하나의 제목만 대화 AI(OpenAI)에 전해요.</p>'}
     </div>
     <div class="field">
-      <label class="sub">관심사로 대화 <span class="opt-badge">선택</span></label>
-      ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>' : `
+      ${swRow('관심사로 대화', prefs.talkInterest !== false, 'talk-interest')}
+      ${!user ? '<p class="sync-line">로그인하면 쓸 수 있어요.</p>' : prefs.talkInterest === false ? '<p class="sync-line">켜면 관심사의 새 소식이나 재미있는 사실을 헤드라인으로 보여 줘요.</p>' : `
         ${(prefs.interests || []).length ? `<div class="chips">${prefs.interests.map((x) => `<button class="cat" aria-pressed="true" data-act="int-remove" data-v="${esc(x)}">${esc(x)} ✕</button>`).join('')}</div>` : ''}
         ${(prefs.interests || []).length < 5 ? `<div class="new-cat"><input class="text" id="int-input" maxlength="30" enterkeyhint="done" placeholder="관심사 적기"><button class="btn small primary" data-act="int-add">추가</button></div>
         <div class="chips">${['스포츠', '여행', '음악', '영화', '음식', '기술', '동물', '게임'].filter((x) => !(prefs.interests || []).includes(x)).map((x) => `<button class="cat ghost" data-act="int-suggest" data-v="${x}">+ ${x}</button>`).join('')}</div>` : ''}
         <p class="sync-line">최대 5개. 대화 탭에 들어가면 그날 관심사 2개의 새 소식이나 재미있는 사실을 찾아 헤드라인으로 보여 줘요. 관심사는 화제를 찾는 데만 쓰려고 서버에 저장해요.</p>`}
+    </div>
+    <div class="field">
+      ${swRow('내가 가져온 이야기로 대화', prefs.talkStory !== false, 'talk-story')}
+      <p class="sync-line">대화 탭에서 본 영상·기사 링크나 본 내용을 넣으면 브리핑을 만들어 같이 얘기해요.</p>
     </div>
     <div class="field">
       <label class="sub">${josa(botName(), '이', '가')} 기억하는 나</label>
@@ -4434,6 +4446,9 @@ document.addEventListener('click', (ev) => {
     case 'int-remove': saveInterests((prefs.interests || []).filter((x) => x !== el.dataset.v)); break;
     case 'talk-go-topic': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; setTab('talk'); startTalk(topic || null); break; }
     case 'cal-connect': connectCalendar(); break;
+    case 'cal-switch': prefs.calendar ? disconnectCalendar() : connectCalendar(); break;
+    case 'talk-interest': setPref('talkInterest', prefs.talkInterest === false); renderSettingsPage('talk'); renderTalk(); break;
+    case 'talk-story': setPref('talkStory', prefs.talkStory === false); renderSettingsPage('talk'); renderTalk(); break;
     case 'cal-disconnect': disconnectCalendar(); break;
     case 'talk-start': startTalk(); break;
     case 'talk-end': endTalk(); break;

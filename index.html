@@ -1050,7 +1050,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v130';
+const APP_VERSION = 'v131';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2973,7 +2973,7 @@ function savePushSoon() {
   savePushTimer = setTimeout(() => savePush().catch(() => toast('알림 설정을 저장하지 못했어요. 인터넷 연결을 확인해 주세요.')), 500);
 }
 function setAlarms(list) { setPref('alarms', list); renderSettingsPage('alarm'); savePushSoon(); }
-async function enablePush() {
+async function enablePush(announce = true) {
   if (!user || !('Notification' in window)) return;
   // 아이폰: 알림 허용 묻기는 누른 그 순간에
   const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
@@ -2983,7 +2983,7 @@ async function enablePush() {
     if (!(prefs.alarms || []).length) setPref('alarms', [{ time: '20:00', kind: 'review', on: true }]);
     await savePush(sub);
     setPref('push', true);
-    toast('알림을 켰어요.');
+    if (announce) toast('알림을 켰어요.');
   } catch (err) { toast(`알림을 켜지 못했어요. (${errText(err)})`); }
   renderSettingsPage('alarm');
 }
@@ -4870,7 +4870,19 @@ document.addEventListener('click', (ev) => {
       ob.step += 1; renderOnboard(); break;
     case 'ob-skip': if (ob.step === 0) applyOnboardLang(); closeOnboard(); break;
     case 'ob-push': setPref('pushAsked', true); enablePush().then(() => { if (!$('#onboard').hidden) renderOnboard(); }); break;
-    case 'nudge-push': setPref('pushAsked', true); enablePush().then(() => renderReview()); break;
+    case 'nudge-push':
+      setPref('pushAsked', true);
+      // 켜지면 알림 화면에서 바로 시간을 정하게 (룰렛이 펼쳐진 채로, 뒤로 가면 오늘 탭)
+      enablePush(false).then(() => {
+        if (!prefs.push) { renderReview(); return; }
+        setTab('settings');
+        ui.settingsFrom = 'review';
+        openSettingsPage('alarm');
+        ui.alarmEdit = 0;
+        renderSettingsPage('alarm');
+        toast('알림을 켰어요. 알림 받을 시간을 정해 주세요.');
+      });
+      break;
     case 'nudge-push-no': setPref('pushAsked', true); renderReview(); break;
     case 'push-switch': prefs.push ? disablePush() : enablePush(); break;
     case 'push-test': pushPost('/push/test', {}).then((r) => toast(r.ok ? '시험 알림을 보냈어요. 곧 도착해요.' : '시험 알림을 보내지 못했어요. 알림을 껐다 켜 보세요.')).catch(() => toast('시험 알림을 보내지 못했어요.')); break;

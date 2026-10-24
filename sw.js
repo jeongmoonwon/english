@@ -1,6 +1,6 @@
 // 앱 파일을 기기에 저장해 오프라인에서도 열리게 합니다.
 // index.html 등을 수정해 다시 올릴 때는 아래 버전 숫자와 index.html의 APP_VERSION을 같이 올려 주세요.
-const CACHE = 'freedom-v103';
+const CACHE = 'freedom-v104';
 // 브라우저에 남은 옛 파일 말고 서버의 새 파일을 받아 저장 (cache: 'reload')
 const ASSETS = [
   './',
@@ -8,9 +8,9 @@ const ASSETS = [
   './manifest.webmanifest',
   './vendor/ts-fsrs.mjs',
   './vendor/firebase.mjs',
-  './icons/mooni-180.png?v=102',
-  './icons/mooni-192.png?v=102',
-  './icons/mooni-512.png?v=102',
+  './icons/orb-180.png',
+  './icons/orb-192.png',
+  './icons/orb-512.png',
 ];
 
 self.addEventListener('install', (event) => {

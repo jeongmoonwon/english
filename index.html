@@ -451,12 +451,6 @@ textarea.eng { font-family: var(--serif); }
 .talk-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .talk-card .btn { margin-top: 2px; }
 
-.topic-exprs { display: flex; flex-direction: column; gap: 6px; }
-.topic-expr { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 7px 10px; background: color-mix(in srgb, var(--muted) 9%, transparent); font: inherit; color: var(--ink); }
-.topic-expr b { font-family: var(--serif); font-size: 15px; }
-.topic-expr span { flex: 1; color: var(--muted); font-size: 13px; }
-.topic-expr i { font-style: normal; color: var(--accent); font-weight: 800; }
-.topic-expr.saved i { color: var(--good); }
 .topic-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .topic-src { color: var(--muted); font-size: 12px; text-decoration: none; }
 .topic-votes { display: flex; gap: 4px; }
@@ -980,7 +974,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v107';
+const APP_VERSION = 'v108';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2647,7 +2641,6 @@ function talkCardHTML(topic, i, where) {
     return `<section class="talk-card tap" role="button" tabindex="0" data-act="talk-go-topic" data-index="${i}">
       <span class="talk-tag">✨ 관심사 · ${esc(topic.interest)}${topic.fact ? ' · 재미있는 사실' : ''}</span>
       <h3>${esc(topic.title)}</h3><p>${esc(topic.summary)}</p>
-      ${topic.expressions.length ? `<div class="topic-exprs">${topic.expressions.map((e, k) => `<button class="topic-expr${intSaved.has(e.expression) ? ' saved' : ''}" data-act="int-expr" data-index="${i}" data-k="${k}"><b>${esc(e.expression)}</b><span>${esc(e.meaning)}</span><i>${intSaved.has(e.expression) ? '✓' : '＋'}</i></button>`).join('')}</div>` : ''}
       <div class="topic-foot">
         ${topic.url ? `<a class="topic-src" href="${esc(topic.url)}" target="_blank" rel="noopener" data-act="ext-link">${esc(topic.source || '출처')} ↗</a>` : '<span></span>'}
         <span class="topic-votes"><button class="topic-vote${vote === 'up' ? ' on' : ''}" data-act="int-vote" data-v="up" data-index="${i}" aria-label="이런 화제 좋아요">👍</button><button class="topic-vote" data-act="int-vote" data-v="down" data-index="${i}" aria-label="이 화제 그만">👎</button></span>
@@ -2687,7 +2680,6 @@ function talkCardsHTML(where) {
 // 오늘 화제를 서버에서 받아 옴 (그날 처음 열면 서버가 찾음). 이 기기에는 오늘 날짜·언어 모드와 함께 저장해 두고 다시 묻지 않음
 const INT_CACHE_KEY = 'freedom-int-topics', INT_VOTE_KEY = 'freedom-int-votes';
 const intState = { data: null, loading: false, failedAt: 0 };
-const intSaved = new Set();   // 이번에 ＋로 카드로 저장한 표현
 function intVotes() { try { return JSON.parse(localStorage.getItem(INT_VOTE_KEY)) || {}; } catch { return {}; } }
 function setIntVote(key, v) {
   const all = intVotes();
@@ -2774,16 +2766,6 @@ function addInterest(name) {
   saveInterests([...list, v]);
 }
 /** 화제 카드의 표현을 바로 카드로 저장 */
-async function saveTopicExpression(topic, e) {
-  if (intSaved.has(e.expression)) return;
-  const card = newCard({ korText: e.meaning, engText: e.expression, korImages: [], engImages: [], category: await keyForName(DEFAULT_CATEGORY), source: 'talk' });
-  await putCard(card);
-  await recordActivity([addActivity(card)]);
-  intSaved.add(e.expression);
-  markChanged();
-  renderAll();
-  toast(`'${e.expression}' 카드로 저장했어요.`);
-}
 
 async function connectCalendar() {
   if (!user) { toast('먼저 로그인해 주세요.'); return; }
@@ -4164,7 +4146,6 @@ document.addEventListener('click', (ev) => {
       break;
     }
     case 'ext-link': break;   // 출처 링크는 그대로 열림 (카드 누름으로 안 넘어감)
-    case 'int-expr': { const topic = ui.talkTopics?.[Number(el.dataset.index)]; const e = topic?.expressions?.[Number(el.dataset.k)]; if (e) saveTopicExpression(topic, e); break; }
     case 'int-vote': {
       const topic = ui.talkTopics?.[Number(el.dataset.index)];
       if (!topic) break;

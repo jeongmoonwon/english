@@ -468,6 +468,10 @@ textarea.eng { font-family: var(--serif); }
 .topic-row i { font-style: normal; color: var(--accent); font-weight: 800; }
 .topic-row.done { color: var(--muted); }
 .story-add { width: 100%; }
+.mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mem-list li { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 12px; border-radius: 12px; background: var(--bg); font-size: 14px; }
+.mem-list li span { flex: 1; }
+.mem-list .x-mini { border: 0; background: none; color: var(--muted); font-size: 14px; padding: 4px 8px; }
 .story-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 16px; padding: 14px; font: inherit; font-size: 16px; background: var(--surface); color: var(--ink); resize: vertical; }
 .brief-body { display: flex; flex-direction: column; gap: 12px; }
 .brief-img { width: 100%; aspect-ratio: 2 / 1; max-height: 180px; object-fit: cover; border-radius: 18px; background: color-mix(in srgb, var(--muted) 12%, transparent); }
@@ -1005,7 +1009,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v117';
+const APP_VERSION = 'v118';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2528,7 +2532,7 @@ async function startTalk(topic = null) {
     const res = await fetch(talkURL('/talk/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic && { ...t.topic, expressions: (t.topic.expressions || []).map((e) => e.expression ?? e) } }),
+      body: JSON.stringify({ target, native, memory: talkMemory(), practice: practiceList, voice: prefs.talkVoice, name: prefs.talkName, botName: prefs.talkBotName, topic: t.topic && { ...t.topic, expressions: (t.topic.expressions || []).map((e) => e.expression ?? e) } }),
     });
     const data = await res.json().catch(() => ({}));
     if (typeof data.remainingSec === 'number') talkLeftSec = data.remainingSec;
@@ -2641,10 +2645,11 @@ async function endTalk() {
     const res = await fetch(talkURL('/talk/review'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ turns, target, native }),
+      body: JSON.stringify({ turns, target, native, memory: talkMemory(), today: dayKey(new Date()) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ScanError(TALK_ERRORS[res.status] || '대화를 정리하지 못했어요.');
+    if (Array.isArray(data.memory)) setTalkMemory(data.memory);
     t.items = Array.isArray(data.items) ? data.items : [];
     // 관심사 화제·가져온 이야기로 한 대화면 브리핑의 표현도 함께
     if (t.topic?.kind === 'interest' || t.topic?.kind === 'story') for (const e of t.topic.expressions || []) {
@@ -2705,6 +2710,13 @@ async function loadCalendar(force = false) {
   if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
 }
 const timeText = (d) => d.toLocaleTimeString('ko-KR', { hour: 'numeric', ...(d.getMinutes() ? { minute: '2-digit' } : {}) });
+// 대화 상대가 기억하는 나 (이 기기에만): 대화를 정리할 때 서버가 고쳐 돌려주고, 대화를 시작할 때 함께 보냄
+const MEMORY_KEY = 'freedom-talk-memory';
+function talkMemory() { try { const m = JSON.parse(localStorage.getItem(MEMORY_KEY)); return Array.isArray(m) ? m : []; } catch { return []; } }
+function setTalkMemory(list) {
+  try { if (list.length) localStorage.setItem(MEMORY_KEY, JSON.stringify(list.slice(0, 30))); else localStorage.removeItem(MEMORY_KEY); } catch {}
+  if (ui.tab === 'settings' && ui.settingsPage === 'talk') renderSettingsPage('talk');
+}
 // 이미 얘기한 일정 (이 기기에만, 5일 지나면 지움): 같은 일정을 또 묻지 않으려고
 const TALKED_KEY = 'freedom-talked-topics';
 function talkedTopics() {
@@ -3730,7 +3742,13 @@ function renderSettingsPage(page) {
         ${(prefs.interests || []).length ? `<div class="chips">${prefs.interests.map((x) => `<button class="cat" aria-pressed="true" data-act="int-remove" data-v="${esc(x)}">${esc(x)} ✕</button>`).join('')}</div>` : ''}
         ${(prefs.interests || []).length < 5 ? `<div class="new-cat"><input class="text" id="int-input" maxlength="30" enterkeyhint="done" placeholder="관심사 적기"><button class="btn small primary" data-act="int-add">추가</button></div>
         <div class="chips">${['스포츠', '여행', '음악', '영화', '음식', '기술', '동물', '게임'].filter((x) => !(prefs.interests || []).includes(x)).map((x) => `<button class="cat ghost" data-act="int-suggest" data-v="${x}">+ ${x}</button>`).join('')}</div>` : ''}
-        <p class="sync-line">최대 5개. 매일 새벽 관심사 중 2개의 새 소식이나 재미있는 사실을 찾아, 오늘의 대화 카드로 보여 줘요. 관심사는 화제를 찾는 데만 쓰려고 서버에 저장해요.</p>`}
+        <p class="sync-line">최대 5개. 대화 탭에 들어가면 그날 관심사 2개의 새 소식이나 재미있는 사실을 찾아 헤드라인으로 보여 줘요. 관심사는 화제를 찾는 데만 쓰려고 서버에 저장해요.</p>`}
+    </div>
+    <div class="field">
+      <label class="sub">${josa(botName(), '이', '가')} 기억하는 나</label>
+      ${talkMemory().length ? `<ul class="mem-list">${talkMemory().map((m, i) => `<li><span>${esc(m)}</span><button class="x-mini" data-act="mem-remove" data-index="${i}" aria-label="이 기억 지우기">✕</button></li>`).join('')}</ul>
+        <button class="btn wide" data-act="mem-clear">모두 잊게 하기</button>` : ''}
+      <p class="sync-line">대화를 정리할 때 내가 말한 좋아하는 것, 일상, 계획을 짧게 기억해 두었다가 다음 대화에서 친구처럼 자연스럽게 꺼내요. 기억은 이 기기에만 저장하고, 대화할 때만 대화 AI(OpenAI)에 전해요.</p>
     </div>`;
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
@@ -4390,6 +4408,8 @@ document.addEventListener('click', (ev) => {
     case 'story-new': openStoryNew(); break;
     case 'story-make': makeStory(); break;
     case 'brief-close': closeBrief(); break;
+    case 'mem-remove': setTalkMemory(talkMemory().filter((_, i) => i !== Number(el.dataset.index))); break;
+    case 'mem-clear': if (confirm(`${josa(botName(), '이', '가')} 기억하는 것을 모두 지울까요?`)) setTalkMemory([]); break;
     case 'brief-go': { const topic = brief.topic; closeBrief(); setTab('talk'); startTalk(topic); break; }
     case 'topic-expr': { const e = brief.topic?.expressions?.[Number(el.dataset.k)]; if (e) saveTopicExpression(e); break; }
     case 'int-add': addInterest($('#int-input')?.value); break;

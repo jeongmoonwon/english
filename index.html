@@ -1050,7 +1050,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v131';
+const APP_VERSION = 'v132';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3286,7 +3286,7 @@ async function loadInterestTopics(force = false) {
     const res = await fetch(talkURL('/interest/topics'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-      body: JSON.stringify({ target, native, level: learnLevel(), ...topicTaste() }),
+      body: JSON.stringify({ target, native, level: learnLevel(), memory: talkMemory(), ...topicTaste() }),   // 기억 메모로 더 좋아할 화제를
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(res.status);

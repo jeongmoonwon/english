@@ -474,7 +474,7 @@ textarea.eng { font-family: var(--serif); }
 .talk-dots i { width: 6px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--muted) 30%, transparent); transition: width .2s; }
 .talk-dots i.on { width: 16px; background: var(--g2, var(--accent)); }
 #review-actions { display: flex; flex-direction: column; gap: 8px; }
-.today-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.today-mini { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 .today-mini .btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; font-size: 14px; background: var(--glass, var(--surface)); color: var(--ink); box-shadow: 0 0 0 .5px var(--line) inset; }
 .today-streak-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; font-weight: 800; }
 .today-streak-line .week { display: flex; gap: 3px; }
@@ -977,7 +977,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v110';
+const APP_VERSION = 'v111';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1559,7 +1559,7 @@ function renderReview() {
       <button class="btn wide" data-act="review-setup-cancel">돌아가기</button>`;
     return;
   }
-  // 시작 전: 오늘 홈 (오늘 링 · 오늘의 대화 · 바로가기, 복습 설정은 복습 시작을 누른 뒤)
+  // 시작 전: 오늘 홈 (오늘 링 · 바로가기, 복습 설정은 복습 시작을 누른 뒤). 대화 화제 카드는 대화 탭에만 (화제도 대화 탭에 갈 때 만듦)
   if (!ui.reviewStarted) {
     ui.reviewShow = false; ui.reviewCardId = null;
     filters.hidden = true;
@@ -1579,7 +1579,6 @@ function renderReview() {
     // 최근 7일 (오늘이 맨 오른쪽)
     const week = [...Array(7)].map((_, i) => { const d = new Date(now); d.setDate(d.getDate() - (6 - i)); return d; });
     const { n } = streakInfo(days);
-    loadCalendar();   // 캘린더를 연결했으면 오늘·내일 일정 (10분마다 새로)
     main.innerHTML = `
       ${orbCardHTML(days, today)}
       <section class="today-hero">
@@ -1591,8 +1590,8 @@ function renderReview() {
           <span class="today-streak-line"><span class="gtext">🔥 ${n}일 연속</span><span class="week">${week.map((d) => `<i class="${studiedOn(days.get(dayKey(d))) ? 'on' : ''}${dayKey(d) === dayKey(now) ? ' now' : ''}" title="${d.getMonth() + 1}/${d.getDate()}"></i>`).join('')}</span></span>
         </div>
       </section>
-      ${talkCardsHTML('home')}
       <div class="today-mini">
+        <button class="btn" data-tab="talk">${icon('chat')} 대화하기</button>
         <button class="btn" data-act="add">${icon('pen')} 카드 추가</button>
         <button class="btn" data-act="practice">${icon('type')} 자유 연습</button>
       </div>`;

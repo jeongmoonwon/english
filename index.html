@@ -957,7 +957,7 @@ const GRADES = [
 ];
 // 자유 연습: 맞음 +1, 틀림 -2, 최근 본 3장은 바로 다시 안 나옴
 const PRACTICE = { correct: 1, wrong: -2, recentExclude: 3 };
-const IMAGE_MAX = 1568;      // 자동 입력용으로 보낼 사진의 긴 변 최대 픽셀 (Claude가 줄이지 않고 읽는 크기)
+const IMAGE_MAX = 1568;      // 자동 입력용으로 보낼 사진의 긴 변 최대 픽셀 (이 이상은 보내도 잘 안 읽힘)
 const IMAGE_QUALITY = 0.8;   // JPEG 품질
 // 사진으로 자동 입력: worker/ 폴더의 Cloudflare Worker 주소. 비어 있으면 이 기능이 숨겨져요
 const SCAN_URL = 'https://mooni-scan.mooni-scan.workers.dev';
@@ -974,7 +974,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v108';
+const APP_VERSION = 'v109';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1854,7 +1854,7 @@ function entryHTML(e, en, i) {
   </div>`;
 }
 
-/** 사진으로 자동 입력: 사진 속 외국어 표현과 한국어 뜻을 Claude가 찾아 채워 줌 (사진은 저장하지 않음) */
+/** 사진으로 자동 입력: 사진 속 외국어 표현과 한국어 뜻을 AI(OpenAI)가 찾아 채워 줌 (사진은 저장하지 않음) */
 function scanEditorHTML(e) {
   if (!SCAN_URL) return '';
   let body;
@@ -1995,7 +1995,7 @@ const MASCOT = `<svg class="mascot" viewBox="0 0 120 116" aria-hidden="true">
   <ellipse cx="34" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/><ellipse cx="86" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/>
   <path d="M55 74q5 6 10 0" fill="none" stroke="#2B2A4C" stroke-width="3" stroke-linecap="round"/>
 </svg>`;
-// ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(Claude) ----------
+// ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(OpenAI) ----------
 // 녹음하는 동안 소리를 OpenAI 실시간 받아쓰기로 바로 보내서, '끝내기'를 누르면 글자가 거의 준비돼 있음.
 // 실시간 받아쓰기가 안 되면(연결 실패 등) 같이 녹음해 둔 파일을 보내 Worker가 받아씀 (예전 방식)
 const VOICE_MAX_SEC = 30;
@@ -2226,7 +2226,7 @@ async function sendVoice(e, blob, live, stream) {
   if (message) toast(message);
 }
 
-// ---------- 글로 물어보기: 궁금한 표현이나 하고 싶은 말을 적으면 Worker(Claude)가 나머지 칸을 채움 ----------
+// ---------- 글로 물어보기: 궁금한 표현이나 하고 싶은 말을 적으면 Worker(OpenAI)가 나머지 칸을 채움 ----------
 const ASK_LIMIT = 30;        // 하루 횟수 (Worker와 같게)
 const ASK_MAX_CHARS = 300;
 const ASK_STAGES = [() => '보내고 있어요', () => '보내고 있어요', () => '뜻과 표현을 찾고 있어요'];
@@ -2293,7 +2293,7 @@ async function sendAsk() {
   if (message) toast(message);
 }
 
-// ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 Claude가 고칠 말·카드 후보 정리 ----------
+// ---------- 복숭아와 대화하기: OpenAI 실시간 음성으로 말로 대화 → 끝나면 OpenAI가 고칠 말·카드 후보 정리 ----------
 const TALK_VOICES = [['marin', 'Marin'], ['cedar', 'Cedar'], ['alloy', 'Alloy'], ['ash', 'Ash'], ['ballad', 'Ballad'], ['coral', 'Coral'], ['echo', 'Echo'], ['sage', 'Sage'], ['shimmer', 'Shimmer'], ['verse', 'Verse']];
 /** 대화 상대 이름: 정한 이름, 없으면 고른 목소리 이름 */
 const botName = () => prefs.talkBotName || (TALK_VOICES.find(([v]) => v === prefs.talkVoice) || TALK_VOICES[0])[1];

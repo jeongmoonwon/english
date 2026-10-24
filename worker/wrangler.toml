@@ -4,7 +4,7 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
-# 항상 미국에서 실행: 한국 사용자 요청이 홍콩 등 Claude API가 막힌 지역에서 나가면 403 "Request not allowed"
+# 항상 미국에서 실행: 한국 사용자 요청이 홍콩 등 AI API가 막힌 지역에서 나가면 403으로 거절됨
 [placement]
 region = "aws:us-east-1"
 

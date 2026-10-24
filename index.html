@@ -470,6 +470,9 @@ textarea.eng { font-family: var(--serif); }
 .story-add { width: 100%; }
 .alarm-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .alarm-row .wheels { grid-column: 1 / -1; }
+.alarm-row.editing { grid-template-columns: 1fr; }
+.alarm-row.editing .chips { grid-row: auto; }
+.alarm-time-btn { justify-self: start; border: 0; background: none; padding: 2px 0; font: inherit; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
 .alarm-row .chips { grid-row: 2; grid-column: 1; }
 .alarm-row .x-mini { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 6px; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1024,7 +1027,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v122';
+const APP_VERSION = 'v123';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3680,22 +3683,20 @@ function alarmWheelsHTML(a, i) {
   return `<div class="wheels">${cols.map(([part, name, vals, on, unit]) => `<div class="wheel-col"><div class="wheel-wrap">
     <ul class="wheel" data-alarm="${i}" data-part="${part}" data-index="${on}" tabindex="0" aria-label="${name}">${vals.map(([v, label], k) => `<li data-v="${v}" class="${k === on ? 'on' : ''}">${label}<small>${unit}</small></li>`).join('')}</ul></div></div>`).join('')}</div>`;
 }
-/** 알림 시간 휠이 멈추면 그 시간으로 저장 (다시 그리지 않음: 돌리던 휠이 튀지 않게) */
-function commitAlarmWheel(i) {
+/** 알림 시간 휠에서 고른 시각 ("21:05") */
+function alarmWheelTime(i) {
   const pick = (part) => {
     const w = document.querySelector(`.wheel[data-alarm="${i}"][data-part="${part}"]`);
     const items = w.querySelectorAll('li');
     return Number(items[Math.max(0, Math.min(items.length - 1, Math.round(w.scrollTop / WHEEL_ROW)))].dataset.v);
   };
-  const time = `${String((pick('h') % 12) + pick('ap') * 12).padStart(2, '0')}:${String(pick('m')).padStart(2, '0')}`;
-  const list = prefs.alarms || [];
-  if (!list[i] || list[i].time === time) return;
-  setPref('alarms', list.map((a, k) => (k === i ? { ...a, time } : a)));
-  savePushSoon();
+  return `${String((pick('h') % 12) + pick('ap') * 12).padStart(2, '0')}:${String(pick('m')).padStart(2, '0')}`;
 }
+/** "21:05" → "오후 9:05" */
+const alarmTimeText = (time) => { const [h, m] = time.split(':').map(Number); return `${h >= 12 ? '오후' : '오전'} ${h % 12 || 12}:${String(m).padStart(2, '0')}`; };
 /** 휠이 멈추면 그 값으로 목표를 바꿈 */
 function commitWheel(w) {
-  if (w.dataset.alarm != null) { commitAlarmWheel(Number(w.dataset.alarm)); return; }
+  if (w.dataset.alarm != null) return;   // 알림 시간은 '확인'을 눌러야 저장
   const items = w.querySelectorAll('li');
   const i = Math.max(0, Math.min(items.length - 1, Math.round(w.scrollTop / WHEEL_ROW)));
   const v = Number(items[i].dataset.v);
@@ -3788,6 +3789,7 @@ async function saveFeedbackToStore(data) {
 function openSettingsPage(page, focusNew) {
   ui.settingsPage = page;
   if (page === 'lang') { ui.newMode = { target: null, native: 'ko' }; ui.removingMode = null; }
+  if (page === 'alarm') ui.alarmEdit = null;
   if (page === 'feedback' && !ui.feedback) ui.feedback = { kind: 'idea', text: '', email: '', sending: false };
   renderSettings();
   $('#settings-main').scrollTop = 0;
@@ -3893,12 +3895,16 @@ function renderSettingsPage(page) {
     </div>
     ${prefs.push && can && !blocked ? `<div class="field">
       <label class="sub">알림 시간</label>
-      ${alarms.map((a, i) => `<div class="alarm-row">
-        ${alarmWheelsHTML(a, i)}
+      ${alarms.map((a, i) => {
+        const kinds = `<div class="chips">${[['review', '📚 복습'], ['talk', '💬 대화']].map(([k, label]) => `<button class="cat" data-act="alarm-kind" data-index="${i}" data-kind="${k}" aria-pressed="${a.kind === k}">${label}</button>`).join('')}</div>`;
+        // 시각을 누르면 룰렛이 펼쳐지고, 확인을 누르면 접히며 그 시각으로 저장
+        return ui.alarmEdit === i ? `<div class="alarm-row editing">${alarmWheelsHTML(a, i)}${kinds}
+          <button class="btn primary wide" data-act="alarm-ok" data-index="${i}">확인</button></div>` : `<div class="alarm-row">
+        <button class="alarm-time-btn" data-act="alarm-edit" data-index="${i}" aria-label="알림 시간 바꾸기">${alarmTimeText(a.time)}</button>
         <button class="sw" role="switch" aria-checked="${a.on}" data-act="alarm-on" data-index="${i}" aria-label="이 알림 켜기"><i></i></button>
         <button class="x-mini" data-act="alarm-del" data-index="${i}" aria-label="이 알림 지우기">✕</button>
-        <div class="chips">${[['review', '📚 복습'], ['talk', '💬 대화']].map(([k, label]) => `<button class="cat" data-act="alarm-kind" data-index="${i}" data-kind="${k}" aria-pressed="${a.kind === k}">${label}</button>`).join('')}</div>
-      </div>`).join('')}
+        ${kinds}</div>`;
+      }).join('')}
       ${alarms.length < 3 ? '<button class="btn wide" data-act="alarm-add">＋ 알림 추가</button>' : ''}
       <button class="btn wide" data-act="push-test">시험 알림 보내기</button>
     </div>` : ''}`;
@@ -4574,8 +4580,10 @@ document.addEventListener('click', (ev) => {
     case 'cal-connect': connectCalendar(); break;
     case 'push-switch': prefs.push ? disablePush() : enablePush(); break;
     case 'push-test': pushPost('/push/test', {}).then((r) => toast(r.ok ? '시험 알림을 보냈어요. 곧 도착해요.' : '시험 알림을 보내지 못했어요. 알림을 껐다 켜 보세요.')).catch(() => toast('시험 알림을 보내지 못했어요.')); break;
-    case 'alarm-add': { const list = prefs.alarms || []; if (list.length < 3) setAlarms([...list, { time: list.some((a) => a.kind === 'talk') ? '08:00' : '21:00', kind: list.some((a) => a.kind === 'talk') ? 'review' : 'talk', on: true }]); break; }
-    case 'alarm-del': setAlarms((prefs.alarms || []).filter((_, i) => i !== Number(el.dataset.index))); break;
+    case 'alarm-edit': ui.alarmEdit = Number(el.dataset.index); renderSettingsPage('alarm'); break;
+    case 'alarm-ok': { const i = Number(el.dataset.index); const time = alarmWheelTime(i); ui.alarmEdit = null; setAlarms((prefs.alarms || []).map((a, k) => (k === i ? { ...a, time } : a))); break; }
+    case 'alarm-add': { const list = prefs.alarms || []; if (list.length < 3) ui.alarmEdit = list.length; if (list.length < 3) setAlarms([...list, { time: list.some((a) => a.kind === 'talk') ? '08:00' : '21:00', kind: list.some((a) => a.kind === 'talk') ? 'review' : 'talk', on: true }]); break; }
+    case 'alarm-del': ui.alarmEdit = null; setAlarms((prefs.alarms || []).filter((_, i) => i !== Number(el.dataset.index))); break;
     case 'alarm-on': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, on: !a.on } : a))); break;
     case 'alarm-kind': setAlarms((prefs.alarms || []).map((a, i) => (i === Number(el.dataset.index) ? { ...a, kind: el.dataset.kind } : a))); break;
     case 'cal-switch': prefs.calendar ? disconnectCalendar() : connectCalendar(); break;

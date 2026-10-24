@@ -10,7 +10,10 @@ const MAX_IMAGES = 5;
 const VOICE_LIMIT = 10;                      // 1인당 하루 말해서 넣기 횟수
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;     // 녹음 한 번 (앱은 30초에서 멈춤)
 const WHISPER = '@cf/openai/whisper-large-v3-turbo';   // OpenAI 키가 없을 때만 씀 (느림)
-const TRANSCRIBE = 'gpt-4o-mini-transcribe';            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
+const TRANSCRIBE = 'gpt-4o-mini-transcribe';
+const LIVE_TRANSCRIBE = 'gpt-live-transcribe';         // 말해서 넣기 실시간 받아쓰기 (녹음하는 동안 글자가 옴)
+const VOICE_TOKEN_LIMIT = 30;                // 1인당 하루 실시간 받아쓰기 키 발급 수 (실패해도 녹음 파일로 다시 보내므로 넉넉히)
+const MAX_TRANSCRIPT_CHARS = 500;            // 말해서 넣기 받아쓰기 (OpenAI)   // Cloudflare Workers AI 음성 인식                        // 한 번에 보낼 수 있는 사진 수 (하루 사용량에서 장수만큼 빠짐)
 const ASK_LIMIT = 30;                        // 1인당 하루 글로 물어보기 횟수
 const MAX_ASK_CHARS = 300;
 const TALK_DAY_SEC = 15 * 60;                // 1인당 하루 대화 시간 (초)
@@ -88,12 +91,13 @@ export async function handle(request, env, deps = {}) {
   if (request.method === 'GET' && path === '/calendar/callback') return handleCalendarCallback(request, env);
   const isUsage = request.method === 'GET' && path === '/usage';
   const isVoice = request.method === 'POST' && path === '/voice';
+  const isVoiceToken = request.method === 'POST' && path === '/voice/token';
   const isAsk = request.method === 'POST' && path === '/ask';
   const isTalk = request.method === 'POST' && ['/talk/token', '/talk/review', '/talk/end'].includes(path);
   const isCalendar = request.method === 'POST' && ['/calendar/start', '/calendar/events', '/calendar/disconnect'].includes(path);
   const isInterest = request.method === 'POST' && ['/interest/get', '/interest/save', '/interest/topics'].includes(path);
   const isFeedback = request.method === 'POST' && path === '/feedback';
-  if (!isUsage && !isVoice && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
+  if (!isUsage && !isVoice && !isVoiceToken && !isAsk && !isTalk && !isCalendar && !isInterest && !isFeedback && (request.method !== 'POST' || path !== '/scan')) return reply(404, { error: 'not_found' });
   if (!cors['Access-Control-Allow-Origin']) return reply(403, { error: 'origin' });
   if (isFeedback) return handleFeedback(request, env, reply, deps);
 
@@ -125,6 +129,7 @@ export async function handle(request, env, deps = {}) {
     });
   }
   if (isVoice) return handleVoice(request, env, reply, voiceKey);
+  if (isVoiceToken) return handleVoiceToken(request, env, reply, voiceKey, `voicetok:${user.sub}:${day}`);
   if (isAsk) return handleAsk(request, env, reply, askKey);
   if (path === '/talk/token') return handleTalkToken(request, env, reply, talkKey, user);
   if (path === '/talk/end') return handleTalkEnd(request, env, reply, talkKey, user);
@@ -224,8 +229,11 @@ async function handleFeedback(request, env, reply, deps) {
 async function handleVoice(request, env, reply, key) {
   let body;
   try { body = await request.json(); } catch { body = null; }
+  // 앱이 실시간 받아쓰기로 이미 글자를 받았으면 transcript만, 아니면 녹음(audio)을 보냄
+  const typedTranscript = typeof body?.transcript === 'string' ? body.transcript.trim() : '';
   const audio = typeof body?.audio === 'string' ? body.audio : '';
-  if (!audio || !/^[A-Za-z0-9+/]+=*$/.test(audio)) return reply(400, { error: 'audio' });
+  if (typedTranscript.length > MAX_TRANSCRIPT_CHARS) return reply(413, { error: 'too_large' });
+  if (!typedTranscript && (!audio || !/^[A-Za-z0-9+/]+=*$/.test(audio))) return reply(400, { error: 'audio' });
   if (audio.length * 0.75 > MAX_AUDIO_BYTES) return reply(413, { error: 'too_large' });
   const target = langName(body.target) || 'English';
   const native = langName(body.native) || 'Korean';
@@ -234,8 +242,8 @@ async function handleVoice(request, env, reply, key) {
   if (used >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
   await env.USAGE.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
   try {
-    const { transcript, language } = env.OPENAI_API_KEY
-      ? await transcribeOpenAI(env, audio, body.mediaType, target, native)
+    const { transcript, language } = typedTranscript ? { transcript: typedTranscript, language: '' }
+      : env.OPENAI_API_KEY ? await transcribeOpenAI(env, audio, body.mediaType, target, native)
       : await transcribeWhisper(env, audio);
     if (!transcript) throw new NoSpeech();
     const result = await askClaudeExpression(env, { transcript, language }, target, native);
@@ -248,6 +256,45 @@ async function handleVoice(request, env, reply, key) {
     console.error('voice failed', err);
     return reply(502, { error: 'upstream' });
   }
+}
+
+/** 말해서 넣기 실시간 받아쓰기: 앱이 녹음하면서 OpenAI로 바로 소리를 보내도록 몇 분짜리 임시 키를 줌.
+ * 횟수는 받아쓴 글자로 /voice를 부를 때 셈 (여기서는 키 발급 수만 따로 제한) */
+async function handleVoiceToken(request, env, reply, voiceKey, tokenKey) {
+  if (!env.OPENAI_API_KEY) return reply(503, { error: 'not_configured' });
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  if ((Number(await env.USAGE.get(voiceKey)) || 0) >= VOICE_LIMIT) return reply(429, { error: 'limit', remaining: 0, limit: VOICE_LIMIT });
+  const issued = Number(await env.USAGE.get(tokenKey)) || 0;
+  if (issued >= VOICE_TOKEN_LIMIT) return reply(429, { error: 'token_limit' });
+  // 받아쓰기가 엉뚱한 언어로 짐작하지 않게 두 언어를 알려 줌 (앱에서 직접 추가한 언어는 코드가 없어서 뺌)
+  const languages = [body?.target, body?.native].filter((c) => typeof c === 'string' && LANG_NAMES[c]);
+  const res = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      expires_after: { anchor: 'created_at', seconds: 120 },
+      session: {
+        type: 'transcription',
+        audio: {
+          input: {
+            format: { type: 'audio/pcm', rate: 24000 },
+            noise_reduction: { type: 'near_field' },
+            transcription: { model: LIVE_TRANSCRIBE, ...(languages.length ? { languages } : {}) },
+            // 말이 끝난 건 앱이 '끝내기'로 알려 줌 (input_audio_buffer.commit)
+            turn_detection: null,
+          },
+        },
+      },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.value) {
+    console.error('voice token failed', res.status, JSON.stringify(data).slice(0, 500));
+    return reply(502, { error: 'upstream' });
+  }
+  await env.USAGE.put(tokenKey, String(issued + 1), { expirationTtl: 2 * 86400 });
+  return reply(200, { value: data.value });
 }
 
 // ----- 글로 물어보기: 궁금한 표현(배울 언어) 또는 하고 싶은 말(편한 언어) → Claude(표현·뜻·설명) -----

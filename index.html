@@ -980,7 +980,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v104';
+const APP_VERSION = 'v105';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -1872,6 +1872,7 @@ function scanEditorHTML(e) {
       <p class="sync-line">어느 쪽으로 말해도 나머지 칸을 채워 줘요</p>
       <button class="rec-btn on" data-act="voice-stop" aria-label="녹음 끝내기"><span class="rec-square"></span></button>
       <p class="rec-time"><span class="rec-dot"></span><span id="rec-secs">0:00</span> / 0:${VOICE_MAX_SEC}</p>
+      <p class="heard" id="rec-heard" ${rec.live?.text ? '' : 'hidden'}>🎙 ${esc(rec.live?.text || '')}</p>
       <div class="rec-actions">
         <button class="btn small" data-act="voice-cancel">취소</button>
         <button class="btn small primary" data-act="voice-stop">다 말했어요</button>
@@ -1882,7 +1883,8 @@ function scanEditorHTML(e) {
     body = `<div class="scan-wait" role="status" aria-live="polite">
       <div class="spinner">${MASCOT}</div>
       <b>${stages[e.scanStage ?? 0](e.scanCount)}<span class="dots"><i>.</i><i>.</i><i>.</i></span></b>
-      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · ${e.busy === 'voice' ? '보통 5~10초 걸려요' : e.busy === 'ask' ? '보통 2~5초 걸려요' : e.scanCount > 1 ? '사진이 많으면 조금 더 걸려요' : '보통 5~15초 걸려요'}</p>
+      ${e.busy === 'voice' && e.heard ? `<p class="heard">🎙 들린 말: “${esc(e.heard)}”</p>` : ''}
+      <p class="sync-line"><span id="scan-secs">${Math.floor((Date.now() - e.scanStart) / 1000)}</span>초째 · ${e.busy === 'voice' ? '보통 몇 초면 돼요' : e.busy === 'ask' ? '보통 2~5초 걸려요' : e.scanCount > 1 ? '사진이 많으면 조금 더 걸려요' : '보통 5~15초 걸려요'}</p>
     </div>`;
   } else {
     let result = '';
@@ -1998,12 +2000,121 @@ const MASCOT = `<svg class="mascot" viewBox="0 0 120 116" aria-hidden="true">
   <ellipse cx="34" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/><ellipse cx="86" cy="75" rx="7" ry="4.2" fill="#F79AC0" opacity=".55"/>
   <path d="M55 74q5 6 10 0" fill="none" stroke="#2B2A4C" stroke-width="3" stroke-linecap="round"/>
 </svg>`;
-// ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(Whisper + Claude) ----------
+// ---------- 말해서 넣기: 버튼으로 녹음 시작 → 끝내기 → Worker(Claude) ----------
+// 녹음하는 동안 소리를 OpenAI 실시간 받아쓰기로 바로 보내서, '끝내기'를 누르면 글자가 거의 준비돼 있음.
+// 실시간 받아쓰기가 안 되면(연결 실패 등) 같이 녹음해 둔 파일을 보내 Worker가 받아씀 (예전 방식)
 const VOICE_MAX_SEC = 30;
 const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 const VOICE_STAGES = [() => '녹음을 준비하고 있어요', () => '말한 내용을 보내고 있어요', () => '듣고 뜻을 찾고 있어요'];
 let voiceRemaining = null;
-const rec = { recorder: null, stream: null, chunks: [], timer: null, start: 0, cancelled: false };
+const rec = { recorder: null, stream: null, chunks: [], timer: null, start: 0, cancelled: false, live: null };
+const canLive = !!(window.AudioContext && window.AudioWorkletNode && window.WebSocket);
+// 마이크 소리 → 24kHz 16비트 PCM 조각 (OpenAI 실시간 받아쓰기 형식). 'flush'를 받으면 남은 것을 보내고 'flushed'
+const PCM_WORKLET = URL.createObjectURL(new Blob([`class Pcm24k extends AudioWorkletProcessor {
+  constructor() { super(); this.step = sampleRate / 24000; this.pos = 0; this.prev = 0; this.out = [];
+    this.port.onmessage = () => { this.send(); this.port.postMessage('flushed'); }; }
+  send() { if (this.out.length) { this.port.postMessage(Int16Array.from(this.out).buffer); this.out = []; } }
+  process(inputs) {
+    const x = inputs[0] && inputs[0][0];
+    if (x && x.length) {
+      // pos 0 = 앞 조각의 마지막 소리, k = 이번 조각의 x[k - 1]
+      for (; this.pos < x.length; this.pos += this.step) {
+        const i = Math.floor(this.pos), f = this.pos - i, a = i ? x[i - 1] : this.prev, v = a + (x[i] - a) * f;
+        this.out.push(Math.max(-1, Math.min(1, v)) * 0x7fff);
+      }
+      this.pos -= x.length;
+      this.prev = x[x.length - 1];
+      if (this.out.length >= 2400) this.send();
+    }
+    return true;
+  }
+}
+registerProcessor('pcm24k', Pcm24k);`], { type: 'application/javascript' }));
+function bufBase64(buf) {
+  const b = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+/** 실시간 받아쓰기 시작 (기다리지 않음). 실패하면 L.failed만 켜고 녹음 파일로 보냄 */
+async function startLive(e, stream, ctx) {
+  const L = rec.live = { e, ctx, ws: null, queue: [], failed: false, closed: false, text: '', final: null, notify: null };
+  const fail = () => { L.failed = true; L.notify?.(); };
+  try {
+    await ctx.resume();
+    await ctx.audioWorklet.addModule(PCM_WORKLET);
+    if (L.closed) return;
+    const src = ctx.createMediaStreamSource(stream);
+    const node = L.node = new AudioWorkletNode(ctx, 'pcm24k');
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    src.connect(node).connect(mute).connect(ctx.destination);
+    node.port.onmessage = (m) => {
+      if (m.data === 'flushed') { L.flushed = true; L.notify?.(); return; }
+      // 연결되기 전 소리는 모아 뒀다가 열리면 한꺼번에 보냄 (처음 1초를 놓치지 않게)
+      if (L.ws?.readyState === WebSocket.OPEN) L.ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: bufBase64(m.data) }));
+      else L.queue.push(m.data);
+    };
+    const { target, native } = modeParts(e.mode);
+    const res = await fetch(`${SCAN_URL.replace(/\/$/, '')}/voice/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+      body: JSON.stringify({ target, native }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.value) throw new Error(`token ${res.status}`);
+    if (L.closed) return;
+    const ws = L.ws = new WebSocket('wss://api.openai.com/v1/realtime?intent=transcription', ['realtime', `openai-insecure-api-key.${data.value}`]);
+    ws.onopen = () => {
+      for (const b of L.queue) ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: bufBase64(b) }));
+      L.queue = [];
+      L.notify?.();
+    };
+    ws.onmessage = (m) => {
+      let ev;
+      try { ev = JSON.parse(m.data); } catch { return; }
+      if (ev.type === 'conversation.item.input_audio_transcription.delta') {
+        L.text += ev.delta || '';
+        const el = $('#rec-heard');
+        if (el && editor === L.e) { el.hidden = false; el.textContent = `🎙 ${L.text}`; }
+      } else if (ev.type === 'conversation.item.input_audio_transcription.completed') {
+        L.final = (ev.transcript || '').trim();
+        L.notify?.();
+      } else if (ev.type === 'conversation.item.input_audio_transcription.failed') fail();
+      else if (ev.type === 'error') { console.warn('live transcribe error', ev.error); if (L.committed) fail(); }
+    };
+    ws.onerror = ws.onclose = () => { if (L.final === null) fail(); };
+  } catch (err) {
+    console.warn('live transcribe off', err);
+    fail();
+  }
+}
+/** '끝내기' 뒤: 남은 소리를 보내고 다 받아쓸 때까지 기다림 → 글자, 안 되면 null (녹음 파일로 보냄) */
+async function finishLive(L, ms = 5000) {
+  const until = Date.now() + ms;
+  const wait = (ok) => new Promise((resolve) => {
+    const check = () => { if (ok() || L.failed || Date.now() > until) { L.notify = null; clearTimeout(L.timer); resolve(); } };
+    L.notify = check;
+    L.timer = setTimeout(check, Math.max(0, until - Date.now()));
+    check();
+  });
+  if (!L.node) return null;
+  L.node.port.postMessage('flush');
+  await wait(() => L.flushed && L.ws?.readyState === WebSocket.OPEN && !L.queue.length);
+  if (L.failed || !L.flushed || L.ws?.readyState !== WebSocket.OPEN || L.queue.length) return null;
+  L.committed = true;
+  L.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+  await wait(() => L.final !== null);
+  return L.failed ? null : L.final;
+}
+function closeLive(L = rec.live) {
+  if (!L) return;
+  L.closed = true;
+  L.notify = null;
+  try { L.ws?.close(); } catch {}
+  L.ctx?.close().catch(() => {});
+  if (rec.live === L) rec.live = null;
+}
 function recMime() {
   // Whisper에서 확인한 형식: webm(opus), mp4(AAC, 아이폰)
   for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) if (MediaRecorder.isTypeSupported?.(t)) return t;
@@ -2013,26 +2124,32 @@ async function startVoice() {
   const e = editor;
   if (!e || !user || e.loading || e.recording) return;
   if (voiceRemaining === 0) { toast(VOICE_ERRORS[429]); return; }
+  // 아이폰: 소리 처리는 버튼을 누른 그 순간에 만들어야 함
+  let ctx = null;
+  try { if (canLive) ctx = new AudioContext(); } catch {}
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch {
+    ctx?.close().catch(() => {});
     toast('마이크를 쓸 수 없어요. 휴대폰 설정에서 마이크 권한을 허용해 주세요.');
     return;
   }
-  if (editor !== e) { stream.getTracks().forEach((t) => t.stop()); return; }
+  if (editor !== e) { ctx?.close().catch(() => {}); stream.getTracks().forEach((t) => t.stop()); return; }
   const mime = recMime();
   const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   Object.assign(rec, { recorder, stream, chunks: [], start: Date.now(), cancelled: false });
   recorder.ondataavailable = (ev) => { if (ev.data.size) rec.chunks.push(ev.data); };
   recorder.onstop = () => {
-    stream.getTracks().forEach((t) => t.stop());
     clearInterval(rec.timer);
     e.recording = false;
-    if (rec.cancelled || editor !== e) { if (editor === e) renderEditor(); return; }
-    sendVoice(e, new Blob(rec.chunks, { type: recorder.mimeType || mime || 'audio/mp4' }));
+    const live = rec.live;
+    if (rec.cancelled || editor !== e) { closeLive(live); stream.getTracks().forEach((t) => t.stop()); if (editor === e) renderEditor(); return; }
+    // 마이크는 실시간 받아쓰기가 남은 소리를 다 보낸 뒤에 끔
+    sendVoice(e, new Blob(rec.chunks, { type: recorder.mimeType || mime || 'audio/mp4' }), live, stream);
   };
   recorder.start();
+  if (ctx) startLive(e, stream, ctx);
   e.recording = true;
   e.found = null; e.checked = null; e.heard = null; e.asked = null;
   renderEditor();
@@ -2055,8 +2172,9 @@ const VOICE_ERRORS = {
   429: '오늘 쓸 수 있는 말하기 10번을 모두 썼어요. 내일 다시 쓸 수 있어요.',
   503: '지금 요청이 많아요. 잠시 뒤 다시 시도해 주세요.',
 };
-async function sendVoice(e, blob) {
-  if (Date.now() - rec.start < 600 || blob.size < 1000) { toast('녹음이 너무 짧아요. 말한 뒤에 끝내기를 눌러 주세요.'); renderEditor(); return; }
+async function sendVoice(e, blob, live, stream) {
+  const micOff = () => stream?.getTracks().forEach((t) => t.stop());
+  if (Date.now() - rec.start < 600 || blob.size < 1000) { closeLive(live); micOff(); toast('녹음이 너무 짧아요. 말한 뒤에 끝내기를 눌러 주세요.'); renderEditor(); return; }
   e.busy = 'voice';
   e.scanCount = 1;
   e.loading += 1;
@@ -2070,7 +2188,12 @@ async function sendVoice(e, blob) {
   let message = null;
   try {
     const { target, native } = modeParts(e.mode);
-    const body = JSON.stringify({ audio: await blobBase64(blob), mediaType: blob.type, target, native });
+    // 실시간 받아쓰기로 글자를 받았으면 글자만, 아니면 녹음 파일을 보냄
+    const transcript = live ? await finishLive(live) : null;
+    closeLive(live);
+    micOff();
+    if (transcript) { e.heard = transcript; setScanStage(e, 2); }
+    const body = JSON.stringify(transcript ? { transcript, target, native } : { audio: await blobBase64(blob), mediaType: blob.type, target, native });
     const reading = setTimeout(() => setScanStage(e, 2), 600);
     let res;
     try {
@@ -2084,6 +2207,7 @@ async function sendVoice(e, blob) {
     }
     const data = await res.json().catch(() => ({}));
     if (typeof data.remaining === 'number') voiceRemaining = data.remaining;
+    if (!res.ok) e.heard = null;
     if (!res.ok) throw new ScanError(VOICE_ERRORS[res.status] || '말한 내용을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
     if (editor !== e) return;
     const items = Array.isArray(data.items) ? data.items : [];
@@ -2096,6 +2220,8 @@ async function sendVoice(e, blob) {
     else if (navigator.onLine === false) message = '인터넷에 연결되어 있지 않아요.';
     else message = `말한 내용을 처리하지 못했어요. (${errText(err)})`;
   } finally {
+    closeLive(live);
+    micOff();
     clearInterval(scanTimer);
     e.loading -= 1;
     e.scanStage = null;

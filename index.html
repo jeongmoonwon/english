@@ -469,8 +469,8 @@ textarea.eng { font-family: var(--serif); }
 .topic-row.done { color: var(--muted); }
 .story-add { width: 100%; }
 .alarm-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.alarm-row .alarm-time { font-size: 20px; font-weight: 700; padding: 6px 10px; width: auto; }
-.alarm-row .chips { grid-column: 1 / -1; }
+.alarm-row .wheels { grid-column: 1 / -1; }
+.alarm-row .chips { grid-row: 2; grid-column: 1; }
 .alarm-row .x-mini { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 6px; }
 .sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sw { flex: none; position: relative; width: 51px; height: 31px; border: 0; border-radius: 999px; padding: 0; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .2s; cursor: pointer; }
@@ -1024,7 +1024,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v121';
+const APP_VERSION = 'v122';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -3669,8 +3669,33 @@ const goalControlsHTML = () => `<div class="wheels">${GOAL_WHEELS.map(([key, nam
 function initWheels() {
   document.querySelectorAll('.wheel').forEach((w) => { w.scrollTop = Number(w.dataset.index) * WHEEL_ROW; });
 }
+/** 알림 시간 휠 세 개 (오전/오후 · 시 · 분 5분 단위): 목표 휠과 같은 모양 */
+function alarmWheelsHTML(a, i) {
+  const [h, m] = a.time.split(':').map(Number);
+  const cols = [
+    ['ap', '오전/오후', [[0, '오전'], [1, '오후']], h >= 12 ? 1 : 0, ''],
+    ['h', '시', range(1, 12, 1).map((x) => [x, x]), (h % 12 || 12) - 1, '시'],
+    ['m', '분', range(0, 55, 5).map((x) => [x, String(x).padStart(2, '0')]), Math.min(11, Math.round(m / 5)), '분'],
+  ];
+  return `<div class="wheels">${cols.map(([part, name, vals, on, unit]) => `<div class="wheel-col"><div class="wheel-wrap">
+    <ul class="wheel" data-alarm="${i}" data-part="${part}" data-index="${on}" tabindex="0" aria-label="${name}">${vals.map(([v, label], k) => `<li data-v="${v}" class="${k === on ? 'on' : ''}">${label}<small>${unit}</small></li>`).join('')}</ul></div></div>`).join('')}</div>`;
+}
+/** 알림 시간 휠이 멈추면 그 시간으로 저장 (다시 그리지 않음: 돌리던 휠이 튀지 않게) */
+function commitAlarmWheel(i) {
+  const pick = (part) => {
+    const w = document.querySelector(`.wheel[data-alarm="${i}"][data-part="${part}"]`);
+    const items = w.querySelectorAll('li');
+    return Number(items[Math.max(0, Math.min(items.length - 1, Math.round(w.scrollTop / WHEEL_ROW)))].dataset.v);
+  };
+  const time = `${String((pick('h') % 12) + pick('ap') * 12).padStart(2, '0')}:${String(pick('m')).padStart(2, '0')}`;
+  const list = prefs.alarms || [];
+  if (!list[i] || list[i].time === time) return;
+  setPref('alarms', list.map((a, k) => (k === i ? { ...a, time } : a)));
+  savePushSoon();
+}
 /** 휠이 멈추면 그 값으로 목표를 바꿈 */
 function commitWheel(w) {
+  if (w.dataset.alarm != null) { commitAlarmWheel(Number(w.dataset.alarm)); return; }
   const items = w.querySelectorAll('li');
   const i = Math.max(0, Math.min(items.length - 1, Math.round(w.scrollTop / WHEEL_ROW)));
   const v = Number(items[i].dataset.v);
@@ -3869,7 +3894,7 @@ function renderSettingsPage(page) {
     ${prefs.push && can && !blocked ? `<div class="field">
       <label class="sub">알림 시간</label>
       ${alarms.map((a, i) => `<div class="alarm-row">
-        <input type="time" class="text alarm-time" data-index="${i}" value="${esc(a.time)}" aria-label="알림 시간">
+        ${alarmWheelsHTML(a, i)}
         <button class="sw" role="switch" aria-checked="${a.on}" data-act="alarm-on" data-index="${i}" aria-label="이 알림 켜기"><i></i></button>
         <button class="x-mini" data-act="alarm-del" data-index="${i}" aria-label="이 알림 지우기">✕</button>
         <div class="chips">${[['review', '📚 복습'], ['talk', '💬 대화']].map(([k, label]) => `<button class="cat" data-act="alarm-kind" data-index="${i}" data-kind="${k}" aria-pressed="${a.kind === k}">${label}</button>`).join('')}</div>
@@ -3877,6 +3902,7 @@ function renderSettingsPage(page) {
       ${alarms.length < 3 ? '<button class="btn wide" data-act="alarm-add">＋ 알림 추가</button>' : ''}
       <button class="btn wide" data-act="push-test">시험 알림 보내기</button>
     </div>` : ''}`;
+    initWheels();
   } else if (page === 'backup') {
     box.innerHTML = `<div class="field">
       <p class="sync-line">동기화와 별개로, 지금 데이터(모든 언어 모드)를 파일 하나로 저장하거나 그 파일에서 되살릴 수 있어요.</p>
@@ -4790,12 +4816,6 @@ document.addEventListener('scroll', (ev) => {
   box.nextElementSibling?.querySelectorAll('i').forEach((dot, k) => dot.classList.toggle('on', k === i));
 }, true);
 
-// 알림 시간 바꾸기
-document.addEventListener('change', (ev) => {
-  if (!ev.target.matches?.('.alarm-time') || !ev.target.value) return;
-  const i = Number(ev.target.dataset.index);
-  setAlarms((prefs.alarms || []).map((a, k) => (k === i ? { ...a, time: ev.target.value } : a)));
-});
 // 새 언어 모드 드롭다운
 document.addEventListener('change', (ev) => {
   if (!ev.target.matches('#new-target, #new-native')) return;

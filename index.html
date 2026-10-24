@@ -404,15 +404,15 @@ textarea.eng { font-family: var(--serif); }
 .talk-hero.speaking .mascot { animation: talk-bob .45s ease-in-out infinite; }
 @keyframes talk-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .talk-hero b { font-size: 19px; }
-/* 대화 중 가운데 동그라미: 듣는 중이면 숨 쉬는 마이크, 대화 상대가 말하는 중이면 누르는 정지 버튼 */
+/* 대화 중 가운데 동그라미: 듣는 중이면 내 목소리 크기에 따라 커지는 마이크, 대화 상대가 말하는 중이면 누르는 정지 버튼 */
 .talk-mic { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; margin: 2px 0; border: 0; padding: 0; }
-.talk-mic.on { background: var(--g2, var(--accent)); color: #fff; animation: mic-breathe 1.6s ease-out infinite; }
+.talk-mic.on { background: var(--g2, var(--accent)); color: #fff; transform: scale(calc(1 + var(--lvl, 0) * .2));
+  box-shadow: 0 0 0 calc(var(--lvl, 0) * 18px) color-mix(in srgb, var(--accent) 22%, transparent); transition: transform .08s linear, box-shadow .08s linear; }
 .talk-mic.on .ico { width: 26px; height: 26px; }
 .talk-mic.stop { background: var(--surface); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent) inset, 0 6px 18px rgba(30, 20, 60, .12); cursor: pointer; }
 .talk-mic.stop span { width: 20px; height: 20px; border-radius: 5px; background: var(--g2, var(--accent)); }
 .talk-mic.stop:active { transform: scale(.94); }
-@keyframes mic-breathe { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent); } 100% { box-shadow: 0 0 0 16px transparent; } }
-@media (prefers-reduced-motion: reduce) { .talk-mic.on { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .talk-mic.on { transform: none; } }
 .talk-hero p { margin: 0; color: var(--muted); }
 .talk-log { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .bubble { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 16px; line-height: 1.4; }
@@ -986,7 +986,7 @@ const STUDY_KEY = 'freedom-study';
 // 설정 탭의 화면·소리 설정 (이 기기에만 저장). theme: system | light | dark, size: normal | large | xlarge
 const PREFS_KEY = 'freedom-prefs';
 // 앱 버전 (백업 화면에 표시). 올릴 때 sw.js의 CACHE 숫자도 같이 올려 주세요
-const APP_VERSION = 'v115';
+const APP_VERSION = 'v116';
 // Firebase 동기화: Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 값을 넣어 주세요. apiKey가 비어 있으면 동기화 메뉴가 꺼져 있어요
 const FIREBASE = {
   apiKey: 'AIzaSyB-V4tt5C0FmHcRZIONLFt4WBzNmMdCL8E',
@@ -2491,7 +2491,8 @@ async function startTalk(topic = null) {
   t.mode = prefs.mode;
   t.turns = [];
   t.topic = topic;
-  // 아이폰: 소리 재생과 마이크는 버튼을 누른 그 순간에 준비해야 함
+  // 아이폰: 소리 재생과 마이크(목소리 크기 재기 포함)는 버튼을 누른 그 순간에 준비해야 함
+  try { t.meterCtx = new AudioContext(); } catch { t.meterCtx = null; }
   t.audio = new Audio();
   t.audio.autoplay = true;
   t.audio.setAttribute('playsinline', '');
@@ -2501,6 +2502,7 @@ async function startTalk(topic = null) {
     // 에코 제거: 스피커로 나온 복숭아 목소리가 마이크로 다시 들어가 내 말로 잡히지 않게
     try { t.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
     catch { throw new ScanError('마이크를 쓸 수 없어요. 휴대폰 설정에서 마이크 권한을 허용해 주세요.'); }
+    startTalkMeter(t);
     const { target, native } = modeParts(t.mode);
     // 오늘 복습할 표현을 대화 중에 써 볼 수 있게 함께 보냄
     const practiceList = dueCards(new Date()).filter((c) => modeOf(c) === t.mode).slice(0, 5).map((c) => c.engText);
@@ -2514,7 +2516,7 @@ async function startTalk(topic = null) {
     if (!res.ok || !data.value) throw new ScanError(TALK_ERRORS[res.status] || `${josa(botName(), '을', '를')} 부르지 못했어요. 잠시 뒤 다시 시도해 주세요.`);
     t.maxSec = Number(data.seconds) || TALK_MAX_SEC;
     t.reservation = data.reservation;
-    if (talk !== t) { t.stream.getTracks().forEach((x) => x.stop()); return; }
+    if (talk !== t) { hangUp(t); return; }
 
     const pc = new RTCPeerConnection();
     t.pc = pc;
@@ -2552,9 +2554,37 @@ async function startTalk(topic = null) {
     toast(err instanceof ScanError ? err.message : `${josa(botName(), '을', '를')} 부르지 못했어요. (${errText(err)})`);
   }
 }
+/** 내 목소리 크기 → 마이크 동그라미(--lvl 0~1). 빨리 커지고 천천히 작아짐 */
+function startTalkMeter(t) {
+  const ctx = t.meterCtx;
+  if (!ctx || !t.stream) return;
+  try {
+    ctx.resume().catch(() => {});
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    ctx.createMediaStreamSource(t.stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let lvl = 0;
+    const tick = () => {
+      if (talk !== t || t.meterCtx !== ctx) return;
+      an.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) sum += v * v;
+      const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-6);
+      const target = Math.min(1, Math.max(0, (db + 50) / 35));   // -50dB(조용) → 0, -15dB(크게) → 1
+      lvl += (target - lvl) * (target > lvl ? 0.5 : 0.12);
+      document.querySelector('.talk-mic.on')?.style.setProperty('--lvl', lvl.toFixed(3));
+      t.meterRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch {}
+}
 function hangUp(t = talk) {
   clearInterval(t.timer);
   clearTimeout(t.micTimer);
+  cancelAnimationFrame(t.meterRaf);
+  t.meterCtx?.close().catch(() => {});
+  t.meterCtx = null;
   reportTalkEnd(t);
   try { t.dc?.close(); } catch {}
   try { t.pc?.close(); } catch {}
